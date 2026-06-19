@@ -1,0 +1,160 @@
+/* Login page — dark gradient base + hand-placed constellation (animated) + grain */
+
+.login-page {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: #fff;
+  background:
+    radial-gradient(900px 500px at 5% 0%, rgba(79, 70, 229, 0.55) 0%, transparent 65%),
+    radial-gradient(1000px 600px at 92% 95%, #06b6d4 0%, transparent 60%),
+    linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  overflow: hidden;
+}
+
+/* Layer 1: noise / grain (replaces the previous ::before background SVG). */
+.login-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.08;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-size: 240px 240px;
+  z-index: 0;
+}
+
+/* Decorative blurred orbs for depth. */
+.login-page .orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+}
+.login-page .orb.o1 {
+  width: 380px; height: 380px;
+  top: -120px; right: -80px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.45), transparent 70%);
+}
+.login-page .orb.o2 {
+  width: 320px; height: 320px;
+  bottom: -110px; left: -70px;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.38), transparent 70%);
+}
+
+/* Inline SVG constellation — sits above the noise, below the card. */
+.login-page .constellation {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.login-card {
+  position: relative;
+  z-index: 1;
+  width: min(960px, 100%);
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  min-height: 520px;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.login-brand {
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 24px;
+  background:
+    linear-gradient(160deg, rgba(79, 70, 229, 0.88), rgba(6, 182, 212, 0.55));
+  position: relative;
+  overflow: hidden;
+}
+.login-brand::before,
+.login-brand::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(36px);
+  pointer-events: none;
+  z-index: 0;
+}
+.login-brand::before {
+  width: 180px; height: 180px;
+  top: -40px; right: -40px;
+  background: rgba(125, 211, 252, 0.5);
+}
+.login-brand::after {
+  width: 140px; height: 140px;
+  bottom: -30px; left: -30px;
+  background: rgba(167, 139, 250, 0.5);
+}
+.login-brand > * { position: relative; z-index: 1; }
+
+.login-brand-title {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0 0 12px;
+}
+
+.login-brand-tagline {
+  margin: 0;
+  opacity: 0.92;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.login-brand-meta {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.login-form-wrap {
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+  background: var(--cds-alias-object-container-background, #fff);
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+}
+
+.login-form-wrap h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.login-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+
+@media (max-width: 720px) {
+  .login-card {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+  .login-brand,
+  .login-form-wrap {
+    padding: 32px;
+  }
+  .login-brand-title { font-size: 24px; }
+}

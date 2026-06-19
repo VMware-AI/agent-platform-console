@@ -1,0 +1,51 @@
+{
+  "name": "agent-platform-console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "VMware Agent Management Platform — console frontend (Vue 3 + Vite + Clarity).",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gyj0825/agent-platform-console.git"
+  },
+  "homepage": "https://github.com/gyj0825/agent-platform-console#readme",
+  "bugs": {
+    "url": "https://github.com/gyj0825/agent-platform-console/issues"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "run-p type-check \"build-only {@}\" --",
+    "build-only": "vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --build",
+    "lint": "eslint . --fix",
+    "format": "prettier --write src/"
+  },
+  "dependencies": {
+    "@cds/city": "^1.1.0",
+    "@cds/core": "^6.13.0",
+    "modern-normalize": "^3.0.1",
+    "pinia": "^2.2.6",
+    "vue": "^3.5.13",
+    "vue-router": "^4.4.5"
+  },
+  "devDependencies": {
+    "@tsconfig/node20": "^20.1.9",
+    "@types/node": "^22.10.1",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/eslint-config-prettier": "^10.2.0",
+    "@vue/eslint-config-typescript": "^14.1.4",
+    "@vue/tsconfig": "^0.7.0",
+    "eslint": "^9.16.0",
+    "eslint-plugin-vue": "^9.32.0",
+    "npm-run-all2": "^7.0.1",
+    "prettier": "^3.4.2",
+    "typescript": "~5.6.0",
+    "vite": "^6.0.3",
+    "vue-tsc": "^2.1.10"
+  }
+}

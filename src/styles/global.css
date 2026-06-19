@@ -1,0 +1,12 @@
+html,
+body,
+#app {
+  min-height: 100vh;
+  margin: 0;
+}
+
+body {
+  background: transparent;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  font-family: 'Metropolis', 'Avenir Next', 'Helvetica Neue', Arial, sans-serif;
+}
