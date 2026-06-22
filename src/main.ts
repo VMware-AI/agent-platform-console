@@ -17,19 +17,27 @@ import '@cds/city/css/bundles/default.min.css'
 import '@cds/core/alert/register.js'
 import '@cds/core/badge/register.js'
 import '@cds/core/button/register.js'
+import '@cds/core/button-action/register.js'
+import '@cds/core/button-sort/register.js'
 import '@cds/core/card/register.js'
 import '@cds/core/checkbox/register.js'
 import '@cds/core/divider/register.js'
 import '@cds/core/dropdown/register.js'
 import '@cds/core/forms/register.js'
+import '@cds/core/grid/register.js'
 import '@cds/core/icon/register.js'
 import '@cds/core/input/register.js'
 import '@cds/core/navigation/register.js'
+import '@cds/core/pagination/register.js'
+import '@cds/core/progress-circle/register.js'
+import '@cds/core/select/register.js'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import { provideApolloClient } from '@vue/apollo-composable'
 import App from './App.vue'
 import router from './router'
+import { apolloClient } from './api/graphql/client'
 import { useAuthStore } from './stores/auth'
 import { useThemeStore } from './stores/theme'
 import { useLocaleStore } from './stores/locale'
@@ -39,6 +47,10 @@ const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
 app.use(router)
+
+// Provide the Apollo client to @vue/apollo-composable so `useQuery`/`useMutation`
+// can find it inside any component without prop drilling.
+provideApolloClient(apolloClient)
 
 // Rehydrate persisted state before the router runs its first guard.
 useAuthStore().restore()

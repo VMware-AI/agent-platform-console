@@ -35,14 +35,14 @@ const groups: Group[] = [
     parent: '智能体中心',
     parentIcon: 'blocks-group',
     children: [
-      { name: 'agents.list',        label: '智能体列表',   icon: 'list',    to: '/agents/list' },
-      { name: 'agents.config',      label: '智能体配置',   icon: 'wrench',  to: '/agents/config' },
+      { name: 'agents.list',        label: '智能体列表',   icon: 'atom',    to: '/agents/list' },
+      { name: 'agents.config',      label: '智能体配置',   icon: 'details', to: '/agents/config' },
       { name: 'agents.marketplace', label: '智能体市场',   icon: 'store',   to: '/agents/marketplace' },
     ],
   },
   {
     parent: '模型网关配置',
-    parentIcon: 'router',
+    parentIcon: 'internet-of-things',
     children: [
       { name: 'mg.route', label: '模型路由', icon: 'forking', to: '/model-gateway/route' },
       { name: 'mg.key',   label: '虚拟密钥', icon: 'key',     to: '/model-gateway/key' },
@@ -54,14 +54,14 @@ const groups: Group[] = [
     parentIcon: 'eye',
     children: [
       { name: 'obs.metering', label: '计量中心', icon: 'bar-chart',    to: '/observability/metering' },
-      { name: 'obs.monitor',  label: '实时监控', icon: 'grid-chart',   to: '/observability/monitor' },
-      { name: 'obs.requests', label: '请求日志', icon: 'history',      to: '/observability/requests' },
+      { name: 'obs.monitor',  label: '实时监控', icon: 'dashboard',    to: '/observability/monitor' },
+      { name: 'obs.requests', label: '请求日志', icon: 'list',         to: '/observability/requests' },
       { name: 'obs.audit',    label: '审计日志', icon: 'shield-check', to: '/observability/audit' },
     ],
   },
   {
     parent: '系统配置',
-    parentIcon: 'tools',
+    parentIcon: 'cog',
     children: [
       { name: 'platform.pools',   label: '资源池接入', icon: 'resource-pool', to: '/platform/pools' },
       { name: 'platform.gateway', label: '模型网关接入',   icon: 'router', to: '/platform/gateway' },

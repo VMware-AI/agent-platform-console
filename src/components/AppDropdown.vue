@@ -6,6 +6,13 @@ const props = defineProps<{
   align?: 'start' | 'end'
   /** Pixel offset below (or above) the trigger. */
   offset?: number
+  /**
+   * When true, the trigger click is ignored and the panel won't open.
+   * Pair this with a `:disabled` on the inner trigger element so the
+   * trigger's own click handler also stops the event — otherwise the
+   * `.dd-trigger` wrapper would still fire this `toggle` and re-open it.
+   */
+  disabled?: boolean
 }>()
 
 const open = ref(false)
@@ -13,6 +20,7 @@ const triggerEl = ref<HTMLElement | null>(null)
 const panelEl = ref<HTMLElement | null>(null)
 
 function toggle() {
+  if (props.disabled) return
   open.value = !open.value
 }
 

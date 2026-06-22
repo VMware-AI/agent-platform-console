@@ -16,7 +16,7 @@ const router = createRouter({
         { path: '', name: 'overview', component: DashboardView },
 
         // 智能体中心
-        { path: 'agents/list',        name: 'agents.list',        component: ComingSoon, props: { title: '智能体列表' } },
+        { path: 'agents/list',        name: 'agents.list',        component: () => import('@/views/AgentListView.vue') },
         { path: 'agents/config',      name: 'agents.config',      component: ComingSoon, props: { title: '智能体配置' } },
         { path: 'agents/marketplace', name: 'agents.marketplace', component: ComingSoon, props: { title: '智能体市场' } },
 

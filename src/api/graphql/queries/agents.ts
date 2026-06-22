@@ -1,0 +1,33 @@
+import { gql } from '@apollo/client/core'
+
+export const AGENTS_QUERY = gql`
+  query Agents($filter: AgentFilter, $pagination: Pagination, $sort: AgentSort) {
+    agents(filter: $filter, pagination: $pagination, sort: $sort) {
+      nodes {
+        id
+        name
+        type
+        typeLabel
+        status
+        apiKey {
+          id
+          name
+        }
+        owner {
+          id
+          displayName
+          email
+        }
+        createdAt
+        updatedAt
+        endpoint
+      }
+      totalCount
+      pageInfo {
+        page
+        pageSize
+        totalPages
+      }
+    }
+  }
+`
