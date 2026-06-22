@@ -253,10 +253,14 @@ function onPageSizeSelect(e: Event) {
 
 type RowActionKey = 'rotateKey' | 'restart' | 'stop' | 'update' | 'delete'
 
+// Order is fixed by the product spec:
+//   密码更新 → 版本更新 → 重启 → 停止 → 删除
+// All five items are exposed for every status so the "更多" menu reads the
+// same regardless of the agent's current state.
 const ACTIONS_BY_STATUS: Record<StatusKey, RowActionKey[]> = {
-  running: ['rotateKey', 'restart', 'stop'],
-  stopped: ['rotateKey', 'restart', 'stop'],
-  error: ['update', 'delete'],
+  running: ['rotateKey', 'update', 'restart', 'stop', 'delete'],
+  stopped: ['rotateKey', 'update', 'restart', 'stop', 'delete'],
+  error: ['rotateKey', 'update', 'restart', 'stop', 'delete'],
 }
 
 const ICON_FOR_ACTION: Record<RowActionKey, string> = {
@@ -350,6 +354,16 @@ async function onCopyKey(agent: Agent) {
 }
 
 const BATCH_KEYS = ['start', 'stop', 'update', 'delete'] as const
+
+/** Map a batch-menu key → its sibling row-action key in `ICON_FOR_ACTION`,
+ *  so "批量启动 / 批量停止 / 批量更新" share the same glyph as the
+ *  matching item in the per-row "更多" menu. */
+const BATCH_ICON_FOR_KEY: Record<(typeof BATCH_KEYS)[number], string> = {
+  start: ICON_FOR_ACTION.restart, // sync
+  stop: ICON_FOR_ACTION.stop,    // stop
+  update: ICON_FOR_ACTION.update, // update
+  delete: 'trash',                // matches the more-menu `delete` icon
+}
 type BatchKey = (typeof BATCH_KEYS)[number]
 
 function onBatch(key: BatchKey, close: () => void) {
@@ -440,7 +454,7 @@ const summaryText = computed(() => {
             :aria-label="locale.t(`agents.batch.${key}`)"
             @click="onBatch(key, close)"
           >
-            <cds-icon :shape="key === 'delete' ? 'trash' : 'cog'" size="sm" aria-hidden="true"></cds-icon>
+            <cds-icon :shape="BATCH_ICON_FOR_KEY[key]" size="sm" aria-hidden="true"></cds-icon>
             <span>{{ locale.t(`agents.batch.${key}`) }}</span>
           </button>
         </template>
@@ -490,7 +504,7 @@ const summaryText = computed(() => {
           />
         </cds-grid-column>
 
-        <cds-grid-column :width="'200px'">
+        <cds-grid-column :width="'18%'">
           {{ locale.t('agents.col.name') }}
           <span class="col-head-actions">
             <cds-button-action
@@ -526,7 +540,7 @@ const summaryText = computed(() => {
           </span>
         </cds-grid-column>
 
-        <cds-grid-column :width="'200px'">
+        <cds-grid-column :width="'14%'">
           {{ locale.t('agents.col.type') }}
           <span class="col-head-actions">
             <cds-button-action
@@ -562,7 +576,7 @@ const summaryText = computed(() => {
           </span>
         </cds-grid-column>
 
-        <cds-grid-column :width="'140px'">
+        <cds-grid-column :width="'10%'">
           {{ locale.t('agents.col.status') }}
           <span class="col-head-actions">
             <cds-button-action
@@ -598,7 +612,7 @@ const summaryText = computed(() => {
           </span>
         </cds-grid-column>
 
-        <cds-grid-column :width="'220px'">
+        <cds-grid-column :width="'18%'">
           {{ locale.t('agents.col.key') }}
           <span class="col-head-actions">
             <cds-button-action
@@ -634,7 +648,7 @@ const summaryText = computed(() => {
           </span>
         </cds-grid-column>
 
-        <cds-grid-column :width="'140px'">
+        <cds-grid-column :width="'10%'">
           {{ locale.t('agents.col.owner') }}
           <span class="col-head-actions">
             <cds-button-action
@@ -670,7 +684,7 @@ const summaryText = computed(() => {
           </span>
         </cds-grid-column>
 
-        <cds-grid-column :width="'320px'">
+        <cds-grid-column :width="'22%'">
           <div class="col-head col-actions">
             <span>{{ locale.t('agents.col.actions') }}</span>
           </div>
@@ -719,7 +733,7 @@ const summaryText = computed(() => {
           <cds-grid-cell>
             <span class="actions-cell">
               <cds-button action="outline" size="sm" @click="onVisit(agent)">
-                <cds-icon shape="pop-out" size="sm" aria-hidden="true"></cds-icon>
+                <cds-icon shape="eye" size="sm" aria-hidden="true"></cds-icon>
                 {{ locale.t('agents.action.visit') }}
               </cds-button>
               <cds-button action="outline" size="sm" @click="onConfigure(agent)">
@@ -976,6 +990,11 @@ const summaryText = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* The grid is a custom element with default `min-width: auto`, so without
+     an explicit width cap it expands to its content's intrinsic min-width
+     and re-introduces horizontal page scroll. Force it to honour the
+     parent width so the percentage column widths can actually shrink. */
+  min-width: 0;
 }
 
 .page-head {
@@ -1063,6 +1082,17 @@ const summaryText = computed(() => {
 /* ---------- cds-grid ---------- */
 /* (No card wrapper — matches official datagrid stories which place cds-grid
    directly on the page surface.) */
+
+/* Force the cds-grid host to respect the parent column. Without this the
+   element's default `min-width: auto` expands to the intrinsic min-width of
+   its cells (long key names + two outline action buttons), forcing a
+   horizontal scroll on the page even when the columns use % widths. */
+.agent-list cds-grid {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
 
 /* Native checkbox used for row + header selection. We use a plain <input
    rather than <cds-checkbox> because Vue's reactive `:checked` binding
@@ -1171,6 +1201,10 @@ const summaryText = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  /* Allow buttons to wrap to a second line when the 操作 column is too
+     narrow to hold them all on one row — the alternative (clipping) would
+     hide part of "访问信息" / "配置". The wrapped row is slightly taller
+     than its neighbours; cds-grid handles the alignment automatically. */
   flex-wrap: wrap;
 }
 

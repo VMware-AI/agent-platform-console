@@ -139,7 +139,14 @@ watch(() => locale.locale, syncTitle)
 .content {
   grid-area: content;
   padding: 24px;
+  /* `min-width: 0` is required on a grid item so its descendants (notably
+     `cds-grid`, a custom element whose default `min-width: auto` would
+     otherwise expand to its content's intrinsic min-width and re-introduce
+     a horizontal scroll on the page).
+     `overflow: hidden` (instead of `auto`) suppresses any in-content
+     scrollbar — pages like the agent list own their own internal scrolling
+     only when the user opts in (e.g. via `cds-grid` `height="..."`). */
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 </style>
