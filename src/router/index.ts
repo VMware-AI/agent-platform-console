@@ -32,9 +32,9 @@ const router = createRouter({
         { path: 'observability/audit',    name: 'obs.audit',     component: ComingSoon, props: { title: '审计日志' } },
 
         // 平台管理
-        { path: 'platform/pools',   name: 'platform.pools',   component: ComingSoon, props: { title: '资源池接入' } },
+        { path: 'platform/resources', name: 'platform.resources', component: () => import('@/views/ResourcePoolListView.vue') },
         { path: 'platform/gateway', name: 'platform.gateway', component: ComingSoon, props: { title: '模型网关' } },
-        { path: 'platform/users',   name: 'platform.users',   component: ComingSoon, props: { title: '用户与权限' } },
+        { path: 'platform/users',   name: 'platform.users',   component: () => import('@/views/UserRoleView.vue') },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: { name: 'overview' } },

@@ -63,7 +63,7 @@ const groups: Group[] = [
     parent: '系统配置',
     parentIcon: 'cog',
     children: [
-      { name: 'platform.pools',   label: '资源池接入', icon: 'resource-pool', to: '/platform/pools' },
+      { name: 'platform.resources', label: '资源池接入', icon: 'resource-pool', to: '/platform/resources' },
       { name: 'platform.gateway', label: '模型网关接入',   icon: 'router', to: '/platform/gateway' },
       { name: 'platform.users',   label: '用户与权限', icon: 'users',  to: '/platform/users' },
     ],

@@ -3,41 +3,36 @@ import {
   InMemoryCache,
   ApolloLink,
   HttpLink,
-  Observable,
-  type FetchResult,
-  type Operation,
 } from '@apollo/client/core'
 import { setContext } from '@apollo/client/link/context'
-import { agentsFixture } from './fixtures/agents'
+import { SchemaLink } from '@apollo/client/link/schema'
+import { buildSchema } from 'graphql'
+import { typeDefs } from './schema.graphql'
+import { rootValue } from './resolvers'
 
 /**
- * Fixture link — intercepts the `Agents` query and returns local data with a
- * simulated 250ms latency. Real network calls fall through to the HTTP link,
- * but the agent-platform-backend isn't reachable yet so we short-circuit.
+ * Single Apollo Client instance for the app.
  *
- * To wire the real backend:
- *   1. Remove `fixtureLink` from the chain below.
- *   2. Set VITE_GRAPHQL_ENDPOINT to the backend URL.
- *   3. Keep `authLink` if you need to attach auth headers.
- *
- * Implementation note: we accept a `forward` argument and call it for the
- * non-Agents path. This keeps the link non-terminating in Apollo's eyes, which
- * silences the "concat on a terminating link" warning emitted by `ApolloLink.from`.
+ * Link chain (left-to-right):
+ *   1. `schemaLink` — executes queries against the in-memory GraphQL schema
+ *      defined in `schema.graphql.ts`. This is where Agents / Users / Roles
+ *      queries + the 6 user-management mutations are served. Zero network
+ *      hops — the resolvers live in `resolvers.ts` and read/write the
+ *      module-level fixture stores in `fixtures/*`.
+ *   2. `authLink`   — attaches the Bearer token from localStorage so the
+ *      shape of future real-network calls matches today's mock.
+ *   3. `httpLink`   — kept as a fallback / future real-backend target.
+ *      Currently nothing should reach it because `schemaLink` is
+ *      terminating; it's wired in so flipping to a real backend is a
+ *      one-line change (drop `schemaLink`).
  */
-const fixtureLink = new ApolloLink(
-  (operation: Operation, forward?: (op: Operation) => ReturnType<ApolloLink['request']>) => {
-    if (operation.operationName === 'Agents') {
-      return new Observable<FetchResult>((observer) => {
-        const handle = setTimeout(() => {
-          observer.next({ data: agentsFixture(operation.variables as never) })
-          observer.complete()
-        }, 250)
-        return () => clearTimeout(handle)
-      })
-    }
-    return forward ? forward(operation) : null
-  },
-)
+const schema = buildSchema(typeDefs)
+
+const schemaLink = new SchemaLink({
+  schema,
+  rootValue,
+  validate: true,
+})
 
 const httpLink = new HttpLink({
   uri:
@@ -60,12 +55,8 @@ const authLink = setContext((_op, { headers }) => {
   }
 })
 
-/**
- * Single Apollo Client instance for the app. Order matters: ApolloLink chain
- * executes left-to-right, so the fixture link takes precedence over HTTP.
- */
 export const apolloClient = new ApolloClient({
-  link: ApolloLink.from([fixtureLink, authLink, httpLink]),
+  link: ApolloLink.from([schemaLink, authLink, httpLink]),
   cache: new InMemoryCache(),
   defaultOptions: {
     watchQuery: { fetchPolicy: 'cache-and-network' },

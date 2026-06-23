@@ -225,9 +225,7 @@ function applySort(
   return out
 }
 
-export function agentsFixture(vars?: AgentsQueryVars): {
-  agents: AgentConnection
-} {
+export function agentsFixture(vars?: AgentsQueryVars): AgentConnection {
   const filtered = applySort(applyFilter(AGENTS, vars?.filter), vars?.sort)
 
   const page = vars?.pagination?.page ?? 1
@@ -238,10 +236,8 @@ export function agentsFixture(vars?: AgentsQueryVars): {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
 
   return {
-    agents: {
-      nodes,
-      totalCount,
-      pageInfo: { page, pageSize, totalPages },
-    },
+    nodes,
+    totalCount,
+    pageInfo: { page, pageSize, totalPages },
   }
 }

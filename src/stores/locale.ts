@@ -100,6 +100,213 @@ const STRINGS: Dict = {
   'agents.empty':             { zh: '暂无数据',         en: 'No data' },
   'agents.loading':           { zh: '加载中…',           en: 'Loading…' },
   'agents.error':             { zh: '加载失败',         en: 'Failed to load' },
+
+  /* ============================================================
+   * User & Role Management — see plan §Locale 新增键
+   * zh-only per project rule #2 (中文 only).
+   * ============================================================ */
+
+  // Page-level
+  'users.title':              { zh: '用户与权限',        en: '' },
+  'users.tabs.users':         { zh: '用户管理',          en: '' },
+  'users.tabs.roles':         { zh: '角色与权限',        en: '' },
+
+  // Toolbar
+  'users.toolbar.create':     { zh: '新建用户',          en: '' },
+  'roles.toolbar.refresh':    { zh: '刷新',              en: '' },
+
+  // Users table columns
+  'users.col.username':       { zh: '用户名',            en: '' },
+  'users.col.role':           { zh: '角色',              en: '' },
+  'users.col.email':          { zh: '邮箱',              en: '' },
+  'users.col.connection':     { zh: '连接状态',          en: '' },
+  'users.col.lastLogin':      { zh: '上次登录',          en: '' },
+  'users.col.createdAt':      { zh: '创建时间',          en: '' },
+  'users.col.updatedAt':      { zh: '更新时间',          en: '' },
+  'users.col.actions':        { zh: '操作',              en: '' },
+
+  // Column filter dropdowns
+  'users.col.filter.usernamePlaceholder': { zh: '输入关键字筛选用户名', en: '' },
+  'users.col.filter.rolePlaceholder':     { zh: '输入关键字筛选角色',   en: '' },
+  'users.col.filter.emailPlaceholder':    { zh: '输入关键字筛选邮箱',   en: '' },
+  'users.col.filter.statusAll':           { zh: '全部',                 en: '' },
+  'users.col.filter.statusOnline':        { zh: '在线',                 en: '' },
+  'users.col.filter.statusOffline':       { zh: '离线',                 en: '' },
+  'users.col.filter.apply':               { zh: '应用',                 en: '' },
+  'users.col.filter.clear':               { zh: '清空',                 en: '' },
+  'users.col.sort':                       { zh: '排序',                 en: '' },
+  'users.col.filter':                     { zh: '过滤',                 en: '' },
+
+  // Connection-status badges
+  'users.status.online':      { zh: '在线',              en: '' },
+  'users.status.offline':     { zh: '离线',              en: '' },
+
+  // Per-row actions (no `edit` per spec)
+  'users.action.resetPwd':    { zh: '重置密码',          en: '' },
+  'users.action.bindRole':    { zh: '绑定角色',          en: '' },
+  'users.action.disable':     { zh: '禁用',              en: '' },
+  'users.action.enable':      { zh: '启用',              en: '' },
+  'users.action.delete':      { zh: '删除',              en: '' },
+
+  // User form (create only)
+  'users.form.title.create':  { zh: '新建用户',          en: '' },
+  'users.form.username':      { zh: '用户名',            en: '' },
+  'users.form.displayName':   { zh: '显示名',            en: '' },
+  'users.form.email':         { zh: '邮箱',              en: '' },
+  'users.form.role':          { zh: '角色',              en: '' },
+  'users.form.enabled':       { zh: '启用账户',          en: '' },
+  'users.form.passwordMode':  { zh: '密码',              en: '' },
+  'users.form.passwordMode.auto':   { zh: '自动生成',      en: '' },
+  'users.form.passwordMode.custom': { zh: '自定义',        en: '' },
+  'users.form.customPassword':      { zh: '密码',          en: '' },
+  'users.form.confirmPassword':    { zh: '确认密码',      en: '' },
+  'users.form.passwordMismatch':    { zh: '两次输入的密码不一致', en: '' },
+  'users.form.passwordHint':        { zh: '密码须包含大小写字母、数字、特殊符号,长度 ≥ 10', en: '' },
+  'users.form.submit':              { zh: '创建',          en: '' },
+  'users.form.cancel':              { zh: '取消',          en: '' },
+  'users.form.username.required':   { zh: '请输入用户名',  en: '' },
+  'users.form.email.invalid':       { zh: '请输入有效的邮箱地址', en: '' },
+  'users.form.username.taken':      { zh: '该用户名已被使用', en: '' },
+  'users.form.email.taken':         { zh: '该邮箱已被使用',   en: '' },
+  'users.form.username.checking':   { zh: '正在检查用户名可用性…', en: '' },
+  'users.form.email.checking':      { zh: '正在检查邮箱可用性…',   en: '' },
+
+  // Page-level empty / loading / error
+  'users.empty':              { zh: '暂无用户',          en: '' },
+  'users.loading':            { zh: '加载中…',            en: '' },
+  'users.error':              { zh: '加载失败',          en: '' },
+
+  // Toasts
+  'users.toast.createOk':     { zh: '已创建用户 {name}', en: '' },
+  'users.toast.createFail':   { zh: '创建失败',          en: '' },
+  'users.toast.deleteOk':     { zh: '已删除用户 {name}', en: '' },
+  'users.toast.deleteFail':   { zh: '删除失败',          en: '' },
+  'users.toast.resetPwdOk':   { zh: '密码已重置:新密码已生成并显示', en: '' },
+  'users.toast.resetPwdFail': { zh: '密码重置失败',      en: '' },
+  'users.toast.bindOk':       { zh: '已为 {count} 个用户绑定角色', en: '' },
+  'users.toast.bindFail':     { zh: '绑定失败',          en: '' },
+  'users.toast.disableOk':    { zh: '已禁用 {name}',     en: '' },
+  'users.toast.enableOk':     { zh: '已启用 {name}',     en: '' },
+  'users.toast.toggleFail':   { zh: '操作失败',          en: '' },
+  'users.toast.duplicateUsername': { zh: '用户名已存在',  en: '' },
+  'users.toast.duplicateEmail':    { zh: '邮箱已被使用',  en: '' },
+  'users.toast.passwordCopied':    { zh: '已复制到剪贴板', en: '' },
+
+  // Confirm dialogs
+  'users.confirm.delete.title':  { zh: '确认删除用户',    en: '' },
+  'users.confirm.delete.body':   { zh: '确定要删除用户 {name} 吗?此操作不可撤销。', en: '' },
+  'users.confirm.reset.title':   { zh: '确认重置密码',    en: '' },
+  'users.confirm.reset.body':    { zh: '将为 {name} 生成新的随机密码,确认继续?', en: '' },
+  'users.confirm.disable.title': { zh: '确认禁用用户',    en: '' },
+  'users.confirm.disable.body':  { zh: '禁用后,{name} 将无法登录。是否继续?', en: '' },
+  'users.confirm.bind.title':    { zh: '确认绑定角色',    en: '' },
+  'users.confirm.bind.body':     { zh: '将为 {count} 个用户绑定该角色,确认继续?', en: '' },
+
+  // Bind-role dialog
+  'users.bind.title':            { zh: '绑定用户与角色',  en: '' },
+  'users.bind.role':             { zh: '选择角色',        en: '' },
+  'users.bind.users':            { zh: '选择用户',        en: '' },
+  'users.bind.submit':           { zh: '保存',            en: '' },
+  'users.bind.cancel':           { zh: '取消',            en: '' },
+  'users.bind.empty':            { zh: '至少选择 1 个用户', en: '' },
+
+  // Password reveal dialog (one-shot)
+  'users.passwordReveal.title':  { zh: '{name} 的初始密码', en: '' },
+  'users.passwordReveal.warning':{ zh: '此密码仅显示一次,请立即复制并安全保存。关闭后无法再次查看。', en: '' },
+  'users.passwordReveal.copy':    { zh: '复制密码',          en: '' },
+  'users.passwordReveal.close':   { zh: '我已保存,关闭',     en: '' },
+
+  // Role-users dialog (read-only)
+  'users.roleUsers.title':       { zh: '{name} 的用户',  en: '' },
+  'users.roleUsers.col.username':{ zh: '用户名',          en: '' },
+  'users.roleUsers.col.email':   { zh: '邮箱',            en: '' },
+  'users.roleUsers.col.connection': { zh: '连接状态',      en: '' },
+  'users.roleUsers.col.lastLogin':  { zh: '上次登录',      en: '' },
+  'users.roleUsers.empty':       { zh: '该角色下暂无用户', en: '' },
+  'users.roleUsers.close':       { zh: '关闭',            en: '' },
+
+  // Roles tab
+  'roles.col.name':             { zh: '角色名称',        en: '' },
+  'roles.col.description':      { zh: '描述',            en: '' },
+  'roles.col.userCount':        { zh: '用户数',          en: '' },
+  'roles.col.actions':          { zh: '操作',            en: '' },
+  'roles.action.delete':        { zh: '删除',            en: '' },
+  'roles.action.deleteDisabledHint': { zh: '预定义角色不可删除', en: '' },
+  'roles.empty':                { zh: '暂无角色',        en: '' },
+  'roles.loading':              { zh: '加载中…',          en: '' },
+  'roles.error':                { zh: '加载失败',        en: '' },
+  'roles.toast.deleteOk':       { zh: '已删除角色 {name}', en: '' },
+  'roles.toast.deleteFail':     { zh: '删除失败',        en: '' },
+  'roles.confirm.delete.title': { zh: '确认删除角色',    en: '' },
+  'roles.confirm.delete.body':  { zh: '确定要删除角色 {name} 吗?此操作不可撤销。', en: '' },
+
+  // Generic
+  'common.confirm':             { zh: '确认',            en: '' },
+  'common.cancel':              { zh: '取消',            en: '' },
+
+  /* ============================================================
+   * Resource Pool Access — see plan
+   * `资源池接入页面 (/platform/resources)`
+   * zh-only per project rule.
+   * ============================================================ */
+  'resources.title':                  { zh: '资源池接入管理',      en: '' },
+  'resources.toolbar.create':         { zh: '接入资源池',          en: '' },
+  'resources.toolbar.search':         { zh: '搜索资源池名称或 Endpoint', en: '' },
+
+  'resources.col.name':              { zh: '资源池名称',          en: '' },
+  'resources.col.endpoint':          { zh: '地址',                  en: '' },
+  'resources.col.status':            { zh: '同步状态',            en: '' },
+  'resources.col.syncStatus':        { zh: '同步状态',            en: '' },
+  'resources.col.datacenter':        { zh: '数据中心数',          en: '' },
+  'resources.col.cluster':           { zh: '集群数',              en: '' },
+  'resources.col.createdAt':         { zh: '创建时间',            en: '' },
+  'resources.col.updatedAt':         { zh: '更新时间',            en: '' },
+  'resources.col.actions':           { zh: '操作',                en: '' },
+
+  'resources.col.name.search':       { zh: '搜索资源池名称',      en: '' },
+  'resources.col.endpoint.search':   { zh: '搜索 Endpoint',       en: '' },
+
+  'resources.status.connected':      { zh: '已连接',              en: '' },
+  'resources.status.disconnected':   { zh: '未连接',              en: '' },
+  'resources.status.filter.all':     { zh: '全部状态',            en: '' },
+  'resources.status.synced':         { zh: '已同步',              en: '' },
+  'resources.status.neverSynced':    { zh: '未同步',              en: '' },
+  'resources.status.syncedAgo':      { zh: '{ago}已同步',          en: '' },
+
+  'resources.action.manage':         { zh: '管理',                en: '' },
+  'resources.action.sync':           { zh: '同步数据',            en: '' },
+  'resources.action.edit':           { zh: '编辑',                en: '' },
+  'resources.action.delete':         { zh: '删除接入',            en: '' },
+
+  'resources.empty':                 { zh: '暂无资源池',          en: '' },
+  'resources.loading':               { zh: '加载中…',              en: '' },
+  'resources.error':                 { zh: '加载失败',            en: '' },
+
+  'resources.footer.syncStatus.title':   { zh: '当前同步状态',  en: '' },
+  'resources.footer.syncStatus.summary': { zh: '资源池 vCenter_OC1 连接成功,屏幕提示不可连接成功。', en: '' },
+
+  // Toasts
+  'resources.toast.createOk':       { zh: '已创建资源池 {name}', en: '' },
+  'resources.toast.createFail':     { zh: '创建失败',            en: '' },
+  'resources.toast.updateOk':       { zh: '已保存资源池 {name}', en: '' },
+  'resources.toast.updateFail':     { zh: '保存失败',            en: '' },
+  'resources.toast.deleteOk':       { zh: '已删除资源池 {name}', en: '' },
+  'resources.toast.deleteFail':     { zh: '删除失败',            en: '' },
+  'resources.toast.syncOk':         { zh: '已同步资源池 {name}', en: '' },
+  'resources.toast.syncFail':       { zh: '同步失败',            en: '' },
+
+  // Form dialog (create / edit)
+  'resources.form.title.create':    { zh: '接入资源池',          en: '' },
+  'resources.form.title.edit':      { zh: '编辑资源池',          en: '' },
+  'resources.form.name':            { zh: '资源池名称',          en: '' },
+  'resources.form.endpoint':        { zh: 'Endpoint',            en: '' },
+  'resources.form.datacenter':      { zh: '数据中心数',          en: '' },
+  'resources.form.cluster':         { zh: '集群数',              en: '' },
+  'resources.form.submit':          { zh: '保存',                en: '' },
+
+  // Confirm dialog
+  'resources.confirm.delete.title': { zh: '确认删除资源池',      en: '' },
+  'resources.confirm.delete.body':  { zh: '确定要删除资源池 {name} 吗?此操作不可撤销。', en: '' },
 }
 
 export const useLocaleStore = defineStore('locale', () => {
