@@ -17,7 +17,9 @@ const MOCK_USERS: Record<string, { password: string; displayName: string }> = {
 const STORAGE_KEY = 'clarity-auth'
 const TOKEN_STORAGE_KEY = 'clarity-auth-token'
 const SIMULATED_LATENCY_MS = 600
-const authMode = import.meta.env.VITE_AUTH_MODE === 'mock' ? 'mock' : 'api'
+// Default to the in-memory mock user list so the local demo works out of the
+// box. Set VITE_AUTH_MODE=api to switch to the GraphQL backend.
+const authMode = import.meta.env.VITE_AUTH_MODE === 'api' ? 'api' : 'mock'
 
 interface PersistedAuth {
   user: User

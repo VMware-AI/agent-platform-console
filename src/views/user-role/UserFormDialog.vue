@@ -54,7 +54,6 @@ const toast = useToast()
 
 /* ---------- form state ---------- */
 const username = ref('')
-const displayName = ref('')
 const email = ref('')
 const roleId = ref<string>('')
 const enabled = ref(true)
@@ -90,7 +89,6 @@ watch(
   (o) => {
     if (!o) return
     username.value = ''
-    displayName.value = ''
     email.value = ''
     roleId.value = props.roles[0]?.id ?? ''
     enabled.value = true
@@ -167,7 +165,6 @@ const passwordsMatch = computed(
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const formValid = computed(() => {
   if (!username.value.trim()) return false
-  if (!displayName.value.trim()) return false
   if (!emailRegex.test(email.value.trim())) return false
   if (!roleId.value) return false
   if (usernameTaken.value || emailTaken.value) return false
@@ -185,7 +182,12 @@ async function onSubmit() {
   if (!formValid.value) return
   const input: CreateUserInput = {
     username: username.value.trim(),
-    displayName: displayName.value.trim(),
+    // displayName is no longer collected in the UI; the backend schema
+    // still requires the field, so we send an empty string. Once the
+    // server-side field is removed (and the type in
+    // `api/graphql/types.ts` updated to make it optional), drop this
+    // line.
+    displayName: '',
     email: email.value.trim(),
     roleId: roleId.value,
     passwordMode: 'CUSTOM',
@@ -238,7 +240,7 @@ function close() {
     </cds-modal-header>
 
     <cds-modal-content>
-      <form class="user-form" @submit.prevent="onSubmit">
+      <form class="user-form" cds-layout="vertical align:stretch gap:md" @submit.prevent="onSubmit">
         <!-- username -->
         <cds-control>
           <cds-input>
@@ -258,19 +260,6 @@ function close() {
               v-else-if="usernameTaken"
               status="error"
             >{{ locale.t('users.form.username.taken') }}</cds-control-message>
-          </cds-input>
-        </cds-control>
-
-        <!-- displayName -->
-        <cds-control>
-          <cds-input>
-            <label>{{ locale.t('users.form.displayName') }}</label>
-            <input
-              slot="input"
-              type="text"
-              :value="displayName"
-              @input="(e: Event) => displayName = (e.target as HTMLInputElement).value"
-            />
           </cds-input>
         </cds-control>
 
@@ -311,7 +300,20 @@ function close() {
           </cds-select>
         </cds-control>
 
-        <!-- password: always custom — no toggle, no auto-generate path. -->
+        <!-- password: always custom — no toggle, no auto-generate path.
+
+             IMPORTANT: cds-password is a Lit web component. Anything placed
+             inside it (other than the slotted <input slot="input">) is
+             re-projected into cds-password's shadow DOM, which only honors
+             the `input` slot — the rest is silently dropped, so neither
+             cds-control-message nor our <ul> would ever reach the page.
+             Live complexity feedback therefore lives OUTSIDE the
+             cds-password host, in two siblings:
+               - .user-form-hint  (always-on static rule, muted gray)
+               - .user-form-error (only when complexity.reasons is non-empty,
+                 red list of failing rules)
+             Both are aligned with the password input's left edge and
+             sized to the same width as the input. -->
         <cds-control>
           <cds-password>
             <label>{{ locale.t('users.form.customPassword') }}</label>
@@ -321,20 +323,24 @@ function close() {
               :value="customPassword"
               @input="(e: Event) => customPassword = (e.target as HTMLInputElement).value"
             />
-            <ul v-if="complexity.reasons.length > 0" class="user-form-error-list">
-              <li v-for="r in complexity.reasons" :key="r">{{ r }}</li>
-            </ul>
-            <cds-control-message
-              v-else-if="customPassword.length > 0"
-              status="success"
-            >✓ {{ locale.t('users.form.passwordHint').slice(0, 8) }}</cds-control-message>
           </cds-password>
         </cds-control>
 
-        <!-- complexity rule hint, sits directly under the password input -->
         <div class="user-form-hint muted">
           {{ locale.t('users.form.passwordHint') }}
         </div>
+        <!-- Live complexity feedback. Only rendered once the user has typed
+             at least one character, so the form doesn't open with a red
+             error block already visible. The error line collapses all
+             failed rules into a single comma-separated sentence so the
+             message stays compact and reads as one statement instead of a
+             list (see screenshot — 5 stacked <li>s were visually noisy
+             and made the modal feel "already broken" on open). -->
+        <div
+          v-if="customPassword.length > 0 && complexity.reasons.length > 0"
+          class="user-form-error"
+          data-testid="password-complexity-errors"
+        >{{ complexity.reasons.join('，') }}</div>
 
         <cds-control>
           <cds-password>
@@ -345,12 +351,13 @@ function close() {
               :value="confirmPassword"
               @input="(e: Event) => confirmPassword = (e.target as HTMLInputElement).value"
             />
-            <cds-control-message
-              v-if="customPassword.length > 0 && !passwordsMatch"
-              status="error"
-            >{{ locale.t('users.form.passwordMismatch') }}</cds-control-message>
           </cds-password>
         </cds-control>
+        <div
+          v-if="confirmPassword.length > 0 && !passwordsMatch"
+          class="user-form-error"
+          data-testid="password-mismatch-error"
+        >{{ locale.t('users.form.passwordMismatch') }}</div>
 
         <!-- enabled toggle at the bottom of the form, defaults to on -->
         <cds-control>
@@ -387,21 +394,49 @@ function close() {
 
 <style scoped>
 .user-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  /* Layout, gap and horizontal stretching are applied via the Clarity
+     `cds-layout="vertical align:stretch gap:md"` utility on the form
+     element — see template. This class is kept so the form remains
+     targetable in tests/devtools, and so any future form-level
+     overrides (e.g. max-width) have an obvious hook.
+
+     `max-width: 70%` shrinks the form to ~70% of the modal content
+     area so the inputs read as more compact. The form is left-aligned
+     (no auto margins) so the inputs line up flush with the modal's
+     left padding rather than floating in the middle. */
+  max-width: 70%;
+  margin-left: 0;
+  margin-right: auto;
+}
+
+/* Password complexity rule hint, displayed under the password input.
+   `padding-left` matches the measured width of cds-internal-control-label
+   in this modal's horizontal layout (74px at default Clarity scale) so
+   the hint's left edge aligns with the password input's left edge. If
+   the form's layout or Clarity's label sizing changes, re-measure and
+   update this value.
+
+   Both classes share padding-left so they line up under the input. The
+   hint is always-on (gray) — the error block is only shown after the
+   user has typed and a rule is failing. */
+.user-form-hint,
+.user-form-error {
+  padding-left: 74px;
 }
 
 .user-form-hint {
   font-size: 12px;
   color: var(--cds-alias-typography-color-300, #565656);
+  /* Pull the hint up so it sits just under the input's bottom border
+     instead of one full `gap:md` row away. */
+  margin-top: -8px;
 }
 
-.user-form-error-list {
-  margin: 4px 0 0;
-  padding-left: 16px;
+.user-form-error {
+  /* Single-line comma-joined complexity feedback. See template. */
   font-size: 12px;
   color: var(--cds-alias-status-danger, #c21d00);
+  margin: 2px 0 0;
 }
 
 /* The cds-modal renders into a top-level overlay (Teleport-like). Pull the

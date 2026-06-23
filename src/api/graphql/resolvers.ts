@@ -171,7 +171,7 @@ export const rootValue = {
 
     const user = createUserInFixture({
       username: input.username,
-      displayName: input.displayName,
+      displayName: input.displayName ?? '',
       email: input.email,
       roleId: input.roleId,
       passwordHash,

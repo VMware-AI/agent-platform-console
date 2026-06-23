@@ -23,7 +23,6 @@ import {
 } from '@/api/graphql/queries/users'
 import type {
   AccountUser,
-  ConnectionStatus,
   ResetPasswordPayload,
   Role,
   RolesQueryResult,
@@ -34,7 +33,6 @@ import type {
   UserSort,
   UserSortField,
 } from '@/api/graphql/types'
-import { CONNECTION_FROM_GQL } from '@/api/graphql/types'
 import '@/components/icons'
 
 import UserFormDialog from './UserFormDialog.vue'
@@ -72,37 +70,12 @@ const totalCount = computed(() => usersResult.value?.users.totalCount ?? 0)
 const pageInfo = computed(() => usersResult.value?.users.pageInfo ?? null)
 const roles = computed<Role[]>(() => rolesResult.value?.roles.nodes ?? [])
 
-/* ---------- Per-column keyword filters ---------- */
-const usernameKeyword = ref('')
-const roleKeyword = ref('')
-const emailKeyword = ref('')
-const statusKeyword = ref<ConnectionStatus | ''>('')
-
+/* ---------- Per-column keyword filters ----------
+ * Filter values live directly on `filter` (no draft ref). Each input in
+ * the column filter dropdown calls `setColumnFilter` on `input`/`change`,
+ * which both writes the active filter and resets the pager. */
 function setColumnFilter(field: keyof UserFilter, value: string) {
-  if (field === 'statusKeyword') {
-    filter.value = { ...filter.value, statusKeyword: (value || null) as ConnectionStatus | null }
-  } else {
-    filter.value = { ...filter.value, [field]: value || null }
-  }
-  currentPage.value = 1
-}
-
-function applyColumnFilter() {
-  filter.value = {
-    usernameKeyword: usernameKeyword.value.trim() || null,
-    roleKeyword: roleKeyword.value.trim() || null,
-    emailKeyword: emailKeyword.value.trim() || null,
-    statusKeyword: (statusKeyword.value || null) as ConnectionStatus | null,
-  }
-  currentPage.value = 1
-}
-
-function clearColumnFilter() {
-  usernameKeyword.value = ''
-  roleKeyword.value = ''
-  emailKeyword.value = ''
-  statusKeyword.value = ''
-  filter.value = {}
+  filter.value = { ...filter.value, [field]: value || null }
   currentPage.value = 1
 }
 
@@ -121,32 +94,24 @@ function onSortClick(field: UserSortField) {
   else sort.value = null
 }
 
-/* ---------- Filter dropdown open/close ---------- */
-const openFilterAnchor = ref<HTMLElement | null>(null)
-const openFilterKey = ref<keyof UserFilter | null>(null)
-/** CSS selector for cds-dropdown's `:anchor` — `cds-internal-popup`'s `anchor`
- *  property is declared as `HTMLElement | string` but the `@property`
- *  decorator reflects it as a string attribute, so the popup uses
- *  `getRootNode().querySelector("#" + anchor)` to locate the element.
- *  Passing the HTMLElement directly toasts to `"[object HTMLElement]"` and
- *  the lookup silently fails (anchorRect becomes an empty DOMRect, the
- *  dropdown renders at 0,0 and the inner `<input>` has 0×0 dimensions —
- *  which is exactly the symptom reported as "无法输入文字").
- *
- *  We bind `id` on the trigger cds-button-action and pass `'#' + id`
- *  here so the popup can resolve the anchor by id. */
+/* ---------- Filter dropdown open/close ----------
+ * `cds-internal-popup`'s `anchor` property is declared as
+ * `@property({type: String})`, so passing an HTMLElement would get coerced
+ * to the literal string `"[object HTMLElement]"` and the popup's
+ * `querySelector("#" + anchor)` lookup would silently miss. We bind a real
+ * id on the trigger cds-button-action and pass that id (without a `#`
+ * prefix — the popup prepends one itself). */
 const openFilterAnchorId = ref<string | null>(null)
+const openFilterKey = ref<keyof UserFilter | null>(null)
 
 function openFilter(key: keyof UserFilter, target: EventTarget | null) {
   openFilterKey.value = key
   const host = (target as HTMLElement | null)?.closest('cds-button-action') as HTMLElement | null
-  openFilterAnchor.value = host
   openFilterAnchorId.value = host?.id ?? null
 }
 function closeFilter() {
-  openFilterAnchor.value = null
-  openFilterKey.value = null
   openFilterAnchorId.value = null
+  openFilterKey.value = null
 }
 
 /* ---------- Row action dialogs ---------- */
@@ -294,10 +259,6 @@ function fmtDateTime(iso: string | null): string {
   }
 }
 
-function badgeStatusFor(c: AccountUser['connectionStatus']): 'success' | 'neutral' {
-  return c === 'ONLINE' ? 'success' : 'neutral'
-}
-
 /* ---------- Hand-off for BindRoleDialog "assigned" callback ---------- */
 function onAssigned() {
   showBindFor.value = null
@@ -342,7 +303,7 @@ function onRevealClose() {
       aria-label="users"
     >
       <!-- Column: username -->
-      <cds-grid-column :width="'18%'">
+      <cds-grid-column :width="'14%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.username') }}</span>
           <span class="col-head-actions">
@@ -375,7 +336,7 @@ function onRevealClose() {
       </cds-grid-column>
 
       <!-- Column: role -->
-      <cds-grid-column :width="'12%'">
+      <cds-grid-column :width="'10%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.role') }}</span>
           <span class="col-head-actions">
@@ -408,7 +369,7 @@ function onRevealClose() {
       </cds-grid-column>
 
       <!-- Column: email -->
-      <cds-grid-column :width="'20%'">
+      <cds-grid-column :width="'18%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.email') }}</span>
           <span class="col-head-actions">
@@ -440,41 +401,8 @@ function onRevealClose() {
         </div>
       </cds-grid-column>
 
-      <!-- Column: connection status -->
-      <cds-grid-column :width="'10%'">
-        <div class="col-head">
-          <span>{{ locale.t('users.col.connection') }}</span>
-          <span class="col-head-actions">
-            <cds-button-action
-              :aria-label="`sort ${locale.t('users.col.connection')}`"
-              @click="onSortClick('CONNECTION')"
-            >
-              <cds-icon
-                v-if="sortStateFor('CONNECTION') === 'ascending'"
-                shape="angle" direction="up" size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else-if="sortStateFor('CONNECTION') === 'descending'"
-                shape="angle" direction="down" size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else
-                shape="two-way-arrows" class="col-sort-rotated" size="sm"
-              ></cds-icon>
-            </cds-button-action>
-            <cds-button-action
-              id="users-filter-connection"
-              shape="filter"
-              :aria-label="`filter ${locale.t('users.col.connection')}`"
-              :expanded="!!(filter.statusKeyword)"
-              @click="(e: MouseEvent) => openFilter('statusKeyword', e.target)"
-            ></cds-button-action>
-          </span>
-        </div>
-      </cds-grid-column>
-
       <!-- Column: last login -->
-      <cds-grid-column :width="'12%'">
+      <cds-grid-column :width="'16%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.lastLogin') }}</span>
           <span class="col-head-actions">
@@ -500,7 +428,7 @@ function onRevealClose() {
       </cds-grid-column>
 
       <!-- Column: createdAt -->
-      <cds-grid-column :width="'12%'">
+      <cds-grid-column :width="'16%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.createdAt') }}</span>
           <span class="col-head-actions">
@@ -526,7 +454,7 @@ function onRevealClose() {
       </cds-grid-column>
 
       <!-- Column: updatedAt -->
-      <cds-grid-column :width="'6%'">
+      <cds-grid-column :width="'16%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.updatedAt') }}</span>
           <span class="col-head-actions">
@@ -563,11 +491,6 @@ function onRevealClose() {
         <cds-grid-cell>{{ u.username }}</cds-grid-cell>
         <cds-grid-cell>{{ u.role.name }}</cds-grid-cell>
         <cds-grid-cell class="muted">{{ u.email }}</cds-grid-cell>
-        <cds-grid-cell>
-          <cds-badge :status="badgeStatusFor(u.connectionStatus)" class="status-badge">
-            {{ locale.t(`users.status.${CONNECTION_FROM_GQL[u.connectionStatus]}`) }}
-          </cds-badge>
-        </cds-grid-cell>
         <cds-grid-cell>{{ fmtDateTime(u.lastLoginAt) }}</cds-grid-cell>
         <cds-grid-cell>{{ fmtDateTime(u.createdAt) }}</cds-grid-cell>
         <cds-grid-cell>{{ fmtDateTime(u.updatedAt) }}</cds-grid-cell>
@@ -681,57 +604,43 @@ function onRevealClose() {
     </cds-grid>
 
     <!-- Column filter dropdowns (one anchor reused for all three keyword
-         filters + the status select) -->
+         filters + the status select; the popup prepends '#' to the anchor
+         id itself, so we pass the bare id.) -->
     <cds-dropdown
       v-if="openFilterAnchorId"
       :hidden="!openFilterKey"
-      :anchor="`#${openFilterAnchorId}`"
+      :anchor="openFilterAnchorId"
       closable
       @closeChange="closeFilter"
     >
       <div cds-layout="vertical align:stretch p:xs" class="filter-panel">
         <cds-input v-if="openFilterKey === 'usernameKeyword'">
           <input
-            type="search"
-            :value="usernameKeyword"
+            type="text"
+            :value="filter.usernameKeyword ?? ''"
             :placeholder="locale.t('users.col.filter.usernamePlaceholder')"
-            @input="(e: Event) => usernameKeyword = (e.target as HTMLInputElement).value"
+            :aria-label="locale.t('users.col.filter.usernamePlaceholder')"
+            @input="(e: Event) => setColumnFilter('usernameKeyword', (e.target as HTMLInputElement).value)"
           />
         </cds-input>
         <cds-input v-else-if="openFilterKey === 'roleKeyword'">
           <input
-            type="search"
-            :value="roleKeyword"
+            type="text"
+            :value="filter.roleKeyword ?? ''"
             :placeholder="locale.t('users.col.filter.rolePlaceholder')"
-            @input="(e: Event) => roleKeyword = (e.target as HTMLInputElement).value"
+            :aria-label="locale.t('users.col.filter.rolePlaceholder')"
+            @input="(e: Event) => setColumnFilter('roleKeyword', (e.target as HTMLInputElement).value)"
           />
         </cds-input>
         <cds-input v-else-if="openFilterKey === 'emailKeyword'">
           <input
-            type="search"
-            :value="emailKeyword"
+            type="text"
+            :value="filter.emailKeyword ?? ''"
             :placeholder="locale.t('users.col.filter.emailPlaceholder')"
-            @input="(e: Event) => emailKeyword = (e.target as HTMLInputElement).value"
+            :aria-label="locale.t('users.col.filter.emailPlaceholder')"
+            @input="(e: Event) => setColumnFilter('emailKeyword', (e.target as HTMLInputElement).value)"
           />
         </cds-input>
-        <cds-select v-else-if="openFilterKey === 'statusKeyword'" control-width="shrink">
-          <select
-            :value="statusKeyword"
-            @change="(e: Event) => statusKeyword = (e.target as HTMLSelectElement).value as ConnectionStatus | ''"
-          >
-            <option value="">{{ locale.t('users.col.filter.statusAll') }}</option>
-            <option value="ONLINE">{{ locale.t('users.col.filter.statusOnline') }}</option>
-            <option value="OFFLINE">{{ locale.t('users.col.filter.statusOffline') }}</option>
-          </select>
-        </cds-select>
-        <div class="filter-actions">
-          <cds-button action="outline" size="sm" @click="clearColumnFilter">
-            {{ locale.t('users.col.filter.clear') }}
-          </cds-button>
-          <cds-button action="solid" status="primary" size="sm" @click="applyColumnFilter">
-            {{ locale.t('users.col.filter.apply') }}
-          </cds-button>
-        </div>
       </div>
     </cds-dropdown>
 
@@ -838,7 +747,7 @@ function onRevealClose() {
 }
 
 .col-head.col-actions {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .actions-cell {
@@ -872,12 +781,6 @@ function onRevealClose() {
 
 .filter-panel {
   min-width: 240px;
-  gap: 8px;
-}
-
-.filter-actions {
-  display: flex;
-  justify-content: flex-end;
   gap: 8px;
 }
 </style>

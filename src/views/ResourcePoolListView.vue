@@ -30,20 +30,17 @@ import type {
   CreateResourcePoolVars,
   DeleteResourcePoolPayload,
   DeleteResourcePoolVars,
-  PoolConnectionStatus,
   ResourcePool,
   ResourcePoolFilter,
   ResourcePoolsQueryResult,
   ResourcePoolsQueryVars,
   ResourcePoolSort,
   ResourcePoolSortField,
-  SortDirection,
   SyncResourcePoolPayload,
   SyncResourcePoolVars,
   UpdateResourcePoolPayload,
   UpdateResourcePoolVars,
 } from '@/api/graphql/types'
-import { POOL_CONNECTION_FROM_GQL } from '@/api/graphql/types'
 import '@/components/icons'
 
 import CreateOrEditResourcePoolDialog from './resource-list/CreateOrEditResourcePoolDialog.vue'
@@ -101,26 +98,30 @@ function onSortClick(field: ResourcePoolSortField) {
   currentPage.value = 1
 }
 
-/* ---------- Filter dropdown (single anchor + ID-string anchor) ---------- */
-const openFilterAnchorId = ref<string | null>(null)
+/* ---------- Filter dropdown (single anchor, single key) ---------- */
+const openFilterAnchor = ref<HTMLElement | null>(null)
 const openFilterKey = ref<'nameKeyword' | null>(null)
 
 function openFilter(key: 'nameKeyword', target: EventTarget | null) {
   openFilterKey.value = key
+  // `cds-button-action` dispatches the click from its inner element; we want
+  // the outer host element so cds-dropdown can position against it.
+  // (cds-dropdown's anchor prop accepts either an HTMLElement or a CSS id
+  // selector — but when given a string it prepends another `#`, so passing
+  // a pre-hashed id like "#foo" would be searched as "##foo" and miss.
+  // Pass the element reference instead, matching AgentListView's pattern.)
   const host = (target as HTMLElement | null)?.closest('cds-button-action') as HTMLElement | null
-  openFilterAnchorId.value = host?.id ?? null
+  openFilterAnchor.value = host ?? (target as HTMLElement | null)
 }
 function closeFilter() {
-  openFilterAnchorId.value = null
+  openFilterAnchor.value = null
   openFilterKey.value = null
 }
 
-function applyColumnFilter() {
-  // `filter` is computed from refs — just reset to page 1 so the user sees results.
-  currentPage.value = 1
-}
-function clearColumnFilter() {
-  nameKeyword.value = ''
+function onNameKeywordInput(e: Event) {
+  nameKeyword.value = (e.target as HTMLInputElement).value
+  // The `filter` computed reads nameKeyword reactively — just reset the
+  // pager so the user lands on page 1 of the newly filtered results.
   currentPage.value = 1
 }
 
@@ -185,10 +186,6 @@ function fmtSyncAgo(iso: string, nowMs: number = Date.now()): string {
   const diffDay = Math.round(diffHr / 24)
   if (diffDay < 30) return `${diffDay} 天前`
   return fmtDateTime(iso)
-}
-
-function badgeStatusFor(s: PoolConnectionStatus): 'success' | 'neutral' {
-  return s === 'CONNECTED' ? 'success' : 'neutral'
 }
 
 /** "同步状态" badge mapping — green (success) when the pool has been
@@ -314,17 +311,10 @@ async function doDelete() {
       <h1 cds-text="title" class="heading">{{ locale.t('resources.title') }}</h1>
     </header>
 
-    <!-- Toolbar: search input (left) + primary "接入资源池" (right) -->
+    <!-- Toolbar: primary "接入资源池" (far left) + search input -->
     <div class="toolbar">
-      <cds-input class="toolbar-search">
-        <input
-          type="search"
-          :value="nameKeyword"
-          :placeholder="locale.t('resources.toolbar.search')"
-          @input="(e: Event) => { nameKeyword = (e.target as HTMLInputElement).value }"
-        />
-      </cds-input>
       <cds-button
+        class="toolbar-create"
         action="outline"
         status="primary"
         :disabled="creating"
@@ -333,6 +323,14 @@ async function doDelete() {
         <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
         {{ locale.t('resources.toolbar.create') }}
       </cds-button>
+      <cds-input class="toolbar-search">
+        <input
+          type="search"
+          :value="nameKeyword"
+          :placeholder="locale.t('resources.toolbar.search')"
+          @input="(e: Event) => { nameKeyword = (e.target as HTMLInputElement).value }"
+        />
+      </cds-input>
     </div>
 
     <cds-alert v-if="error" status="danger" closable>
@@ -542,31 +540,26 @@ async function doDelete() {
       </cds-grid-footer>
     </cds-grid>
 
-    <!-- Column filter dropdown (single cds-dropdown with ID-string anchor) -->
+    <!-- Column text-search dropdown (matches AgentListView's pattern: a bare
+         cds-input with a typing listener — no apply/clear buttons, the filter
+         applies on each keystroke.  Triggered from the 资源池名称 header.) -->
     <cds-dropdown
-      v-if="openFilterAnchorId"
+      v-if="openFilterAnchor"
       :hidden="!openFilterKey"
-      :anchor="`#${openFilterAnchorId}`"
+      :anchor="openFilterAnchor"
       closable
       @closeChange="closeFilter"
     >
-      <div cds-layout="vertical align:stretch p:xs" class="filter-panel">
+      <div cds-layout="vertical align:stretch p:xs">
         <cds-input v-if="openFilterKey === 'nameKeyword'">
           <input
-            type="search"
+            type="text"
             :value="nameKeyword"
             :placeholder="locale.t('resources.col.name.search')"
-            @input="(e: Event) => nameKeyword = (e.target as HTMLInputElement).value"
+            :aria-label="locale.t('resources.col.name.search')"
+            @input="onNameKeywordInput"
           />
         </cds-input>
-        <div class="filter-actions">
-          <cds-button action="outline" size="sm" @click="clearColumnFilter">
-            {{ locale.t('agents.col.filter.clear') }}
-          </cds-button>
-          <cds-button action="solid" status="primary" size="sm" @click="applyColumnFilter">
-            {{ locale.t('agents.col.filter.apply') }}
-          </cds-button>
-        </div>
       </div>
     </cds-dropdown>
 
@@ -642,10 +635,17 @@ async function doDelete() {
   display: contents;
 }
 /* Inside the toolbar, suppress cds-input's bottom border — it draws a
-   visible horizontal line just before the "接入资源池" button. The
-   standard input chrome (top + side borders) still shows. */
-.toolbar :deep(.input-container) {
-  border-bottom: 0 !important;
+   visible horizontal line just before the "接入资源池" button.
+
+   IMPORTANT: cds-input is a web component. Its `.input-container` lives
+   inside its shadow DOM, so Vue's scoped `:deep(.input-container)`
+   selector never matches (scoped :deep() only crosses Vue component
+   boundaries, not web-component shadow boundaries). The supported way
+   to override cds-input chrome from outside is to set its CSS custom
+   properties on the host element — the host IS in the light DOM, so
+   this scoped selector actually hits. */
+.toolbar-search {
+  --border-bottom: 0;
 }
 
 /* "当前同步状态" inline banner */
@@ -724,14 +724,4 @@ async function doDelete() {
   white-space: nowrap;
 }
 
-.filter-panel {
-  min-width: 240px;
-  gap: 8px;
-}
-
-.filter-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
 </style>

@@ -151,7 +151,6 @@ const STRINGS: Dict = {
   // User form (create only)
   'users.form.title.create':  { zh: '新建用户',          en: '' },
   'users.form.username':      { zh: '用户名',            en: '' },
-  'users.form.displayName':   { zh: '显示名',            en: '' },
   'users.form.email':         { zh: '邮箱',              en: '' },
   'users.form.role':          { zh: '角色',              en: '' },
   'users.form.enabled':       { zh: '启用账户',          en: '' },

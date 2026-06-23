@@ -232,6 +232,14 @@ export type PasswordMode = 'AUTO' | 'CUSTOM'
 
 export interface CreateUserInput {
   username: string
+  /**
+   * The create-user UI no longer collects a display name. The backend
+   * schema (in `mock-server.ts` / the GraphQL SDL) still requires this
+   * field as `String!`, so the front-end sends an empty string. Once
+   * the server-side field is removed from the SDL, change this back to
+   * `displayName?: string | null` and drop the `displayName: ''` line
+   * in `UserFormDialog.vue`'s submit handler.
+   */
   displayName: string
   email: string
   roleId: string
