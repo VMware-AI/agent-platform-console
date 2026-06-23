@@ -1,6 +1,12 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { User } from '@/types/auth'
+import { apolloClient } from '@/api/graphql/client'
+import {
+  LOGIN_MUTATION,
+  type LoginMutationResult,
+  type LoginMutationVars,
+} from '@/api/graphql/queries/auth'
 
 // Mock credentials — swap the body of `login()` for a real fetch later.
 const MOCK_USERS: Record<string, { password: string; displayName: string }> = {
@@ -9,11 +15,13 @@ const MOCK_USERS: Record<string, { password: string; displayName: string }> = {
 }
 
 const STORAGE_KEY = 'clarity-auth'
+const TOKEN_STORAGE_KEY = 'clarity-auth-token'
 const SIMULATED_LATENCY_MS = 600
+const authMode = import.meta.env.VITE_AUTH_MODE === 'mock' ? 'mock' : 'api'
 
 interface PersistedAuth {
   user: User
-  rememberMe: true
+  rememberMe?: boolean
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -24,19 +32,62 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => user.value !== null)
 
-  function login(email: string, password: string, remember: boolean): Promise<boolean> {
+  async function loginWithAPI(
+    email: string,
+    password: string,
+    remember: boolean,
+  ): Promise<boolean> {
+    try {
+      const response = await apolloClient.mutate<LoginMutationResult, LoginMutationVars>({
+        mutation: LOGIN_MUTATION,
+        variables: { input: { email: email.trim().toLowerCase(), password } },
+      })
+      const payload = response.data?.login
+      if (!payload?.token || !payload.user) throw new Error('Invalid login response')
+
+      user.value = {
+        email: payload.user.email,
+        displayName: payload.user.displayName || payload.user.username,
+      }
+      rememberMe.value = remember
+      const storage = remember ? localStorage : sessionStorage
+      const otherStorage = remember ? sessionStorage : localStorage
+      storage.setItem(TOKEN_STORAGE_KEY, payload.token)
+      otherStorage.removeItem(TOKEN_STORAGE_KEY)
+      if (remember) {
+        const persisted: PersistedAuth = { user: user.value, rememberMe: true }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted))
+      } else {
+        localStorage.removeItem(STORAGE_KEY)
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ user: user.value }))
+      }
+      return true
+    } catch {
+      error.value = 'Invalid email or password.'
+      return false
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  function loginWithMock(email: string, password: string, remember: boolean): Promise<boolean> {
     error.value = null
-    isLoading.value = true
 
     return new Promise((resolve) => {
       setTimeout(() => {
         const match = MOCK_USERS[email.trim().toLowerCase()]
         if (match && match.password === password) {
+          localStorage.removeItem(TOKEN_STORAGE_KEY)
+          sessionStorage.removeItem(TOKEN_STORAGE_KEY)
           user.value = { email: email.trim().toLowerCase(), displayName: match.displayName }
           rememberMe.value = remember
           if (remember) {
             const payload: PersistedAuth = { user: user.value, rememberMe: true }
+            sessionStorage.removeItem(STORAGE_KEY)
             localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+          } else {
+            localStorage.removeItem(STORAGE_KEY)
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ user: user.value }))
           }
           isLoading.value = false
           resolve(true)
@@ -49,11 +100,23 @@ export const useAuthStore = defineStore('auth', () => {
     })
   }
 
+  function login(email: string, password: string, remember: boolean): Promise<boolean> {
+    error.value = null
+    isLoading.value = true
+    return authMode === 'mock'
+      ? loginWithMock(email, password, remember)
+      : loginWithAPI(email, password, remember)
+  }
+
   function logout() {
     user.value = null
     rememberMe.value = false
     error.value = null
     localStorage.removeItem(STORAGE_KEY)
+    sessionStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(TOKEN_STORAGE_KEY)
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY)
+    void apolloClient.clearStore()
   }
 
   function clearError() {
@@ -63,12 +126,12 @@ export const useAuthStore = defineStore('auth', () => {
   // Called once on app boot from main.ts.
   function restore() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY)
+      const raw = localStorage.getItem(STORAGE_KEY) ?? sessionStorage.getItem(STORAGE_KEY)
       if (!raw) return
       const parsed = JSON.parse(raw) as PersistedAuth
       if (parsed?.user?.email) {
         user.value = parsed.user
-        rememberMe.value = true
+        rememberMe.value = Boolean(parsed.rememberMe)
       }
     } catch {
       // ignore corrupt storage

@@ -33,7 +33,7 @@ const router = createRouter({
 
         // 平台管理
         { path: 'platform/resources', name: 'platform.resources', component: () => import('@/views/ResourcePoolListView.vue') },
-        { path: 'platform/gateway', name: 'platform.gateway', component: ComingSoon, props: { title: '模型网关' } },
+        { path: 'platform/gateway', name: 'platform.gateway', component: () => import('@/views/ModelGatewayView.vue') },
         { path: 'platform/users',   name: 'platform.users',   component: () => import('@/views/UserRoleView.vue') },
       ],
     },
