@@ -9,6 +9,22 @@ import {
 } from '@apollo/client/core'
 import { setContext } from '@apollo/client/link/context'
 import { agentsFixture } from './fixtures/agents'
+import {
+  createModelGatewayFixture,
+  deleteModelGatewayFixture,
+  modelGatewaysFixture,
+  testModelGatewayConnectionFixture,
+  updateModelGatewayFixture,
+} from './fixtures/model-gateways'
+import type {
+  CreateModelGatewayVars,
+  DeleteModelGatewayVars,
+  ModelGatewaysQueryVars,
+  TestModelGatewayConnectionVars,
+  UpdateModelGatewayVars,
+} from './model-gateway-types'
+
+const gatewayFixtureEnabled = import.meta.env.VITE_MODEL_GATEWAY_DATA_MODE === 'fixture'
 
 /**
  * Fixture link — intercepts the `Agents` query and returns local data with a
@@ -35,20 +51,65 @@ const fixtureLink = new ApolloLink(
         return () => clearTimeout(handle)
       })
     }
+
+    if (
+      gatewayFixtureEnabled &&
+      [
+        'ModelGateways',
+        'CreateModelGateway',
+        'UpdateModelGateway',
+        'DeleteModelGateway',
+        'TestModelGatewayConnection',
+      ].includes(operation.operationName)
+    ) {
+      return new Observable<FetchResult>((observer) => {
+        const handle = setTimeout(
+          () => {
+            try {
+              let data: FetchResult['data']
+              switch (operation.operationName) {
+                case 'ModelGateways':
+                  data = modelGatewaysFixture(operation.variables as ModelGatewaysQueryVars)
+                  break
+                case 'CreateModelGateway':
+                  data = createModelGatewayFixture(operation.variables as CreateModelGatewayVars)
+                  break
+                case 'UpdateModelGateway':
+                  data = updateModelGatewayFixture(operation.variables as UpdateModelGatewayVars)
+                  break
+                case 'DeleteModelGateway':
+                  data = deleteModelGatewayFixture(operation.variables as DeleteModelGatewayVars)
+                  break
+                case 'TestModelGatewayConnection':
+                  data = testModelGatewayConnectionFixture(
+                    operation.variables as TestModelGatewayConnectionVars,
+                  )
+                  break
+              }
+              observer.next({ data })
+              observer.complete()
+            } catch (error) {
+              observer.error(error)
+            }
+          },
+          operation.operationName === 'ModelGateways' ? 250 : 450,
+        )
+        return () => clearTimeout(handle)
+      })
+    }
     return forward ? forward(operation) : null
   },
 )
 
 const httpLink = new HttpLink({
-  uri:
-    (import.meta.env.VITE_GRAPHQL_ENDPOINT as string | undefined) ??
-    '/graphql',
+  uri: (import.meta.env.VITE_GRAPHQL_ENDPOINT as string | undefined) ?? '/graphql',
 })
 
 const authLink = setContext((_op, { headers }) => {
   let token: string | null = null
   try {
     token = localStorage.getItem('clarity-auth-token')
+    if (!token) token = sessionStorage.getItem('clarity-auth-token')
   } catch {
     /* ignore — SSR / locked storage */
   }

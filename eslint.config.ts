@@ -15,5 +15,13 @@ export default [
 
   ...pluginVue.configs['flat/essential'],
   ...vueTsEslintConfig(),
+  {
+    name: 'app/clarity-web-components',
+    rules: {
+      // Clarity Core custom elements use native Web Component slots. These
+      // are not deprecated Vue 2 scoped slots, even though the syntax is the same.
+      'vue/no-deprecated-slot-attribute': 'off',
+    },
+  },
   skipFormatting,
 ]

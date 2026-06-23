@@ -16,7 +16,7 @@ import type {
   StatusKey,
   TypeKey,
 } from '@/api/graphql/types'
-import { STATUS_FROM_GQL, TYPE_FROM_GQL } from '@/api/graphql/types'
+import { STATUS_FROM_GQL } from '@/api/graphql/types'
 
 const locale = useLocaleStore()
 
@@ -279,7 +279,6 @@ function badgeStatusFor(status: Agent['status']): 'success' | 'neutral' | 'dange
 
 /* Stub handlers — wired to a real backend mutation later. */
 function noop(label: string, payload?: unknown) {
-  // eslint-disable-next-line no-console
   console.log(`[agents] ${label}`, payload)
 }
 
@@ -347,7 +346,6 @@ async function onCopyKey(agent: Agent) {
     }
     toast.success(locale.t('agents.action.copyKeyOk').replace('{name}', text))
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn('[agents] copy-key failed', { id: agent.id, err })
     toast.error(locale.t('agents.action.copyKeyFail'))
   }
@@ -383,10 +381,6 @@ function onExport() {
 function onRefresh() {
   refetch()
 }
-
-/** Map GraphQL loading → cds-button's `loadingState` enum. cds-button
- *  doesn't accept a boolean `loading` prop — only this 4-state string. */
-const refreshState = computed(() => (loading.value ? 'loading' : 'default'))
 
 /* ---------- Footer summary (mirrors the old clr-datagrid "X - Y of Z" pattern) ---------- */
 
