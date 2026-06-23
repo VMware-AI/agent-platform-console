@@ -142,7 +142,6 @@ export function useAgentExport(options: UseAgentExportOptions) {
         locale.t('agents.export.success').replace('{count}', String(all.length)),
       )
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('[agents] export failed', err)
       toast.error(locale.t('agents.export.fail'))
     } finally {

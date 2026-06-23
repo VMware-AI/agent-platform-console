@@ -60,6 +60,7 @@ import {
   trashIcon,
   refreshIcon,
   twoWayArrowsIcon,
+  pencilIcon,
 } from '@cds/core/icon'
 
 // Register once at module load. Idempotent — safe to import multiple times.
@@ -123,4 +124,5 @@ ClarityIcons.addIcons(
   trashIcon,
   refreshIcon,
   twoWayArrowsIcon,
+  pencilIcon,
 )
