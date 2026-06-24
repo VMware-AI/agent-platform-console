@@ -21,7 +21,7 @@ const router = createRouter({
         { path: 'agents/marketplace', name: 'agents.marketplace', component: ComingSoon, props: { title: '智能体市场' } },
 
         // 模型网关配置
-        { path: 'model-gateway/route', name: 'mg.route', component: ComingSoon, props: { title: '模型路由' } },
+        { path: 'model-gateway/route', name: 'mg.route', component: () => import('@/views/ModelRouteView.vue') },
         { path: 'model-gateway/key',   name: 'mg.key',   component: ComingSoon, props: { title: '虚拟密钥' } },
         { path: 'model-gateway/limit', name: 'mg.limit', component: ComingSoon, props: { title: '限流策略' } },
 
