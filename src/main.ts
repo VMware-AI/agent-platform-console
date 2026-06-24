@@ -56,9 +56,13 @@ app.use(router)
 // can find it inside any component without prop drilling.
 provideApolloClient(apolloClient)
 
-// Rehydrate persisted state before the router runs its first guard.
-useAuthStore().restore()
+// Rehydrate UI state synchronously, then the session (token → `me`)
+// asynchronously, before mounting — so the router's first guard sees the correct
+// auth state and a logged-in reload doesn't bounce to /login.
 useThemeStore().init()
 useLocaleStore().init()
-
-app.mount('#app')
+useAuthStore()
+  .restore()
+  .finally(() => {
+    app.mount('#app')
+  })
