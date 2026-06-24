@@ -424,6 +424,7 @@ const summaryText = computed(() => {
   <section class="agent-list" cds-layout="vertical gap:md">
     <header class="page-head">
       <h1 cds-text="title" class="heading">{{ locale.t('agents.list.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('agents.list.description') }}</p>
     </header>
 
     <!-- Toolbar: export / batch / refresh -->
@@ -1070,7 +1071,6 @@ const summaryText = computed(() => {
 
 .page-head {
   flex-shrink: 0;
-  margin-bottom: 8px;
 }
 
 .heading {
@@ -1080,6 +1080,14 @@ const summaryText = computed(() => {
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+.desc {
+  margin: 12px 0 0;
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 720px;
 }
 
 .muted {
@@ -1094,6 +1102,7 @@ const summaryText = computed(() => {
   justify-content: flex-end;
   gap: 8px;
   flex-shrink: 0;
+  margin-top: 20px;
 }
 
 /* Refresh button: fully transparent — no background, no border, no focus

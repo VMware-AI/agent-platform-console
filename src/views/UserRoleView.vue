@@ -27,6 +27,7 @@ const tabsWithLabels = computed(() => [
   <section class="user-role-view">
     <header class="page-head">
       <h1 cds-text="title" class="heading">{{ locale.t('users.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('users.description') }}</p>
     </header>
 
     <TabStrip v-model="activeTab" :tabs="tabsWithLabels" />
@@ -46,15 +47,22 @@ const tabsWithLabels = computed(() => [
 
 .page-head {
   flex-shrink: 0;
-  margin-bottom: 4px;
 }
 
 .heading {
   margin: 0;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 24px;
+  font-size: 28px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+.desc {
+  margin: 12px 0 0;
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 720px;
 }
 </style>

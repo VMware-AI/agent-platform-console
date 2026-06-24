@@ -45,6 +45,7 @@ const STRINGS: Dict = {
   'login.error.password': { zh: '请输入密码',             en: 'Password is required.' },
   'login.error.creds': { zh: '邮箱或密码错误',            en: 'Invalid email or password.' },
   'agents.list.title':     { zh: '智能体列表',         en: 'Agent List' },
+  'agents.list.description': { zh: '统一管理已部署的智能体实例，支持筛选、批量操作与导出。', en: '' },
   'agents.list.export':    { zh: '导出列表',           en: 'Export' },
   'agents.export.success': { zh: '已导出 {count} 项',   en: 'Exported {count} agents' },
   'agents.export.fail':    { zh: '导出失败',           en: 'Export failed' },
@@ -114,6 +115,7 @@ const STRINGS: Dict = {
 
   // Page-level
   'users.title':              { zh: '用户与权限',        en: '' },
+  'users.description':        { zh: '管理平台用户、角色与权限分配，支持密码重置与角色绑定。', en: '' },
   'users.tabs.users':         { zh: '用户管理',          en: '' },
   'users.tabs.roles':         { zh: '角色与权限',        en: '' },
 
@@ -255,6 +257,7 @@ const STRINGS: Dict = {
    * zh-only per project rule.
    * ============================================================ */
   'resources.title':                  { zh: '资源池接入管理',      en: '' },
+  'resources.description':            { zh: '接入并管理可调度的算力资源池，是智能体运行的物理底座。', en: '' },
   'resources.toolbar.create':         { zh: '接入资源池',          en: '' },
   'resources.toolbar.search':         { zh: '搜索资源池名称或 VC 地址', en: '' },
 
@@ -548,6 +551,7 @@ const STRINGS: Dict = {
 
   // Model routing
   'modelRoute.title': { zh: '模型路由配置', en: 'Model Route Configuration' },
+  'modelRoute.description': { zh: '配置模型路由规则，将请求按策略分派到不同后端模型。', en: '' },
   'modelRoute.table.label': { zh: '模型路由列表', en: 'Model routes' },
   'modelRoute.sort': { zh: '排序：{column}', en: 'Sort {column}' },
   'modelRoute.filter': { zh: '过滤：{column}', en: 'Filter {column}' },
@@ -652,7 +656,8 @@ const STRINGS: Dict = {
   'modelRoute.toast.refreshed': { zh: '模型路由列表已刷新', en: 'Model routes refreshed' },
 
   // Virtual keys
-  'virtualKey.title': { zh: '虚拟密钥', en: 'Virtual Keys' },
+  'virtualKey.title': { zh: '虚拟密钥管理', en: 'Virtual Keys Management' },
+  'virtualKey.description': { zh: '颁发和管理调用方使用的虚拟 API Key，支持额度与作用域控制。', en: '' },
   'virtualKey.table.label': { zh: '虚拟密钥列表', en: 'Virtual keys' },
   'virtualKey.sort': { zh: '排序：{column}', en: 'Sort {column}' },
   'virtualKey.filter': { zh: '过滤：{column}', en: 'Filter {column}' },
@@ -730,8 +735,8 @@ const STRINGS: Dict = {
   'virtualKey.toast.refreshed': { zh: '虚拟密钥列表已刷新', en: 'Virtual key list refreshed' },
 
   // Rate-limit policies
-  'rateLimit.title': { zh: '限流策略管理', en: 'Rate-limit Policy Management' },
-  'rateLimit.sectionTitle': { zh: '当前已配置的限流策略', en: 'Configured Rate-limit Policies' },
+  'rateLimit.title': { zh: '网关策略管理', en: 'Gateway Policy Management' },
+  'rateLimit.description': { zh: '管理网关上的策略配置（含限流、路由等），控制请求速率、并发与转发规则。', en: '' },
   'rateLimit.table.label': { zh: '限流策略列表', en: 'Rate-limit policies' },
   'rateLimit.sort': { zh: '排序：{column}', en: 'Sort {column}' },
   'rateLimit.filter': { zh: '过滤：{column}', en: 'Filter {column}' },
