@@ -121,7 +121,7 @@ function scheduleUsernameCheck() {
       })
       usernameTaken.value = !!r.data?.userExists
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.warn('[users] username dedupe check failed', err)
     } finally {
       checkingUsername.value = false
@@ -147,7 +147,7 @@ function scheduleEmailCheck() {
       })
       emailTaken.value = !!r.data?.userExists
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.warn('[users] email dedupe check failed', err)
     } finally {
       checkingEmail.value = false

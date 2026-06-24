@@ -8,34 +8,39 @@
 export type AgentStatus = 'RUNNING' | 'STOPPED' | 'ERROR'
 
 export type AgentType =
-  | 'PYTHON_AUTOMATION'
   | 'GENERAL_CHAT'
-  | 'CODE_ANALYSIS'
-  | 'DATA_ANALYSIS'
   | 'IMAGE_GENERATION'
+  | 'BASIC_LLM'
+  | 'OPENCLAW'
+  | 'HERMES'
+  | 'CLAUDE_CODE'
+  | 'XIAOGUAI'
+  | 'QCODER'
+  | 'OPENCODE'
 
 export interface AgentApiKey {
   id: string
   name: string
 }
 
-export interface User {
-  id: string
-  displayName: string
-  email: string
+export interface AgentCredentials {
+  username: string
+  passwordHash: string
 }
 
 export interface Agent {
   id: string
   name: string
   type: AgentType
-  typeLabel: string
   status: AgentStatus
   apiKey: AgentApiKey | null
-  owner: User | null
+  credentials: AgentCredentials
   createdAt: string
   updatedAt: string
   endpoint: string | null
+  templateFamilyId: string | null
+  templateVersionId: string | null
+  resourcePoolId: string | null
 }
 
 export interface PageInfo {
@@ -55,7 +60,7 @@ export type AgentSortField =
   | 'TYPE'
   | 'STATUS'
   | 'API_KEY_NAME'
-  | 'OWNER'
+  | 'USERNAME'
   | 'CREATED_AT'
   | 'UPDATED_AT'
 
@@ -68,8 +73,8 @@ export interface AgentFilter {
   nameKeyword?: string | null
   /** Substring match against the agent's `apiKey.name`. */
   keyKeyword?: string | null
-  /** Substring match against the agent's `owner.displayName` / `owner.email`. */
-  ownerKeyword?: string | null
+  /** Substring match against the agent's `credentials.username`. */
+  usernameKeyword?: string | null
 }
 
 export interface AgentSort {
@@ -111,18 +116,26 @@ export const STATUS_TO_GQL: Record<StatusKey, AgentStatus> = {
 
 /** Lower-case type key used in views / i18n keys. */
 export type TypeKey =
-  | 'python-automation'
   | 'general-chat'
-  | 'code-analysis'
-  | 'data-analysis'
   | 'image-generation'
+  | 'basic-llm'
+  | 'openclaw'
+  | 'hermes'
+  | 'claude-code'
+  | 'xiaoguai'
+  | 'qcoder'
+  | 'opencode'
 
 export const TYPE_FROM_GQL: Record<AgentType, TypeKey> = {
-  PYTHON_AUTOMATION: 'python-automation',
   GENERAL_CHAT: 'general-chat',
-  CODE_ANALYSIS: 'code-analysis',
-  DATA_ANALYSIS: 'data-analysis',
   IMAGE_GENERATION: 'image-generation',
+  BASIC_LLM: 'basic-llm',
+  OPENCLAW: 'openclaw',
+  HERMES: 'hermes',
+  CLAUDE_CODE: 'claude-code',
+  XIAOGUAI: 'xiaoguai',
+  QCODER: 'qcoder',
+  OPENCODE: 'opencode',
 }
 
 /* ============================================================
@@ -325,9 +338,8 @@ export interface ResourcePool {
   id: string
   name: string
   endpoint: string
+  contentLibraryName: string
   connectionStatus: PoolConnectionStatus
-  datacenterCount: number
-  clusterCount: number
   esxiHostCount: number
   vmInstanceCount: number
   syncStatus: ResourcePoolSyncState
@@ -346,8 +358,7 @@ export type ResourcePoolSortField =
   | 'NAME'
   | 'ENDPOINT'
   | 'CONNECTION_STATUS'
-  | 'DATACENTER_COUNT'
-  | 'CLUSTER_COUNT'
+  | 'CONTENT_LIBRARY_NAME'
   | 'ESXI_HOST_COUNT'
   | 'VM_INSTANCE_COUNT'
   | 'CREATED_AT'
@@ -379,15 +390,30 @@ export interface ResourcePoolsQueryResult {
 export interface CreateResourcePoolInput {
   name: string
   endpoint: string
-  datacenterCount?: number | null
-  clusterCount?: number | null
+  contentLibraryName: string
 }
 
 export interface UpdateResourcePoolInput {
   name?: string | null
   endpoint?: string | null
-  datacenterCount?: number | null
-  clusterCount?: number | null
+  contentLibraryName?: string | null
+}
+
+export interface TestResourcePoolConnectionInput {
+  name: string
+  endpoint: string
+  contentLibraryName: string
+}
+
+export interface ResourcePoolConnectionDetail {
+  vSphereVersion: string
+  itemCount: number
+}
+
+export interface ResourcePoolConnectionTest {
+  ok: boolean
+  message: string
+  detail: ResourcePoolConnectionDetail | null
 }
 
 export interface CreateResourcePoolPayload {
@@ -420,4 +446,215 @@ export interface DeleteResourcePoolVars {
 }
 export interface SyncResourcePoolVars {
   id: string
+}
+export interface TestResourcePoolConnectionVars {
+  input: TestResourcePoolConnectionInput
+}
+export interface TestResourcePoolConnectionResult {
+  testResourcePoolConnection: ResourcePoolConnectionTest
+}
+
+/* ============================================================
+ * Agent Marketplace — OvaTemplateFamily + OvaTemplateVersion
+ * ============================================================ */
+
+export type OvaTemplateColor = 'BLUE' | 'PURPLE' | 'ORANGE' | 'GREEN' | 'RED' | 'CYAN'
+
+export interface OvaTemplateVersion {
+  id: string
+  familyId: string
+  version: string
+  ovaIdentifier: string
+  notes: string | null
+  createdAt: string
+}
+
+export interface OvaTemplateFamily {
+  id: string
+  name: string
+  type: AgentType
+  description: string
+  tools: string[]
+  scenarios: string[]
+  skills: string[]
+  iconShape: string
+  iconColor: OvaTemplateColor
+  versions: OvaTemplateVersion[]
+  latestVersion: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface OvaTemplateFamilyConnection {
+  nodes: OvaTemplateFamily[]
+  totalCount: number
+  pageInfo: PageInfo
+}
+
+export type OvaTemplateFamilySortField = 'OVA_NAME' | 'TYPE' | 'CREATED_AT' | 'UPDATED_AT'
+
+export interface OvaTemplateFamilyFilter {
+  nameKeyword?: string | null
+  type?: AgentType | null
+}
+
+export interface OvaTemplateFamilySort {
+  field: OvaTemplateFamilySortField
+  direction: SortDirection
+}
+
+export interface OvaTemplateFamiliesQueryVars {
+  filter?: OvaTemplateFamilyFilter | null
+  pagination?: Pagination | null
+  sort?: OvaTemplateFamilySort | null
+}
+
+export interface OvaTemplateFamiliesQueryResult {
+  ovaTemplateFamilies: OvaTemplateFamilyConnection
+}
+
+export interface OvaTemplateVersionConnection {
+  nodes: OvaTemplateVersion[]
+  totalCount: number
+  pageInfo: PageInfo
+}
+
+export interface OvaTemplateVersionsQueryVars {
+  familyId?: string | null
+  pagination?: Pagination | null
+}
+
+export interface OvaTemplateVersionsQueryResult {
+  ovaTemplateVersions: OvaTemplateVersionConnection
+}
+
+export interface CreateOvaTemplateVersionInput {
+  version: string
+  ovaIdentifier: string
+  notes?: string | null
+}
+
+export interface CreateOvaTemplateFamilyInput {
+  name: string
+  type: AgentType
+  description: string
+  tools: string[]
+  scenarios: string[]
+  skills: string[]
+  iconShape: string
+  iconColor: OvaTemplateColor
+  initialVersion: CreateOvaTemplateVersionInput
+}
+
+export interface AddOvaTemplateVersionInput {
+  familyId: string
+  version: string
+  ovaIdentifier: string
+  notes?: string | null
+}
+
+export interface CreateOvaTemplateFamilyPayload {
+  family: OvaTemplateFamily
+}
+
+export interface AddOvaTemplateVersionPayload {
+  version: OvaTemplateVersion
+}
+
+export interface CreateOvaTemplateFamilyVars {
+  input: CreateOvaTemplateFamilyInput
+}
+
+export interface AddOvaTemplateVersionVars {
+  input: AddOvaTemplateVersionInput
+}
+
+/* ============================================================
+ * VirtualKey
+ * ============================================================ */
+
+export type VirtualKeyStatus = 'AVAILABLE' | 'BOUND' | 'REVOKED'
+
+export interface ModelGatewayRef {
+  id: string
+  name: string
+  endpoint: string
+}
+
+export interface VirtualKey {
+  id: string
+  name: string
+  secret: string
+  modelGatewayId: string
+  modelGateway: ModelGatewayRef
+  status: VirtualKeyStatus
+  boundAgentId: string | null
+  boundAgent: Agent | null
+  createdAt: string
+  boundAt: string | null
+}
+
+export interface VirtualKeyConnection {
+  nodes: VirtualKey[]
+  totalCount: number
+  pageInfo: PageInfo
+}
+
+export interface VirtualKeyFilter {
+  status?: VirtualKeyStatus | null
+  modelGatewayId?: string | null
+  nameKeyword?: string | null
+}
+
+export interface VirtualKeysQueryVars {
+  filter?: VirtualKeyFilter | null
+  pagination?: Pagination | null
+}
+
+export interface VirtualKeysQueryResult {
+  virtualKeys: VirtualKeyConnection
+}
+
+export interface CreateVirtualKeyInput {
+  name: string
+  modelGatewayId: string
+}
+
+export interface CreateVirtualKeyPayload {
+  key: VirtualKey
+  secret: string
+}
+
+export interface CreateVirtualKeyVars {
+  input: CreateVirtualKeyInput
+}
+
+/* ============================================================
+ * Deploy Agent
+ * ============================================================ */
+
+export type VirtualKeyMode = 'USE_EXISTING' | 'CREATE_NEW'
+
+export interface DeployAgentInput {
+  templateVersionId: string
+  resourcePoolId: string
+  modelGatewayId: string
+  virtualKeyMode: VirtualKeyMode
+  existingVirtualKeyId?: string | null
+  newVirtualKeyName?: string | null
+  name: string
+  username: string
+  password: string
+  description?: string | null
+}
+
+export interface DeployAgentPayload {
+  agent: Agent
+  virtualKey: VirtualKey
+  templateVersion: OvaTemplateVersion
+  resourcePool: ResourcePool
+}
+
+export interface DeployAgentVars {
+  input: DeployAgentInput
 }

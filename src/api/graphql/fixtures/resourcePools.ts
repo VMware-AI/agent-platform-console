@@ -23,8 +23,8 @@ export const poolsStore: ResourcePool[] = [
   {
     id: 'rp01', name: 'vCenter_OC1',
     endpoint: 'https://vc.oc1.platform.local/sdk',
+    contentLibraryName: 'cl-vc-oc1-001',
     connectionStatus: 'CONNECTED',
-    datacenterCount: 3, clusterCount: 8,
     esxiHostCount: 24, vmInstanceCount: 412,
     syncStatus: 'NEVER', lastSyncedAt: null,
     createdAt: '2026-06-22T08:00:00Z', updatedAt: '2026-06-22T08:00:00Z',
@@ -32,8 +32,8 @@ export const poolsStore: ResourcePool[] = [
   {
     id: 'rp02', name: 'vCenter_OC2',
     endpoint: 'https://vc.oc2.platform.local/sdk',
+    contentLibraryName: 'cl-vc-oc2-001',
     connectionStatus: 'CONNECTED',
-    datacenterCount: 2, clusterCount: 6,
     esxiHostCount: 18, vmInstanceCount: 287,
     syncStatus: 'NEVER', lastSyncedAt: null,
     createdAt: '2026-06-22T08:05:00Z', updatedAt: '2026-06-22T08:05:00Z',
@@ -41,8 +41,8 @@ export const poolsStore: ResourcePool[] = [
   {
     id: 'rp03', name: 'vCenter_OC3',
     endpoint: 'https://vc.oc3.platform.local/sdk',
+    contentLibraryName: 'cl-vc-oc3-001',
     connectionStatus: 'DISCONNECTED',
-    datacenterCount: 1, clusterCount: 4,
     esxiHostCount: 12, vmInstanceCount: 156,
     syncStatus: 'SYNCED', lastSyncedAt: '2026-06-22T08:10:00Z',
     createdAt: '2026-06-22T08:10:00Z', updatedAt: '2026-06-22T08:10:00Z',
@@ -50,8 +50,8 @@ export const poolsStore: ResourcePool[] = [
   {
     id: 'rp04', name: 'vCenter_HK1',
     endpoint: 'https://vc.hk1.platform.local/sdk',
+    contentLibraryName: 'cl-vc-hk1-001',
     connectionStatus: 'CONNECTED',
-    datacenterCount: 1, clusterCount: 3,
     esxiHostCount: 9, vmInstanceCount: 128,
     syncStatus: 'SYNCED', lastSyncedAt: '2026-06-20T08:00:00Z',
     createdAt: '2026-02-15T02:00:00Z', updatedAt: '2026-06-20T08:00:00Z',
@@ -59,8 +59,8 @@ export const poolsStore: ResourcePool[] = [
   {
     id: 'rp05', name: 'vCenter_SG1',
     endpoint: 'https://vc.sg1.platform.local/sdk',
+    contentLibraryName: 'cl-vc-sg1-001',
     connectionStatus: 'DISCONNECTED',
-    datacenterCount: 2, clusterCount: 5,
     esxiHostCount: 15, vmInstanceCount: 203,
     syncStatus: 'FAILED', lastSyncedAt: '2026-06-19T10:00:00Z',
     createdAt: '2026-03-01T02:00:00Z', updatedAt: '2026-06-19T10:00:00Z',
@@ -68,8 +68,8 @@ export const poolsStore: ResourcePool[] = [
   {
     id: 'rp06', name: 'vCenter_TokyoA',
     endpoint: 'https://vc.tokyo-a.platform.local/sdk',
+    contentLibraryName: 'cl-vc-tokyo-a-001',
     connectionStatus: 'CONNECTED',
-    datacenterCount: 2, clusterCount: 7,
     esxiHostCount: 21, vmInstanceCount: 348,
     syncStatus: 'SYNCED', lastSyncedAt: '2026-06-21T03:40:00Z',
     createdAt: '2026-03-12T02:00:00Z', updatedAt: '2026-06-21T03:40:00Z',
@@ -77,8 +77,8 @@ export const poolsStore: ResourcePool[] = [
   {
     id: 'rp07', name: 'vCenter_TokyoB',
     endpoint: 'https://vc.tokyo-b.platform.local/sdk',
+    contentLibraryName: 'cl-vc-tokyo-b-001',
     connectionStatus: 'CONNECTED',
-    datacenterCount: 1, clusterCount: 4,
     esxiHostCount: 12, vmInstanceCount: 174,
     syncStatus: 'SYNCED', lastSyncedAt: '2026-06-21T03:42:00Z',
     createdAt: '2026-03-20T02:00:00Z', updatedAt: '2026-06-21T03:42:00Z',
@@ -86,8 +86,8 @@ export const poolsStore: ResourcePool[] = [
   {
     id: 'rp08', name: 'vCenter_Seoul1',
     endpoint: 'https://vc.seoul1.platform.local/sdk',
+    contentLibraryName: 'cl-vc-seoul1-001',
     connectionStatus: 'DISCONNECTED',
-    datacenterCount: 1, clusterCount: 3,
     esxiHostCount: 8, vmInstanceCount: 92,
     syncStatus: 'FAILED', lastSyncedAt: '2026-06-17T15:00:00Z',
     createdAt: '2026-04-02T02:00:00Z', updatedAt: '2026-06-17T15:00:00Z',
@@ -95,8 +95,8 @@ export const poolsStore: ResourcePool[] = [
   {
     id: 'rp09', name: 'vCenter_FRA1',
     endpoint: 'https://vc.fra1.platform.local/sdk',
+    contentLibraryName: 'cl-vc-fra1-001',
     connectionStatus: 'CONNECTED',
-    datacenterCount: 3, clusterCount: 9,
     esxiHostCount: 27, vmInstanceCount: 489,
     syncStatus: 'SYNCED', lastSyncedAt: '2026-06-21T03:45:00Z',
     createdAt: '2026-04-15T02:00:00Z', updatedAt: '2026-06-21T03:45:00Z',
@@ -104,8 +104,8 @@ export const poolsStore: ResourcePool[] = [
   {
     id: 'rp10', name: 'vCenter_DFW1',
     endpoint: 'https://vc.dfw1.platform.local/sdk',
+    contentLibraryName: 'cl-vc-dfw1-001',
     connectionStatus: 'CONNECTED',
-    datacenterCount: 2, clusterCount: 6,
     esxiHostCount: 18, vmInstanceCount: 256,
     syncStatus: 'SYNCED', lastSyncedAt: '2026-06-21T03:50:00Z',
     createdAt: '2026-04-28T02:00:00Z', updatedAt: '2026-06-21T03:50:00Z',
@@ -113,8 +113,8 @@ export const poolsStore: ResourcePool[] = [
   {
     id: 'rp11', name: 'vCenter_SJC1',
     endpoint: 'https://vc.sjc1.platform.local/sdk',
+    contentLibraryName: 'cl-vc-sjc1-001',
     connectionStatus: 'DISCONNECTED',
-    datacenterCount: 1, clusterCount: 2,
     esxiHostCount: 6, vmInstanceCount: 73,
     syncStatus: 'SYNCED', lastSyncedAt: '2026-06-19T09:00:00Z',
     createdAt: '2026-05-10T02:00:00Z', updatedAt: '2026-06-19T09:00:00Z',
@@ -122,8 +122,8 @@ export const poolsStore: ResourcePool[] = [
   {
     id: 'rp12', name: 'vCenter_IAD1',
     endpoint: 'https://vc.iad1.platform.local/sdk',
+    contentLibraryName: 'cl-vc-iad1-001',
     connectionStatus: 'CONNECTED',
-    datacenterCount: 2, clusterCount: 5,
     esxiHostCount: 15, vmInstanceCount: 211,
     syncStatus: 'SYNCED', lastSyncedAt: '2026-06-21T03:55:00Z',
     createdAt: '2026-05-25T02:00:00Z', updatedAt: '2026-06-21T03:55:00Z',
@@ -156,10 +156,8 @@ function compareBy(field: ResourcePoolSortField, a: ResourcePool, b: ResourcePoo
       return a.endpoint.localeCompare(b.endpoint)
     case 'CONNECTION_STATUS':
       return a.connectionStatus.localeCompare(b.connectionStatus)
-    case 'DATACENTER_COUNT':
-      return a.datacenterCount - b.datacenterCount
-    case 'CLUSTER_COUNT':
-      return a.clusterCount - b.clusterCount
+    case 'CONTENT_LIBRARY_NAME':
+      return a.contentLibraryName.localeCompare(b.contentLibraryName)
     case 'ESXI_HOST_COUNT':
       return a.esxiHostCount - b.esxiHostCount
     case 'VM_INSTANCE_COUNT':
@@ -205,9 +203,8 @@ export function createResourcePoolInFixture(input: CreateResourcePoolInput, now:
     id: `rp${Date.now()}`,
     name: input.name,
     endpoint: input.endpoint,
+    contentLibraryName: input.contentLibraryName,
     connectionStatus: 'DISCONNECTED', // brand-new pool starts disconnected until first sync
-    datacenterCount: input.datacenterCount ?? 0,
-    clusterCount: input.clusterCount ?? 0,
     esxiHostCount: 0,
     vmInstanceCount: 0,
     syncStatus: 'NEVER',
@@ -228,8 +225,9 @@ export function updateResourcePoolInFixture(
   if (!p) throw new Error(`资源池不存在: ${id}`)
   if (patch.name !== undefined && patch.name !== null) p.name = patch.name
   if (patch.endpoint !== undefined && patch.endpoint !== null) p.endpoint = patch.endpoint
-  if (patch.datacenterCount !== undefined && patch.datacenterCount !== null) p.datacenterCount = patch.datacenterCount
-  if (patch.clusterCount !== undefined && patch.clusterCount !== null) p.clusterCount = patch.clusterCount
+  if (patch.contentLibraryName !== undefined && patch.contentLibraryName !== null) {
+    p.contentLibraryName = patch.contentLibraryName
+  }
   p.updatedAt = now
   return p
 }

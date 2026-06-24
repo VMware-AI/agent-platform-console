@@ -39,11 +39,10 @@ function escapeCsvCell(value: string): string {
 function buildCsv(agents: Agent[], headers: string[], locale: ReturnType<typeof useLocaleStore>): string {
   const headerLine = headers.map(escapeCsvCell).join(',')
   const dataLines = agents.map((a) => {
-    const typeCell = a.typeLabel
-      ?? locale.t(`agents.type.${TYPE_FROM_GQL[a.type]}`)
+    const typeCell = locale.t(`agents.type.${TYPE_FROM_GQL[a.type]}`)
     const statusCell = locale.t(`agents.status.${STATUS_FROM_GQL[a.status]}`)
     const keyCell = a.apiKey?.name ?? '—'
-    const ownerCell = a.owner?.displayName ?? '—'
+    const ownerCell = a.credentials?.username ?? '—'
     return [a.name, typeCell, statusCell, keyCell, ownerCell]
       .map(escapeCsvCell)
       .join(',')
@@ -132,7 +131,7 @@ export function useAgentExport(options: UseAgentExportOptions) {
         locale.t('agents.col.type'),
         locale.t('agents.col.status'),
         locale.t('agents.col.key'),
-        locale.t('agents.col.owner'),
+        locale.t('agents.col.username'),
       ]
       const csv = buildCsv(all, headers, locale)
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })

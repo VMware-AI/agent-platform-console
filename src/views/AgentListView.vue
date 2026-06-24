@@ -16,7 +16,7 @@ import type {
   StatusKey,
   TypeKey,
 } from '@/api/graphql/types'
-import { STATUS_FROM_GQL } from '@/api/graphql/types'
+import { STATUS_FROM_GQL, TYPE_FROM_GQL } from '@/api/graphql/types'
 
 const locale = useLocaleStore()
 
@@ -30,18 +30,18 @@ const statusFilter = ref<StatusKey | 'all'>('all')
 const typeFilter = ref<TypeKey | 'all'>('all')
 const sort = ref<{ field: AgentSortField; direction: SortDirection } | null>(null)
 
-/* Per-column text-search filters (Name / Key Name / Owner). Each one maps
+/* Per-column text-search filters (Name / Key Name / Run-as User). Each one maps
    to its own AgentFilter field; the backend is expected to substring-match. */
-type ColumnKeywordField = 'nameKeyword' | 'keyKeyword' | 'ownerKeyword'
+type ColumnKeywordField = 'nameKeyword' | 'keyKeyword' | 'usernameKeyword'
 const columnFilters = ref<Record<ColumnKeywordField, string>>({
   nameKeyword: '',
   keyKeyword: '',
-  ownerKeyword: '',
+  usernameKeyword: '',
 })
 const columnFilterAnchors = ref<Record<ColumnKeywordField, HTMLElement | null>>({
   nameKeyword: null,
   keyKeyword: null,
-  ownerKeyword: null,
+  usernameKeyword: null,
 })
 
 const filter = computed<AgentsQueryVars['filter']>(() => {
@@ -56,7 +56,7 @@ const filter = computed<AgentsQueryVars['filter']>(() => {
   }
   if (columnFilters.value.nameKeyword) f.nameKeyword = columnFilters.value.nameKeyword
   if (columnFilters.value.keyKeyword) f.keyKeyword = columnFilters.value.keyKeyword
-  if (columnFilters.value.ownerKeyword) f.ownerKeyword = columnFilters.value.ownerKeyword
+  if (columnFilters.value.usernameKeyword) f.usernameKeyword = columnFilters.value.usernameKeyword
   return Object.keys(f).length > 0 ? f : null
 })
 
@@ -155,11 +155,15 @@ const STATUS_OPTIONS: Array<StatusKey | 'all'> = [
 
 const TYPE_OPTIONS: Array<TypeKey | 'all'> = [
   'all',
-  'python-automation',
   'general-chat',
-  'code-analysis',
-  'data-analysis',
   'image-generation',
+  'basic-llm',
+  'openclaw',
+  'hermes',
+  'claude-code',
+  'xiaoguai',
+  'qcoder',
+  'opencode',
 ]
 
 function setStatusFilter(value: StatusKey | 'all') {
@@ -655,21 +659,21 @@ const summaryText = computed(() => {
           </span>
         </cds-grid-column>
 
-        <cds-grid-column :width="'9%'">
-          {{ locale.t('agents.col.owner') }}
+        <cds-grid-column :width="'10%'">
+          {{ locale.t('agents.col.username') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="`sort ${locale.t('agents.col.owner')}`"
-              @click="(e: MouseEvent) => onSortClick('OWNER')"
+              :aria-label="`sort ${locale.t('agents.col.username')}`"
+              @click="(e: MouseEvent) => onSortClick('USERNAME')"
             >
               <cds-icon
-                v-if="sortStateFor('OWNER') === 'ascending'"
+                v-if="sortStateFor('USERNAME') === 'ascending'"
                 shape="angle"
                 direction="up"
                 size="sm"
               ></cds-icon>
               <cds-icon
-                v-else-if="sortStateFor('OWNER') === 'descending'"
+                v-else-if="sortStateFor('USERNAME') === 'descending'"
                 shape="angle"
                 direction="down"
                 size="sm"
@@ -683,10 +687,10 @@ const summaryText = computed(() => {
             </cds-button-action>
             <cds-button-action
               shape="filter"
-              aria-controls="filter-OWNER"
-              :aria-label="`filter ${locale.t('agents.col.owner')}`"
-              :expanded="columnFilters.ownerKeyword.length > 0"
-              @click="(e: MouseEvent) => openColumnFilter('ownerKeyword', e.target)"
+              aria-controls="filter-USERNAME"
+              :aria-label="`filter ${locale.t('agents.col.username')}`"
+              :expanded="columnFilters.usernameKeyword.length > 0"
+              @click="(e: MouseEvent) => openColumnFilter('usernameKeyword', e.target)"
             ></cds-button-action>
           </span>
         </cds-grid-column>
@@ -770,7 +774,7 @@ const summaryText = computed(() => {
             <span class="cell-name">{{ agent.name }}</span>
           </cds-grid-cell>
           <cds-grid-cell>
-            <span class="muted">{{ agent.typeLabel }}</span>
+            <span class="muted">{{ locale.t(`agents.type.${TYPE_FROM_GQL[agent.type]}`) }}</span>
           </cds-grid-cell>
           <cds-grid-cell>
             <cds-badge
@@ -793,7 +797,7 @@ const summaryText = computed(() => {
             </span>
           </cds-grid-cell>
           <cds-grid-cell>
-            <span>{{ agent.owner?.displayName ?? '—' }}</span>
+            <span>{{ agent.credentials?.username ?? '—' }}</span>
           </cds-grid-cell>
           <cds-grid-cell class="muted time-cell">{{ fmtDateTime(agent.createdAt) }}</cds-grid-cell>
           <cds-grid-cell class="muted time-cell">{{ fmtDateTime(agent.updatedAt) }}</cds-grid-cell>
@@ -1005,20 +1009,20 @@ const summaryText = computed(() => {
     </cds-dropdown>
 
     <cds-dropdown
-      id="filter-OWNER"
+      id="filter-USERNAME"
       closable
-      :hidden="!columnFilterAnchors.ownerKeyword"
-      @closeChange="() => closeColumnFilter('ownerKeyword')"
-      :anchor="columnFilterAnchors.ownerKeyword"
+      :hidden="!columnFilterAnchors.usernameKeyword"
+      @closeChange="() => closeColumnFilter('usernameKeyword')"
+      :anchor="columnFilterAnchors.usernameKeyword"
     >
       <div cds-layout="vertical align:stretch p:xs">
         <cds-input>
           <input
             type="text"
-            :placeholder="locale.t('agents.col.owner.search')"
-            :aria-label="locale.t('agents.col.owner.search')"
-            :value="columnFilters.ownerKeyword"
-            @input="(e: Event) => setColumnFilter('ownerKeyword', (e.target as HTMLInputElement).value)"
+            :placeholder="locale.t('agents.col.username.search')"
+            :aria-label="locale.t('agents.col.username.search')"
+            :value="columnFilters.usernameKeyword"
+            @input="(e: Event) => setColumnFilter('usernameKeyword', (e.target as HTMLInputElement).value)"
           />
         </cds-input>
       </div>
