@@ -204,11 +204,10 @@ const visibleKeys = computed(() => {
   return filteredKeys.value.slice(offset, offset + pageSize.value)
 })
 const selectedCount = computed(() => selectedIds.value.size)
-const allVisibleSelected = computed(
-  () =>
-    visibleKeys.value.length > 0 &&
-    visibleKeys.value.every((key) => selectedIds.value.has(key.id)),
-)
+const allVisibleSelected = computed(() => {
+  const selectable = visibleKeys.value.filter((key) => key.status !== 'revoked')
+  return selectable.length > 0 && selectable.every((key) => selectedIds.value.has(key.id))
+})
 const summaryText = computed(() => {
   const start = totalCount.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1
   const end = Math.min(currentPage.value * pageSize.value, totalCount.value)
@@ -263,6 +262,7 @@ function toggleSelect(id: string, checked: boolean) {
 function toggleSelectAll(checked: boolean) {
   const next = new Set(selectedIds.value)
   for (const key of visibleKeys.value) {
+    if (key.status === 'revoked') continue // terminal — not actionable
     if (checked) next.add(key.id)
     else next.delete(key.id)
   }
@@ -374,22 +374,30 @@ async function submitKey(draft: VirtualKeyDraft) {
       },
     })
     formOpen.value = false
-    toast.success(locale.t('virtualKey.toast.created'))
-    currentPage.value = 1
-    await refetchKeys()
+    // Reveal the one-time secret BEFORE refetching — the secret is unrecoverable,
+    // so a failure of the (independent) list query must never suppress it.
     const secret = data?.issueVirtualKey?.secret
     if (secret) revealSecret(secret)
+    toast.success(locale.t('virtualKey.toast.created'))
+    currentPage.value = 1
   } catch (error) {
     toast.error(graphqlErrorMessage(error, locale.t('virtualKey.toast.issueFailed')))
+    return
   } finally {
     saving.value = false
   }
+  await refetchKeys()?.catch(() => {})
 }
 
 async function setEnabled(ids: string[], enabled: boolean) {
-  if (ids.length === 0) return
+  // Revoked keys are terminal — the backend rejects enable/disable on them, so
+  // drop them rather than surface a spurious partial-failure toast.
+  const actionable = ids.filter(
+    (id) => virtualKeys.value.find((key) => key.id === id)?.status !== 'revoked',
+  )
+  if (actionable.length === 0) return
   const outcomes = await Promise.allSettled(
-    ids.map((id) =>
+    actionable.map((id) =>
       apolloClient.mutate<SetVirtualKeyEnabledResult, SetVirtualKeyEnabledVars>({
         mutation: SET_VIRTUAL_KEY_ENABLED,
         variables: { id, enabled },
@@ -430,15 +438,17 @@ async function regenerate(key: VirtualKey, close?: () => void) {
       mutation: REGENERATE_VIRTUAL_KEY,
       variables: { id: key.id },
     })
-    toast.success(locale.t('virtualKey.toast.regenerated'))
-    await refetchKeys()
+    // Reveal before refetch — the rotated secret is returned once and unrecoverable.
     const secret = data?.regenerateVirtualKey?.secret
     if (secret) revealSecret(secret)
+    toast.success(locale.t('virtualKey.toast.regenerated'))
   } catch (error) {
     toast.error(graphqlErrorMessage(error, locale.t('virtualKey.toast.regenerateFailed')))
+    return
   } finally {
     saving.value = false
   }
+  await refetchKeys()?.catch(() => {})
 }
 
 function performBatch(action: BatchAction, close: () => void) {
@@ -464,7 +474,10 @@ function closeDelete() {
 }
 
 async function confirmDelete() {
-  const ids = [...pendingDeleteIds.value]
+  // Skip already-revoked keys — revoke is terminal and errors on them.
+  const ids = pendingDeleteIds.value.filter(
+    (id) => virtualKeys.value.find((key) => key.id === id)?.status !== 'revoked',
+  )
   pendingDeleteIds.value = []
   if (ids.length === 0) return
   const outcomes = await Promise.allSettled(
@@ -652,6 +665,7 @@ function goToPage(page: number) {
               type="checkbox"
               class="app-checkbox"
               :checked="selectedIds.has(keyItem.id)"
+              :disabled="keyItem.status === 'revoked'"
               :aria-label="locale.t('virtualKey.col.selectKey').replace('{name}', displayName(keyItem))"
               @change="toggleSelect(keyItem.id, ($event.target as HTMLInputElement).checked)"
             />

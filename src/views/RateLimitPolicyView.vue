@@ -45,7 +45,9 @@ function toUiPolicy(node: RateLimitPolicyNode): RateLimitPolicy {
       ? 'COMBINED'
       : requestLimitPerMinute > 0
         ? 'REQUEST'
-        : 'TOKEN'
+        : tokenLimitPerMinute > 0
+          ? 'TOKEN'
+          : 'COMBINED' // neither cap set — show as COMBINED rather than mislabel as TOKEN
   return {
     id: node.id,
     name: node.name,
@@ -246,24 +248,29 @@ async function submitPolicy(draft: RateLimitPolicyDraft) {
 
 async function setEnabled(ids: string[], enabled: boolean) {
   if (ids.length === 0) return
-  try {
-    await Promise.all(
-      ids.map((id) =>
-        apolloClient.mutate<SetRateLimitPolicyEnabledResult, SetRateLimitPolicyEnabledVars>({
-          mutation: SET_RATE_LIMIT_POLICY_ENABLED,
-          variables: { id, enabled },
-        }),
-      ),
-    )
+  const outcomes = await Promise.allSettled(
+    ids.map((id) =>
+      apolloClient.mutate<SetRateLimitPolicyEnabledResult, SetRateLimitPolicyEnabledVars>({
+        mutation: SET_RATE_LIMIT_POLICY_ENABLED,
+        variables: { id, enabled },
+      }),
+    ),
+  )
+  const ok = outcomes.filter((outcome) => outcome.status === 'fulfilled').length
+  const failure = outcomes.find(
+    (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected',
+  )
+  if (ok > 0) {
     toast.success(
       locale
         .t(enabled ? 'rateLimit.toast.enabled' : 'rateLimit.toast.disabled')
-        .replace('{count}', String(ids.length)),
+        .replace('{count}', String(ok)),
     )
-    await refetch()
-  } catch (error) {
-    toast.error(graphqlErrorMessage(error, locale.t('rateLimit.toast.saveFailed')))
   }
+  if (failure) {
+    toast.error(graphqlErrorMessage(failure.reason, locale.t('rateLimit.toast.saveFailed')))
+  }
+  await refetch()
 }
 
 function toggleEnabled(policy: RateLimitPolicy) {

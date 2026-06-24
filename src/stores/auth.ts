@@ -140,6 +140,8 @@ export const useAuthStore = defineStore('auth', () => {
         mustChangePassword.value = Boolean(data.me.mustChangePassword)
       } else {
         user.value = null
+        role.value = null
+        mustChangePassword.value = false
         clearStoredSession()
       }
     } catch {
