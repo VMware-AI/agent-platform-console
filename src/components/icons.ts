@@ -62,7 +62,9 @@ import {
   twoWayArrowsIcon,
   pencilIcon,
   banIcon,
-  timesIcon
+  timesIcon,
+  timesCircleIcon,
+  ellipsisVerticalIcon
 } from '@cds/core/icon'
 
 // Register once at module load. Idempotent — safe to import multiple times.
@@ -128,5 +130,7 @@ ClarityIcons.addIcons(
   twoWayArrowsIcon,
   pencilIcon,
   banIcon,
-  timesIcon
+  timesIcon,
+  timesCircleIcon,
+  ellipsisVerticalIcon
 )
