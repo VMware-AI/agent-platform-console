@@ -203,6 +203,9 @@ export const apolloClient = new ApolloClient({
       ResourcePool: { keyFields: ['id'] },
       AccountUser: { keyFields: ['id'] },
       Role: { keyFields: ['id'] },
+      OvaTemplateFamily: { keyFields: ['id'] },
+      OvaTemplateVersion: { keyFields: ['id'] },
+      VirtualKey: { keyFields: ['id'] },
     },
   }),
   defaultOptions: {

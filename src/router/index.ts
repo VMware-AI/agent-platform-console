@@ -18,7 +18,7 @@ const router = createRouter({
         // 智能体中心
         { path: 'agents/list',        name: 'agents.list',        component: () => import('@/views/AgentListView.vue') },
         { path: 'agents/config',      name: 'agents.config',      component: ComingSoon, props: { title: '智能体配置' } },
-        { path: 'agents/marketplace', name: 'agents.marketplace', component: ComingSoon, props: { title: '智能体市场' } },
+        { path: 'agents/marketplace', name: 'agents.marketplace', component: () => import('@/views/AgentMarketplaceView.vue') },
 
         // 模型网关配置
         { path: 'model-gateway/route', name: 'mg.route', component: () => import('@/views/ModelRouteView.vue') },

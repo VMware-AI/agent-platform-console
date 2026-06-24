@@ -57,7 +57,7 @@ async function openRoleUsers(role: Role) {
     const r = await usersByRoleQuery.refetch({ roleId: role.id })
     usersUnderRole.value = r?.data?.users.nodes ?? []
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[roles] load users under role failed', err)
     usersUnderRole.value = []
   }
@@ -85,7 +85,7 @@ async function doDelete() {
     toast.success(locale.t('roles.toast.deleteOk').replace('{name}', target.name))
     refetchRoles()
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[roles] delete role failed', err)
     toast.error(locale.t('roles.toast.deleteFail'))
   }

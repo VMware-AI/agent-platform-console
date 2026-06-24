@@ -29,7 +29,7 @@ import {
 } from './fixtures/users'
 import { rolesFixture, findRoleOptional } from './fixtures/roles'
 import { generatePassword, passwordMeets } from '../../composables/usePasswordComplexity'
-import { agentsFixture } from './fixtures/agents'
+import { agentsFixture, deployAgentInFixture } from './fixtures/agents'
 import {
   resourcePoolsFixture,
   findResourcePool,
@@ -38,11 +38,30 @@ import {
   deleteResourcePoolFromFixture,
   syncResourcePoolInFixture,
 } from './fixtures/resourcePools'
+import {
+  ovaTemplateFamiliesFixture,
+  ovaTemplateVersionsFixture,
+  findOvaTemplateFamily,
+  findOvaTemplateFamilyByName,
+  createOvaTemplateFamilyInFixture,
+  addOvaTemplateVersionInFixture,
+} from './fixtures/ovaTemplates'
+import {
+  virtualKeysFixture,
+  findAvailableVirtualKeys,
+  findVirtualKey,
+  createVirtualKeyInFixture,
+  revokeVirtualKeyInFixture,
+} from './fixtures/virtualKeys'
 import { GraphQLError } from 'graphql'
 import type {
   AssignUsersToRoleInput,
+  CreateOvaTemplateFamilyInput,
+  AddOvaTemplateVersionInput,
+  CreateVirtualKeyInput,
   CreateResourcePoolInput,
   CreateUserInput,
+  DeployAgentInput,
   UpdateResourcePoolInput,
   UpdateUserInput,
 } from './types'
@@ -132,6 +151,30 @@ export const rootValue = {
     })
     return p
   },
+
+  // ---------- Agent Marketplace ----------
+  ovaTemplateFamilies: (args: {
+    filter?: unknown
+    pagination?: unknown
+    sort?: unknown
+  }) => ovaTemplateFamiliesFixture(args as never),
+
+  ovaTemplateFamily: (args: { id: string }) => {
+    const f = findOvaTemplateFamily(args.id)
+    if (!f) throw new GraphQLError('模板不存在', {
+      extensions: { code: 'OVA_TEMPLATE_FAMILY_NOT_FOUND' },
+    })
+    return f
+  },
+
+  ovaTemplateVersions: (args: { familyId?: string; pagination?: unknown }) =>
+    ovaTemplateVersionsFixture(args.familyId),
+
+  virtualKeys: (args: { filter?: unknown; pagination?: unknown }) =>
+    virtualKeysFixture(args.filter as never),
+
+  availableVirtualKeys: (args: { modelGatewayId?: string }) =>
+    findAvailableVirtualKeys(args.modelGatewayId),
 
   /* ============================================================
    * Mutation
@@ -225,6 +268,7 @@ export const rootValue = {
   createResourcePool: (args: { input: CreateResourcePoolInput }) => {
     const name = args.input?.name?.trim()
     const endpoint = args.input?.endpoint?.trim()
+    const contentLibraryName = args.input?.contentLibraryName?.trim()
     if (!name) {
       throw new GraphQLError('资源池名称不能为空', {
         extensions: { code: 'NAME_REQUIRED', field: 'name' },
@@ -233,6 +277,11 @@ export const rootValue = {
     if (!endpoint) {
       throw new GraphQLError('Endpoint 不能为空', {
         extensions: { code: 'ENDPOINT_REQUIRED', field: 'endpoint' },
+      })
+    }
+    if (!contentLibraryName) {
+      throw new GraphQLError('内容库名称不能为空', {
+        extensions: { code: 'CONTENT_LIBRARY_NAME_REQUIRED', field: 'contentLibraryName' },
       })
     }
     const pool = createResourcePoolInFixture(args.input, nowIso())
@@ -266,6 +315,127 @@ export const rootValue = {
     } catch (err) {
       throw new GraphQLError((err as Error).message, {
         extensions: { code: 'RESOURCE_POOL_NOT_FOUND' },
+      })
+    }
+  },
+
+  // Pretend test-connection: returns 50% success / 50% failure with a
+  // stable hash so the same name+endpoint+contentLibraryName triple
+  // always yields the same result (good for screenshot tests / dev).
+  testResourcePoolConnection: (args: {
+    input: {
+      name?: string | null
+      endpoint?: string | null
+      contentLibraryName?: string | null
+    }
+  }) => {
+    const name = (args.input?.name ?? '').trim()
+    const endpoint = (args.input?.endpoint ?? '').trim()
+    const contentLibraryName = (args.input?.contentLibraryName ?? '').trim()
+    if (!name || !endpoint || !contentLibraryName) {
+      return { ok: false, message: '字段不能为空', detail: null }
+    }
+    const seed = `${name}|${endpoint}|${contentLibraryName}`
+    let h = 0
+    for (let i = 0; i < seed.length; i++) {
+      h = (h * 31 + seed.charCodeAt(i)) >>> 0
+    }
+    if (h % 2 === 0) {
+      return {
+        ok: true,
+        message: '连接成功',
+        detail: { vSphereVersion: '7.0.3', itemCount: 12 },
+      }
+    }
+    const failureMessages = ['Endpoint 不可达', '内容库未找到', '认证失败']
+    return { ok: false, message: failureMessages[h % failureMessages.length], detail: null }
+  },
+
+  // ---------- Agent Marketplace ----------
+  createOvaTemplateFamily: (args: { input: CreateOvaTemplateFamilyInput }) => {
+    if (!args.input.name?.trim()) {
+      throw new GraphQLError('名称不能为空', {
+        extensions: { code: 'NAME_REQUIRED', field: 'name' },
+      })
+    }
+    if (!args.input.initialVersion?.ovaIdentifier?.trim()) {
+      throw new GraphQLError('OVA 标识符不能为空', {
+        extensions: { code: 'OVA_IDENTIFIER_REQUIRED' },
+      })
+    }
+    if (findOvaTemplateFamilyByName(args.input.name.trim())) {
+      throw new GraphQLError('名称已存在', { extensions: { code: 'OVA_NAME_TAKEN' } })
+    }
+    if (!/^[a-zA-Z0-9._-]+$/.test(args.input.initialVersion.ovaIdentifier.trim())) {
+      throw new GraphQLError('OVA 标识符格式不正确', {
+        extensions: { code: 'OVA_IDENTIFIER_FORMAT' },
+      })
+    }
+    return { family: createOvaTemplateFamilyInFixture(args.input, nowIso()) }
+  },
+
+  addOvaTemplateVersion: (args: { input: AddOvaTemplateVersionInput }) => {
+    try {
+      return { version: addOvaTemplateVersionInFixture(args.input, nowIso()) }
+    } catch (err) {
+      throw new GraphQLError((err as Error).message, {
+        extensions: { code: 'OVA_TEMPLATE_FAMILY_NOT_FOUND' },
+      })
+    }
+  },
+
+  // ---------- VirtualKey ----------
+  createVirtualKey: (args: { input: CreateVirtualKeyInput }) => {
+    if (!args.input.name?.trim()) {
+      throw new GraphQLError('密钥名称不能为空', {
+        extensions: { code: 'NAME_REQUIRED' },
+      })
+    }
+    return createVirtualKeyInFixture(args.input, nowIso())
+  },
+
+  revokeVirtualKey: (args: { id: string }) => {
+    try {
+      return revokeVirtualKeyInFixture(args.id, nowIso())
+    } catch (err) {
+      throw new GraphQLError((err as Error).message, {
+        extensions: { code: 'VIRTUAL_KEY_NOT_FOUND' },
+      })
+    }
+  },
+
+  // ---------- Deploy Agent ----------
+  deployAgent: (args: { input: DeployAgentInput }) => {
+    if (!args.input.name?.trim()) {
+      throw new GraphQLError('智能体名称不能为空', {
+        extensions: { code: 'NAME_REQUIRED' },
+      })
+    }
+    if (!args.input.username?.trim()) {
+      throw new GraphQLError('运行账户用户名不能为空', {
+        extensions: { code: 'USERNAME_REQUIRED' },
+      })
+    }
+    if (!args.input.password) {
+      throw new GraphQLError('密码不能为空', {
+        extensions: { code: 'PASSWORD_REQUIRED' },
+      })
+    }
+    if (args.input.virtualKeyMode === 'USE_EXISTING' && !args.input.existingVirtualKeyId) {
+      throw new GraphQLError('缺少已选虚拟密钥 ID', {
+        extensions: { code: 'VIRTUAL_KEY_REQUIRED' },
+      })
+    }
+    if (args.input.virtualKeyMode === 'CREATE_NEW' && !args.input.newVirtualKeyName?.trim()) {
+      throw new GraphQLError('新虚拟密钥名称不能为空', {
+        extensions: { code: 'VIRTUAL_KEY_NAME_REQUIRED' },
+      })
+    }
+    try {
+      return deployAgentInFixture(args.input, nowIso())
+    } catch (err) {
+      throw new GraphQLError((err as Error).message, {
+        extensions: { code: 'DEPLOY_FAILED' },
       })
     }
   },

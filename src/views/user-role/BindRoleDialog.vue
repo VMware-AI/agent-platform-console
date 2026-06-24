@@ -86,7 +86,7 @@ async function onSubmit() {
       locale.t('users.toast.bindOk').replace('{count}', String(payload.assignedCount)),
     )
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[users] assignUsersToRole failed', err)
     toast.error(locale.t('users.toast.bindFail'))
   }

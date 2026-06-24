@@ -17,14 +17,18 @@ export const typeDefs = /* GraphQL */ `
   enum SortDirection { ASC DESC }
   enum AgentStatus { RUNNING STOPPED ERROR }
   enum AgentType {
-    PYTHON_AUTOMATION
     GENERAL_CHAT
-    CODE_ANALYSIS
-    DATA_ANALYSIS
     IMAGE_GENERATION
+    BASIC_LLM
+    OPENCLAW
+    HERMES
+    CLAUDE_CODE
+    XIAOGUAI
+    QCODER
+    OPENCODE
   }
   enum AgentSortField {
-    NAME TYPE STATUS API_KEY_NAME OWNER CREATED_AT UPDATED_AT
+    NAME TYPE STATUS API_KEY_NAME USERNAME CREATED_AT UPDATED_AT
   }
   enum UserSortField {
     USERNAME ROLE EMAIL CONNECTION LAST_LOGIN CREATED_AT UPDATED_AT
@@ -32,20 +36,22 @@ export const typeDefs = /* GraphQL */ `
 
   type PageInfo { page: Int!  pageSize: Int!  totalPages: Int! }
 
-  # ---------- Agent (legacy — read-only) ----------
+  # ---------- Agent ----------
   type AgentApiKey { id: ID!  name: String! }
-  type User { id: ID!  displayName: String!  email: String! }
+  type AgentCredentials { username: String!  passwordHash: String! }
   type Agent {
     id: ID!
     name: String!
     type: AgentType!
-    typeLabel: String!
     status: AgentStatus!
     apiKey: AgentApiKey
-    owner: User
+    credentials: AgentCredentials!
     createdAt: DateTime!
     updatedAt: DateTime!
     endpoint: String
+    templateFamilyId: ID
+    templateVersionId: ID
+    resourcePoolId: ID
   }
   type AgentConnection {
     nodes: [Agent!]!
@@ -57,7 +63,7 @@ export const typeDefs = /* GraphQL */ `
     type: AgentType
     nameKeyword: String
     keyKeyword: String
-    ownerKeyword: String
+    usernameKeyword: String
   }
   input AgentSort { field: AgentSortField!  direction: SortDirection! }
 
@@ -125,16 +131,16 @@ export const typeDefs = /* GraphQL */ `
   enum ResourcePoolSyncState { SYNCED SYNCING PARTIAL FAILED NEVER }
   enum ResourcePoolSortField {
     NAME ENDPOINT CONNECTION_STATUS
-    DATACENTER_COUNT CLUSTER_COUNT ESXI_HOST_COUNT VM_INSTANCE_COUNT
+    CONTENT_LIBRARY_NAME
+    ESXI_HOST_COUNT VM_INSTANCE_COUNT
     CREATED_AT UPDATED_AT
   }
   type ResourcePool {
     id: ID!
     name: String!
     endpoint: String!
+    contentLibraryName: String!
     connectionStatus: PoolConnectionStatus!
-    datacenterCount: Int!
-    clusterCount: Int!
     esxiHostCount: Int!
     vmInstanceCount: Int!
     syncStatus: ResourcePoolSyncState!
@@ -156,19 +162,149 @@ export const typeDefs = /* GraphQL */ `
   input CreateResourcePoolInput {
     name: String!
     endpoint: String!
-    datacenterCount: Int
-    clusterCount: Int
+    contentLibraryName: String!
   }
   input UpdateResourcePoolInput {
     name: String
     endpoint: String
-    datacenterCount: Int
-    clusterCount: Int
+    contentLibraryName: String
+  }
+  input TestResourcePoolConnectionInput {
+    name: String!
+    endpoint: String!
+    contentLibraryName: String!
+  }
+  type ResourcePoolConnectionDetail {
+    vSphereVersion: String!
+    itemCount: Int!
+  }
+  type ResourcePoolConnectionTest {
+    ok: Boolean!
+    message: String!
+    detail: ResourcePoolConnectionDetail
   }
   type CreateResourcePoolPayload { pool: ResourcePool! }
   type UpdateResourcePoolPayload { pool: ResourcePool! }
   type DeleteResourcePoolPayload { id: ID!  deletedName: String! }
   type SyncResourcePoolPayload { pool: ResourcePool!  syncedAt: DateTime! }
+
+  # ---------- Agent Marketplace: OvaTemplateFamily + OvaTemplateVersion ----------
+  enum OvaTemplateColor { BLUE PURPLE ORANGE GREEN RED CYAN }
+  enum OvaTemplateFamilySortField { OVA_NAME TYPE CREATED_AT UPDATED_AT }
+  type OvaTemplateFamily {
+    id: ID!
+    name: String!
+    type: AgentType!
+    description: String!
+    tools: [String!]!
+    scenarios: [String!]!
+    skills: [String!]!
+    iconShape: String!
+    iconColor: OvaTemplateColor!
+    versions: [OvaTemplateVersion!]!
+    latestVersion: String
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+  type OvaTemplateFamilyConnection {
+    nodes: [OvaTemplateFamily!]!
+    totalCount: Int!
+    pageInfo: PageInfo!
+  }
+  type OvaTemplateVersion {
+    id: ID!
+    familyId: ID!
+    version: String!
+    ovaIdentifier: String!
+    notes: String
+    createdAt: DateTime!
+  }
+  type OvaTemplateVersionConnection {
+    nodes: [OvaTemplateVersion!]!
+    totalCount: Int!
+    pageInfo: PageInfo!
+  }
+  input OvaTemplateFamilyFilter { nameKeyword: String  type: AgentType }
+  input OvaTemplateFamilySort { field: OvaTemplateFamilySortField!  direction: SortDirection! }
+  input CreateOvaTemplateVersionInput {
+    version: String!
+    ovaIdentifier: String!
+    notes: String
+  }
+  input CreateOvaTemplateFamilyInput {
+    name: String!
+    type: AgentType!
+    description: String!
+    tools: [String!]!
+    scenarios: [String!]!
+    skills: [String!]!
+    iconShape: String!
+    iconColor: OvaTemplateColor!
+    initialVersion: CreateOvaTemplateVersionInput!
+  }
+  input AddOvaTemplateVersionInput {
+    familyId: ID!
+    version: String!
+    ovaIdentifier: String!
+    notes: String
+  }
+  type CreateOvaTemplateFamilyPayload { family: OvaTemplateFamily! }
+  type AddOvaTemplateVersionPayload { version: OvaTemplateVersion! }
+
+  # ---------- VirtualKey ----------
+  enum VirtualKeyStatus { AVAILABLE BOUND REVOKED }
+  type ModelGatewayRef { id: ID!  name: String!  endpoint: String! }
+  type VirtualKey {
+    id: ID!
+    name: String!
+    secret: String!
+    modelGatewayId: ID!
+    modelGateway: ModelGatewayRef!
+    status: VirtualKeyStatus!
+    boundAgentId: ID
+    boundAgent: Agent
+    createdAt: DateTime!
+    boundAt: DateTime
+  }
+  type VirtualKeyConnection {
+    nodes: [VirtualKey!]!
+    totalCount: Int!
+    pageInfo: PageInfo!
+  }
+  input VirtualKeyFilter {
+    status: VirtualKeyStatus
+    modelGatewayId: ID
+    nameKeyword: String
+  }
+  input CreateVirtualKeyInput {
+    name: String!
+    modelGatewayId: ID!
+  }
+  type CreateVirtualKeyPayload {
+    key: VirtualKey!
+    secret: String!
+  }
+
+  # ---------- Deploy Agent ----------
+  enum VirtualKeyMode { USE_EXISTING CREATE_NEW }
+  input DeployAgentInput {
+    templateVersionId: ID!
+    resourcePoolId: ID!
+    modelGatewayId: ID!
+    virtualKeyMode: VirtualKeyMode!
+    existingVirtualKeyId: ID
+    newVirtualKeyName: String
+    name: String!
+    username: String!
+    password: String!
+    description: String
+  }
+  type DeployAgentPayload {
+    agent: Agent!
+    virtualKey: VirtualKey!
+    templateVersion: OvaTemplateVersion!
+    resourcePool: ResourcePool!
+  }
 
   input Pagination { page: Int!  pageSize: Int! }
 
@@ -204,6 +340,19 @@ export const typeDefs = /* GraphQL */ `
       sort: ResourcePoolSort
     ): ResourcePoolConnection!
     resourcePool(id: ID!): ResourcePool
+
+    # ---------- Agent Marketplace ----------
+    ovaTemplateFamilies(
+      filter: OvaTemplateFamilyFilter
+      pagination: Pagination
+      sort: OvaTemplateFamilySort
+    ): OvaTemplateFamilyConnection!
+    ovaTemplateFamily(id: ID!): OvaTemplateFamily
+    ovaTemplateVersions(familyId: ID, pagination: Pagination): OvaTemplateVersionConnection!
+
+    # ---------- VirtualKey ----------
+    virtualKeys(filter: VirtualKeyFilter, pagination: Pagination): VirtualKeyConnection!
+    availableVirtualKeys(modelGatewayId: ID): [VirtualKey!]!
   }
 
   type Mutation {
@@ -218,5 +367,17 @@ export const typeDefs = /* GraphQL */ `
     updateResourcePool(id: ID!, input: UpdateResourcePoolInput!): UpdateResourcePoolPayload!
     deleteResourcePool(id: ID!): DeleteResourcePoolPayload!
     syncResourcePool(id: ID!): SyncResourcePoolPayload!
+    testResourcePoolConnection(input: TestResourcePoolConnectionInput!): ResourcePoolConnectionTest!
+
+    # ---------- Agent Marketplace ----------
+    createOvaTemplateFamily(input: CreateOvaTemplateFamilyInput!): CreateOvaTemplateFamilyPayload!
+    addOvaTemplateVersion(input: AddOvaTemplateVersionInput!): AddOvaTemplateVersionPayload!
+
+    # ---------- VirtualKey ----------
+    createVirtualKey(input: CreateVirtualKeyInput!): CreateVirtualKeyPayload!
+    revokeVirtualKey(id: ID!): VirtualKey!
+
+    # ---------- Deploy Agent ----------
+    deployAgent(input: DeployAgentInput!): DeployAgentPayload!
   }
 `

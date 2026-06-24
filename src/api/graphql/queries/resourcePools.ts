@@ -5,9 +5,8 @@ const RESOURCE_POOL_FIELDS = /* GraphQL */ `
     id
     name
     endpoint
+    contentLibraryName
     connectionStatus
-    datacenterCount
-    clusterCount
     esxiHostCount
     vmInstanceCount
     syncStatus
@@ -88,6 +87,19 @@ export const SYNC_RESOURCE_POOL_MUTATION = gql`
         ...ResourcePoolFields
       }
       syncedAt
+    }
+  }
+`
+
+export const TEST_RESOURCE_POOL_CONNECTION_MUTATION = gql`
+  mutation TestResourcePoolConnection($input: TestResourcePoolConnectionInput!) {
+    testResourcePoolConnection(input: $input) {
+      ok
+      message
+      detail {
+        vSphereVersion
+        itemCount
+      }
     }
   }
 `

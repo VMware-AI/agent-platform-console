@@ -10,9 +10,16 @@
  * or `UpdateResourcePoolInput` payload — the parent decides which mutation
  * to fire.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { useMutation } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
-import type { CreateResourcePoolInput, ResourcePool } from '@/api/graphql/types'
+import { TEST_RESOURCE_POOL_CONNECTION_MUTATION } from '@/api/graphql/queries/resourcePools'
+import type {
+  CreateResourcePoolInput,
+  ResourcePool,
+  TestResourcePoolConnectionResult,
+  TestResourcePoolConnectionVars,
+} from '@/api/graphql/types'
 import '@/components/icons'
 
 const props = defineProps<{
@@ -29,10 +36,11 @@ const emit = defineEmits<{
 
 const locale = useLocaleStore()
 
-const name = ref('')
-const endpoint = ref('')
-const datacenterCount = ref<string>('')
-const clusterCount = ref<string>('')
+const form = reactive({
+  name: '',
+  endpoint: '',
+  contentLibraryName: '',
+})
 
 const isEdit = computed(() => !!props.pool)
 
@@ -40,45 +48,93 @@ const titleKey = computed(() =>
   isEdit.value ? 'resources.form.title.edit' : 'resources.form.title.create',
 )
 
+/** Track which input fields the alert was last computed against — if any
+ *  of them change after the test, the alert is hidden (stale). */
+const testSnapshot = ref<{ name: string; endpoint: string; contentLibraryName: string } | null>(null)
+const testResult = ref<null | { ok: boolean; message: string; detail: { vSphereVersion: string; itemCount: number } | null }>(null)
+
+const canTest = computed(
+  () => !!(form.name.trim() && form.endpoint.trim() && form.contentLibraryName.trim()),
+)
+const canSubmit = computed(() => canTest.value)
+
 watch(
   () => props.open,
   (o) => {
     if (o) {
-      name.value = props.pool?.name ?? ''
-      endpoint.value = props.pool?.endpoint ?? ''
-      datacenterCount.value =
-        props.pool?.datacenterCount !== undefined && props.pool?.datacenterCount !== null
-          ? String(props.pool.datacenterCount)
-          : ''
-      clusterCount.value =
-        props.pool?.clusterCount !== undefined && props.pool?.clusterCount !== null
-          ? String(props.pool.clusterCount)
-          : ''
+      form.name = props.pool?.name ?? ''
+      form.endpoint = props.pool?.endpoint ?? ''
+      form.contentLibraryName = props.pool?.contentLibraryName ?? ''
+      // Reset the test-connection alert every time the dialog re-opens.
+      testResult.value = null
     }
   },
   { immediate: true },
 )
 
-const formValid = computed(() => {
-  if (!name.value.trim()) return false
-  if (!endpoint.value.trim()) return false
-  // numeric fields are optional; if filled they must be non-negative ints
-  if (datacenterCount.value.trim() && Number.isNaN(parseInt(datacenterCount.value, 10))) return false
-  if (clusterCount.value.trim() && Number.isNaN(parseInt(clusterCount.value, 10))) return false
-  return true
-})
+watch(
+  () => [form.name, form.endpoint, form.contentLibraryName],
+  () => {
+    if (testSnapshot.value) {
+      const cur = { name: form.name, endpoint: form.endpoint, contentLibraryName: form.contentLibraryName }
+      if (
+        cur.name !== testSnapshot.value.name ||
+        cur.endpoint !== testSnapshot.value.endpoint ||
+        cur.contentLibraryName !== testSnapshot.value.contentLibraryName
+      ) {
+        testResult.value = null
+        testSnapshot.value = null
+      }
+    }
+  },
+)
+
+const { mutate: testConnectionMutate, loading: testing } = useMutation<
+  TestResourcePoolConnectionResult,
+  TestResourcePoolConnectionVars
+>(TEST_RESOURCE_POOL_CONNECTION_MUTATION)
+
+async function onTestConnection() {
+  if (!canTest.value || testing.value) return
+  try {
+    const r = await testConnectionMutate({
+      input: {
+        name: form.name.trim(),
+        endpoint: form.endpoint.trim(),
+        contentLibraryName: form.contentLibraryName.trim(),
+      },
+    })
+    const res = r?.data?.testResourcePoolConnection
+    if (res) {
+      testResult.value = {
+        ok: res.ok,
+        message: res.message,
+        detail: res.detail,
+      }
+      testSnapshot.value = {
+        name: form.name,
+        endpoint: form.endpoint,
+        contentLibraryName: form.contentLibraryName,
+      }
+    }
+  } catch (err) {
+     
+    console.error('[resources] test connection failed', err)
+    testResult.value = { ok: false, message: '请求失败,请重试', detail: null }
+  }
+}
+
+function dismissTestResult() {
+  testResult.value = null
+  testSnapshot.value = null
+}
 
 function onSubmit() {
-  if (!formValid.value) return
+  if (!canSubmit.value) return
   const input: CreateResourcePoolInput = {
-    name: name.value.trim(),
-    endpoint: endpoint.value.trim(),
-    datacenterCount: datacenterCount.value.trim()
-      ? parseInt(datacenterCount.value, 10)
-      : null,
-    clusterCount: clusterCount.value.trim()
-      ? parseInt(clusterCount.value, 10)
-      : null,
+    name: form.name.trim(),
+    endpoint: form.endpoint.trim(),
+    contentLibraryName: form.contentLibraryName.trim(),
   }
   emit('submit', { mode: isEdit.value ? 'update' : 'create', input })
 }
@@ -113,8 +169,8 @@ function onBackdropClick(e: MouseEvent) {
               <input
                 type="text"
                 class="app-input"
-                :value="name"
-                @input="(e: Event) => name = (e.target as HTMLInputElement).value"
+                :value="form.name"
+                @input="(e: Event) => form.name = (e.target as HTMLInputElement).value"
               />
             </label>
 
@@ -123,34 +179,58 @@ function onBackdropClick(e: MouseEvent) {
               <input
                 type="text"
                 class="app-input"
-                :value="endpoint"
+                :value="form.endpoint"
                 placeholder="https://vc.example.local/sdk"
-                @input="(e: Event) => endpoint = (e.target as HTMLInputElement).value"
+                @input="(e: Event) => form.endpoint = (e.target as HTMLInputElement).value"
               />
             </label>
 
-            <div class="resource-row">
-              <label class="resource-field">
-                <span class="resource-label">{{ locale.t('resources.form.datacenter') }}</span>
-                <input
-                  type="number"
-                  min="0"
-                  class="app-input"
-                  :value="datacenterCount"
-                  @input="(e: Event) => datacenterCount = (e.target as HTMLInputElement).value"
-                />
-              </label>
+            <label class="resource-field">
+              <span class="resource-label">{{ locale.t('resources.form.contentLibrary') }}</span>
+              <input
+                type="text"
+                class="app-input"
+                :value="form.contentLibraryName"
+                :placeholder="locale.t('resources.form.contentLibraryPlaceholder')"
+                @input="(e: Event) => form.contentLibraryName = (e.target as HTMLInputElement).value"
+              />
+            </label>
 
-              <label class="resource-field">
-                <span class="resource-label">{{ locale.t('resources.form.cluster') }}</span>
-                <input
-                  type="number"
-                  min="0"
-                  class="app-input"
-                  :value="clusterCount"
-                  @input="(e: Event) => clusterCount = (e.target as HTMLInputElement).value"
-                />
-              </label>
+            <div class="resource-test">
+              <cds-button
+                type="button"
+                action="outline"
+                status="primary"
+                :disabled="!canTest || testing"
+                @click="onTestConnection"
+              >
+                <cds-icon
+                  v-if="testing"
+                  shape="circle-loader"
+                  size="sm"
+                  aria-hidden="true"
+                ></cds-icon>
+                {{ locale.t('resources.form.testConnection') }}
+              </cds-button>
+              <cds-alert
+                v-if="testResult"
+                :status="testResult.ok ? 'success' : 'danger'"
+                class="resource-test-alert"
+              >
+                <div class="resource-test-message">{{ testResult.message }}</div>
+                <div
+                  v-if="testResult.ok && testResult.detail"
+                  class="resource-test-detail"
+                >
+                  vSphere {{ testResult.detail.vSphereVersion }} · {{ testResult.detail.itemCount }} 个 OVF 模板
+                </div>
+                <cds-button-action
+                  shape="times"
+                  :title="locale.t('common.cancel')"
+                  :aria-label="locale.t('common.cancel')"
+                  @click="dismissTestResult"
+                ></cds-button-action>
+              </cds-alert>
             </div>
 
             <div class="resource-actions">
@@ -161,7 +241,7 @@ function onBackdropClick(e: MouseEvent) {
                 type="submit"
                 action="solid"
                 status="primary"
-                :disabled="!formValid"
+                :disabled="!canSubmit"
               >
                 {{ locale.t('resources.form.submit') }}
               </cds-button>
@@ -225,6 +305,28 @@ function onBackdropClick(e: MouseEvent) {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.resource-test {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.resource-test-alert {
+  width: 100%;
+}
+
+.resource-test-message {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.resource-test-detail {
+  font-size: 12px;
+  margin-top: 2px;
+  color: var(--cds-alias-typography-color-300, #565656);
 }
 
 .app-input {
