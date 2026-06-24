@@ -62,6 +62,7 @@ import {
   twoWayArrowsIcon,
   pencilIcon,
   banIcon,
+  calendarIcon,
   timesIcon
 } from '@cds/core/icon'
 
@@ -128,5 +129,6 @@ ClarityIcons.addIcons(
   twoWayArrowsIcon,
   pencilIcon,
   banIcon,
+  calendarIcon,
   timesIcon
 )

@@ -26,7 +26,7 @@ const router = createRouter({
         { path: 'model-gateway/policy', name: 'mg.policy', component: () => import('@/views/RateLimitPolicyView.vue') },
 
         // 可观测性
-        { path: 'observability/metering', name: 'obs.metering',  component: ComingSoon, props: { title: '计量中心' } },
+        { path: 'observability/metering', name: 'obs.metering', component: () => import('@/views/MeteringCenterView.vue') },
         { path: 'observability/monitor',  name: 'obs.monitor',   component: ComingSoon, props: { title: '实时监控' } },
         { path: 'observability/requests', name: 'obs.requests',  component: ComingSoon, props: { title: '请求日志' } },
         { path: 'observability/audit',    name: 'obs.audit',     component: ComingSoon, props: { title: '审计日志' } },
