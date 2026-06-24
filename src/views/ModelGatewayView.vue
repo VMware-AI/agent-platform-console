@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { apolloClient } from '@/api/graphql/client'
 import {
@@ -15,17 +15,18 @@ import type {
   DeleteModelGatewayResult,
   DeleteModelGatewayVars,
   ModelGateway,
+  ModelGatewayFilterInput,
   ModelGatewayInput,
-  ModelGatewaySyncState,
+  ModelGatewaySort,
+  ModelGatewaySortField,
   ModelGatewaysQueryResult,
   ModelGatewaysQueryVars,
-  ModelGatewayStatus,
+  PageInput,
   TestModelGatewayConnectionResult,
   TestModelGatewayConnectionVars,
   UpdateModelGatewayResult,
   UpdateModelGatewayVars,
 } from '@/api/graphql/model-gateway-types'
-import { STATUS_KEY_FROM_GQL } from '@/api/graphql/model-gateway-types'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 import AppDropdown from '@/components/AppDropdown.vue'
@@ -39,50 +40,66 @@ const toast = useToast()
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const
 type PageSize = (typeof PAGE_SIZE_OPTIONS)[number]
 const pageSize = ref<PageSize>(10)
-const searchText = ref('')
-const debouncedSearch = ref('')
-const statusFilter = ref<ModelGatewayStatus | 'ALL'>('ALL')
+const nameKeyword = ref('')
+const sort = ref<ModelGatewaySort | null>(null)
 const currentPage = ref(1)
-let searchTimer: ReturnType<typeof setTimeout> | null = null
 
-watch(searchText, (value) => {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {
-    debouncedSearch.value = value.trim()
-    currentPage.value = 1
-  }, 300)
-})
+/* ---------- Sort cycle ---------- */
+type SortState = 'none' | 'ascending' | 'descending'
 
-watch([statusFilter, pageSize], () => {
+function sortStateFor(field: ModelGatewaySortField): SortState {
+  if (!sort.value || sort.value.field !== field) return 'none'
+  return sort.value.direction === 'ASC' ? 'ascending' : 'descending'
+}
+
+function onSortClick(field: ModelGatewaySortField) {
+  const cur = sortStateFor(field)
+  if (cur === 'none') sort.value = { field, direction: 'ASC' }
+  else if (cur === 'ascending') sort.value = { field, direction: 'DESC' }
+  else sort.value = null
   currentPage.value = 1
-})
+}
 
-onBeforeUnmount(() => {
-  if (searchTimer) clearTimeout(searchTimer)
-})
+/* ---------- Filter dropdown (single anchor, single key) ---------- */
+const openFilterAnchor = ref<HTMLElement | null>(null)
+const openFilterKey = ref<'nameKeyword' | null>(null)
 
-const variables = computed<ModelGatewaysQueryVars>(() => ({
-  filter:
-    debouncedSearch.value || statusFilter.value !== 'ALL'
-      ? {
-          search: debouncedSearch.value || null,
-          status: statusFilter.value === 'ALL' ? null : statusFilter.value,
-        }
-      : null,
-  page: {
+function openFilter(key: 'nameKeyword', target: EventTarget | null) {
+  openFilterKey.value = key
+  const host = (target as HTMLElement | null)?.closest('cds-button-action') as HTMLElement | null
+  openFilterAnchor.value = host ?? (target as HTMLElement | null)
+}
+function closeFilter() {
+  openFilterAnchor.value = null
+  openFilterKey.value = null
+}
+
+function onNameKeywordInput(e: Event) {
+  nameKeyword.value = (e.target as HTMLInputElement).value
+  currentPage.value = 1
+}
+
+const variables = computed<ModelGatewaysQueryVars>(() => {
+  const filter: ModelGatewayFilterInput = {}
+  if (nameKeyword.value.trim()) filter.search = nameKeyword.value.trim()
+  const page: PageInput = {
     limit: pageSize.value,
     offset: (currentPage.value - 1) * pageSize.value,
-  },
-}))
+  }
+  return {
+    filter: Object.keys(filter).length > 0 ? filter : null,
+    page,
+    sort: sort.value,
+  }
+})
 
 const { result, loading, error, refetch } = useQuery<
   ModelGatewaysQueryResult,
   ModelGatewaysQueryVars
->(MODEL_GATEWAYS_QUERY, variables, { fetchPolicy: 'network-only' })
+>(MODEL_GATEWAYS_QUERY, variables, { fetchPolicy: 'cache-and-network' })
 
 const gateways = computed(() => result.value?.modelGateways.nodes ?? [])
 const totalCount = computed(() => result.value?.modelGateways.totalCount ?? 0)
-const syncSummary = computed(() => result.value?.modelGatewaySyncSummary ?? null)
 const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)))
 const rangeStart = computed(() =>
   totalCount.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1,
@@ -93,9 +110,9 @@ watch(totalPages, (pages) => {
   if (currentPage.value > pages) currentPage.value = pages
 })
 
-function onStatusChange(event: Event) {
-  statusFilter.value = (event.target as HTMLSelectElement).value as ModelGatewayStatus | 'ALL'
-}
+watch(pageSize, () => {
+  currentPage.value = 1
+})
 
 function onPageSizeChange(event: Event) {
   const next = Number((event.target as HTMLSelectElement).value)
@@ -109,51 +126,50 @@ function goToPage(page: number) {
   currentPage.value = page
 }
 
-function statusBadge(status: ModelGatewayStatus): 'success' | 'neutral' | 'danger' {
-  if (status === 'CONNECTED') return 'success'
-  if (status === 'ERROR') return 'danger'
-  return 'neutral'
+/** 端点是否为可点击的 http(s) URL — 协议缺失时保持纯文本展示,
+ *  否则浏览器会把相对路径拼到当前路由上,反而误导用户。 */
+function isClickableEndpoint(value: string): boolean {
+  return /^https?:\/\//i.test(value)
 }
 
-function isSynchronized(gateway: ModelGateway): boolean {
-  return gateway.lastSyncStatus === 'SYNCED'
-}
-
-const syncStateKey: Record<ModelGatewaySyncState, string> = {
-  SYNCED: 'synced',
-  SYNCING: 'syncing',
-  PARTIAL: 'partial',
-  FAILED: 'failed',
-  NEVER: 'never',
-}
-
-const syncBadgeStatus = computed<'success' | 'info' | 'warning' | 'danger' | 'neutral'>(() => {
-  const state = syncSummary.value?.state
-  if (state === 'SYNCED') return 'success'
-  if (state === 'SYNCING') return 'info'
-  if (state === 'PARTIAL') return 'warning'
-  if (state === 'FAILED') return 'danger'
-  return 'neutral'
-})
-
-const syncSummaryText = computed(() => {
-  const summary = syncSummary.value
-  if (!summary) return locale.t('gateway.sync.noLog')
-  if (locale.locale === 'zh' && summary.message) return summary.message
-  return locale
-    .t('gateway.sync.summary')
-    .replace('{success}', String(summary.successCount))
-    .replace('{failed}', String(summary.failedCount))
-})
-
-function formatSyncDate(value: string | null): string {
-  if (!value) return locale.t('gateway.sync.never')
+function formatGatewayTime(value: string | null | undefined): string {
+  if (!value) return '—'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(locale.locale === 'zh' ? 'zh-CN' : 'en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
+  if (Number.isNaN(date.getTime())) return '—'
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return (
+    `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  )
+}
+
+/** "刚刚" / "X 分钟前" / "X 小时前" / "X 天前" — 同步状态列的相对时间文案。 */
+function fmtSyncAgo(iso: string | null | undefined, nowMs: number = Date.now()): string {
+  if (!iso) return '—'
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return '—'
+  const diffSec = Math.max(0, Math.round((nowMs - then) / 1000))
+  if (diffSec < 60) return '刚刚'
+  const diffMin = Math.round(diffSec / 60)
+  if (diffMin < 60) return `${diffMin} 分钟前`
+  const diffHr = Math.round(diffMin / 60)
+  if (diffHr < 24) return `${diffHr} 小时前`
+  const diffDay = Math.round(diffHr / 24)
+  if (diffDay < 30) return `${diffDay} 天前`
+  return formatGatewayTime(iso)
+}
+
+function syncBadgeFor(gateway: ModelGateway): 'success' | 'neutral' {
+  return gateway.lastSyncStatus === 'NEVER' ? 'neutral' : 'success'
+}
+
+function syncBadgeText(gateway: ModelGateway): string {
+  if (gateway.lastSyncStatus === 'NEVER') {
+    return locale.t('gateway.status.neverSynced')
+  }
+  return locale
+    .t('gateway.status.syncedAgo')
+    .replace('{ago}', fmtSyncAgo(gateway.lastSyncAt))
 }
 
 async function copyName(gateway: ModelGateway) {
@@ -213,14 +229,6 @@ async function testConnection(gateway: ModelGateway) {
     next.delete(gateway.id)
     testingIDs.value = next
   }
-}
-
-function openAdmin(gateway: ModelGateway) {
-  if (!gateway.adminUrl) {
-    toast.warning(locale.t('gateway.toast.noAdminUrl'))
-    return
-  }
-  window.open(gateway.adminUrl, '_blank', 'noopener,noreferrer')
 }
 
 const formOpen = ref(false)
@@ -308,20 +316,18 @@ async function confirmDelete() {
 
 <template>
   <section class="gateway-page">
-    <header class="page-header">
-      <div class="header-copy">
-        <nav class="breadcrumb" :aria-label="locale.t('gateway.breadcrumb.label')">
-          <span>{{ locale.t('gateway.breadcrumb.system') }}</span>
-          <cds-icon shape="angle" direction="right" size="sm" aria-hidden="true"></cds-icon>
-          <span aria-current="page">{{ locale.t('gateway.breadcrumb.current') }}</span>
-        </nav>
-        <h1>{{ locale.t('gateway.title') }}</h1>
-        <p>{{ locale.t('gateway.description') }}</p>
-      </div>
+    <header class="page-head">
+      <h1 cds-text="title" class="heading">{{ locale.t('gateway.title') }}</h1>
+    </header>
 
-      <AppDropdown align="end">
+    <div class="toolbar">
+      <AppDropdown align="start">
         <template #trigger>
-          <cds-button class="connect-button">
+          <cds-button
+            class="connect-button"
+            action="outline"
+            status="primary"
+          >
             <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
             {{ locale.t('gateway.connectButton') }}
             <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
@@ -334,57 +340,9 @@ async function confirmDelete() {
           </button>
         </template>
       </AppDropdown>
-    </header>
+    </div>
 
     <div class="grid-card">
-      <div class="toolbar">
-        <cds-input class="search-control">
-          <cds-control-action action="prefix" :aria-label="locale.t('gateway.search')">
-            <cds-icon shape="search" size="sm" aria-hidden="true"></cds-icon>
-          </cds-control-action>
-          <input
-            type="search"
-            :value="searchText"
-            :placeholder="locale.t('gateway.search')"
-            :aria-label="locale.t('gateway.search')"
-            @input="searchText = ($event.target as HTMLInputElement).value"
-          />
-        </cds-input>
-
-        <label class="status-label" for="gateway-status-filter">
-          {{ locale.t('gateway.filter.status') }}
-        </label>
-        <cds-select class="status-control" control-width="shrink">
-          <select
-            id="gateway-status-filter"
-            :value="statusFilter"
-            :aria-label="locale.t('gateway.filter.status')"
-            @change="onStatusChange"
-          >
-            <option value="ALL">{{ locale.t('gateway.filter.all') }}</option>
-            <option value="CONNECTED">{{ locale.t('gateway.status.connected') }}</option>
-            <option value="DISCONNECTED">{{ locale.t('gateway.status.disconnected') }}</option>
-            <option value="ERROR">{{ locale.t('gateway.status.error') }}</option>
-          </select>
-        </cds-select>
-
-        <cds-button
-          action="ghost"
-          class="refresh-button"
-          :disabled="loading"
-          :aria-label="locale.t('gateway.action.refresh')"
-          :title="locale.t('gateway.action.refresh')"
-          @click="refetch()"
-        >
-          <cds-icon
-            shape="refresh"
-            size="md"
-            :class="{ spinning: loading }"
-            aria-hidden="true"
-          ></cds-icon>
-        </cds-button>
-      </div>
-
       <cds-alert v-if="error" status="danger" class="query-error">
         {{ locale.t('gateway.error.load') }}
       </cds-alert>
@@ -395,14 +353,38 @@ async function confirmDelete() {
         role="grid"
         :aria-label="locale.t('gateway.table.label')"
       >
-        <cds-grid-column width="16%">{{ locale.t('gateway.col.name') }}</cds-grid-column>
-        <cds-grid-column width="18%">{{ locale.t('gateway.col.endpoint') }}</cds-grid-column>
-        <cds-grid-column width="9%">{{ locale.t('gateway.col.status') }}</cds-grid-column>
-        <cds-grid-column width="9%">{{ locale.t('gateway.col.sync') }}</cds-grid-column>
-        <cds-grid-column width="8%">{{ locale.t('gateway.col.models') }}</cds-grid-column>
-        <cds-grid-column width="10%">{{ locale.t('gateway.col.strategy') }}</cds-grid-column>
-        <cds-grid-column width="8%">{{ locale.t('gateway.col.latency') }}</cds-grid-column>
-        <cds-grid-column width="22%">{{ locale.t('gateway.col.actions') }}</cds-grid-column>
+        <cds-grid-column width="20%">
+          <div class="col-head">
+            <span>{{ locale.t('gateway.col.name') }}</span>
+            <span class="col-head-actions">
+              <cds-button-action
+                id="gateway-sort-name"
+                :aria-label="`sort ${locale.t('gateway.col.name')}`"
+                @click="onSortClick('NAME')"
+              >
+                <cds-icon
+                  v-if="sortStateFor('NAME') === 'ascending'" shape="angle" direction="up" size="sm"
+                ></cds-icon>
+                <cds-icon
+                  v-else-if="sortStateFor('NAME') === 'descending'" shape="angle" direction="down" size="sm"
+                ></cds-icon>
+                <cds-icon v-else shape="two-way-arrows" class="col-sort-rotated" size="sm"></cds-icon>
+              </cds-button-action>
+              <cds-button-action
+                id="gateway-filter-name-input"
+                shape="filter"
+                :aria-label="`filter ${locale.t('gateway.col.name')}`"
+                :expanded="!!nameKeyword"
+                @click="(e: MouseEvent) => openFilter('nameKeyword', e.target)"
+              ></cds-button-action>
+            </span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="22%">{{ locale.t('gateway.col.endpoint') }}</cds-grid-column>
+        <cds-grid-column width="12%">{{ locale.t('gateway.col.sync') }}</cds-grid-column>
+        <cds-grid-column width="14%">{{ locale.t('gateway.col.createdAt') }}</cds-grid-column>
+        <cds-grid-column width="14%">{{ locale.t('gateway.col.updatedAt') }}</cds-grid-column>
+        <cds-grid-column width="18%">{{ locale.t('gateway.col.actions') }}</cds-grid-column>
 
         <cds-grid-row v-for="gateway in gateways" :key="gateway.id">
           <cds-grid-cell>
@@ -417,60 +399,39 @@ async function confirmDelete() {
             </span>
           </cds-grid-cell>
           <cds-grid-cell>
-            <a class="endpoint" :href="gateway.endpoint" target="_blank" rel="noopener noreferrer">
-              {{ gateway.endpoint }}
-            </a>
+            <a
+              v-if="isClickableEndpoint(gateway.endpoint)"
+              class="endpoint"
+              :href="gateway.endpoint"
+              target="_blank"
+              rel="noopener noreferrer"
+              :title="gateway.endpoint"
+            >{{ gateway.endpoint }}</a>
+            <span v-else class="endpoint endpoint-text" :title="gateway.endpoint">{{ gateway.endpoint }}</span>
           </cds-grid-cell>
           <cds-grid-cell>
-            <cds-badge :status="statusBadge(gateway.status)" class="status-badge">
-              {{ locale.t(`gateway.status.${STATUS_KEY_FROM_GQL[gateway.status]}`) }}
+            <cds-badge :status="syncBadgeFor(gateway)" class="sync-status-badge">
+              {{ syncBadgeText(gateway) }}
             </cds-badge>
           </cds-grid-cell>
-          <cds-grid-cell>
-            <cds-badge
-              :status="isSynchronized(gateway) ? 'success' : 'neutral'"
-              class="sync-status-badge"
-            >
-              {{
-                locale.t(
-                  isSynchronized(gateway)
-                    ? 'gateway.sync.synchronized'
-                    : 'gateway.sync.notSynchronized',
-                )
-              }}
-            </cds-badge>
-          </cds-grid-cell>
-          <cds-grid-cell>{{ gateway.backendModelCount }}</cds-grid-cell>
-          <cds-grid-cell>{{ locale.t('gateway.strategy.roundRobin') }}</cds-grid-cell>
-          <cds-grid-cell>
-            {{ gateway.latencyMs == null ? '—' : gateway.latencyMs }}
-          </cds-grid-cell>
+          <cds-grid-cell class="time-cell">{{ formatGatewayTime(gateway.createdAt) }}</cds-grid-cell>
+          <cds-grid-cell class="time-cell">{{ formatGatewayTime(gateway.updatedAt) }}</cds-grid-cell>
           <cds-grid-cell>
             <span class="row-actions">
               <button
                 type="button"
                 class="row-action"
                 :disabled="testingIDs.has(gateway.id)"
-                :title="locale.t('gateway.action.test')"
+                :title="locale.t('gateway.action.sync')"
                 @click="testConnection(gateway)"
               >
                 <cds-icon
-                  shape="check-circle"
+                  shape="sync"
                   size="sm"
                   :class="{ spinning: testingIDs.has(gateway.id) }"
                   aria-hidden="true"
                 ></cds-icon>
-                <span>{{ locale.t('gateway.action.test') }}</span>
-              </button>
-              <button
-                type="button"
-                class="row-action"
-                :class="{ disabled: !gateway.adminUrl }"
-                :title="locale.t('gateway.action.manage')"
-                @click="openAdmin(gateway)"
-              >
-                <cds-icon shape="cog" size="sm" aria-hidden="true"></cds-icon>
-                <span>{{ locale.t('gateway.action.manage') }}</span>
+                <span>{{ locale.t('gateway.action.sync') }}</span>
               </button>
               <button
                 type="button"
@@ -576,50 +537,25 @@ async function confirmDelete() {
       </cds-grid>
     </div>
 
-    <div v-if="syncSummary" class="sync-panel-row">
-      <form
-        class="sync-status-form"
-        aria-live="polite"
-        aria-labelledby="gateway-sync-title"
-        @submit.prevent
-      >
-        <div class="sync-form-header">
-          <div>
-            <h2 id="gateway-sync-title">{{ locale.t('gateway.sync.title') }}</h2>
-            <p>{{ locale.t('gateway.sync.description') }}</p>
-          </div>
-          <cds-badge :status="syncBadgeStatus">
-            {{ locale.t(`gateway.sync.state.${syncStateKey[syncSummary.state]}`) }}
-          </cds-badge>
-        </div>
-
-        <div class="sync-form-fields">
-          <cds-input>
-            <label>{{ locale.t('gateway.sync.title') }}</label>
-            <input
-              readonly
-              :value="locale.t(`gateway.sync.state.${syncStateKey[syncSummary.state]}`)"
-            />
-          </cds-input>
-          <cds-input>
-            <label>{{ locale.t('gateway.sync.last') }}</label>
-            <input readonly :value="formatSyncDate(syncSummary.lastSyncedAt)" />
-          </cds-input>
-          <cds-input>
-            <label>{{ locale.t('gateway.sync.success') }}</label>
-            <input readonly :value="String(syncSummary.successCount)" />
-          </cds-input>
-          <cds-input>
-            <label>{{ locale.t('gateway.sync.failed') }}</label>
-            <input readonly :value="String(syncSummary.failedCount)" />
-          </cds-input>
-          <cds-input class="sync-summary-field">
-            <label>{{ locale.t('gateway.sync.logTitle') }}</label>
-            <input readonly :value="syncSummaryText" />
-          </cds-input>
-        </div>
-      </form>
-    </div>
+    <cds-dropdown
+      v-if="openFilterAnchor"
+      :hidden="!openFilterKey"
+      :anchor="openFilterAnchor"
+      closable
+      @closeChange="closeFilter"
+    >
+      <div cds-layout="vertical align:stretch p:xs">
+        <cds-input v-if="openFilterKey === 'nameKeyword'">
+          <input
+            type="text"
+            :value="nameKeyword"
+            :placeholder="locale.t('gateway.col.name.search')"
+            :aria-label="locale.t('gateway.col.name.search')"
+            @input="onNameKeywordInput"
+          />
+        </cds-input>
+      </div>
+    </cds-dropdown>
 
     <ModelGatewayFormModal
       v-if="formOpen"
@@ -642,42 +578,29 @@ async function confirmDelete() {
 
 <style scoped>
 .gateway-page {
-  height: 100%;
-  min-width: 0;
-  overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 0 2px 18px;
-}
-.page-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  flex-shrink: 0;
-}
-.header-copy {
+  gap: 12px;
   min-width: 0;
+  padding-bottom: 18px;
 }
-.breadcrumb {
+.page-head {
+  flex-shrink: 0;
+  margin-bottom: 4px;
+}
+.heading {
+  margin: 0;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  font-size: 24px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.toolbar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  color: var(--cds-alias-typography-color-300, #565656);
-  font-size: 13px;
-  margin-bottom: 7px;
-}
-.page-header h1 {
-  margin: 0;
-  font-size: 28px;
-  line-height: 1.25;
-  font-weight: 600;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-}
-.page-header p {
-  margin: 5px 0 0;
-  color: var(--cds-alias-typography-color-300, #565656);
+  justify-content: flex-start;
+  gap: 12px;
 }
 .connect-button {
   white-space: nowrap;
@@ -706,33 +629,23 @@ async function confirmDelete() {
   overflow: hidden;
   flex-shrink: 0;
 }
-.toolbar {
-  min-height: 48px;
-  padding: 8px 10px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
-}
-.search-control {
-  width: min(360px, 48%);
-}
-.status-label {
-  margin-left: auto;
-  color: var(--cds-alias-typography-color-300, #565656);
-  white-space: nowrap;
-}
-.status-control {
-  min-width: 148px;
-}
-.refresh-button {
-  --background: transparent;
-  --border-color: transparent;
-  --box-shadow-color: transparent;
-  min-width: 32px;
-}
 .query-error {
   margin: 10px;
+}
+.col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+}
+.col-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.col-sort-rotated {
+  transform: rotate(90deg);
 }
 .gateway-page cds-grid {
   display: block;
@@ -762,11 +675,18 @@ async function confirmDelete() {
 .endpoint:hover {
   text-decoration: underline;
 }
-.status-badge {
-  min-width: 64px;
+.endpoint-text {
+  color: var(--cds-alias-typography-color-300, #565656);
+  cursor: default;
 }
 .sync-status-badge {
-  min-width: 56px;
+  display: inline-flex;
+  white-space: nowrap;
+}
+.time-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--cds-alias-typography-color-300, #565656);
 }
 .row-actions {
   display: flex;
@@ -822,48 +742,6 @@ async function confirmDelete() {
 .gateway-pager > label {
   color: var(--cds-alias-typography-color-300, #565656);
 }
-.sync-panel-row {
-  min-width: 0;
-}
-.sync-status-form {
-  width: 100%;
-  padding: 16px 18px;
-  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
-  border-radius: 6px;
-  background: var(--cds-alias-object-container-background, #fff);
-}
-.sync-form-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
-}
-.sync-form-header h2 {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.35;
-  font-weight: 600;
-}
-.sync-form-header p {
-  margin: 4px 0 0;
-  color: var(--cds-alias-typography-color-300, #565656);
-  font-size: 12px;
-  line-height: 1.45;
-}
-.sync-form-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px 20px;
-  margin: 14px 0 0;
-}
-.sync-form-fields > * {
-  min-width: 0;
-}
-.sync-summary-field {
-  grid-column: 1 / -1;
-}
 .spinning {
   animation: gateway-spin 1s linear infinite;
   transform-origin: center;
@@ -874,18 +752,6 @@ async function confirmDelete() {
   }
 }
 @media (max-width: 980px) {
-  .page-header {
-    align-items: flex-start;
-  }
-  .toolbar {
-    flex-wrap: wrap;
-  }
-  .search-control {
-    width: 100%;
-  }
-  .status-label {
-    margin-left: 0;
-  }
   .grid-card {
     overflow-x: auto;
   }
@@ -894,15 +760,9 @@ async function confirmDelete() {
   }
 }
 @media (max-width: 640px) {
-  .page-header {
-    flex-direction: column;
-  }
   .gateway-pager {
     flex-wrap: wrap;
     justify-content: flex-end;
-  }
-  .sync-form-fields {
-    grid-template-columns: 1fr;
   }
 }
 @media (prefers-reduced-motion: reduce) {

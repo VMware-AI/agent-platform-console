@@ -7,19 +7,20 @@ const MODEL_GATEWAY_FIELDS = gql`
     provider
     endpoint
     status
-    backendModelCount
     loadBalancingStrategy
     latencyMs
     adminUrl
     lastSyncAt
     lastSyncStatus
     lastSyncMessage
+    createdAt
+    updatedAt
   }
 `
 
 export const MODEL_GATEWAYS_QUERY = gql`
-  query ModelGateways($filter: ModelGatewayFilterInput, $page: PageInput!) {
-    modelGateways(filter: $filter, page: $page) {
+  query ModelGateways($filter: ModelGatewayFilterInput, $page: PageInput!, $sort: ModelGatewaySort) {
+    modelGateways(filter: $filter, page: $page, sort: $sort) {
       nodes {
         ...ModelGatewayFields
       }

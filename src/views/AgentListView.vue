@@ -382,6 +382,19 @@ function onRefresh() {
   refetch()
 }
 
+/** "2026年6月15日 17:00" — matches the format used in ResourcePoolListView
+ *  so all "创建时间/更新时间" cells in the console look the same. */
+function fmtDateTime(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat('zh-CN', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(iso))
+  } catch {
+    return iso
+  }
+}
+
 /* ---------- Footer summary (mirrors the old clr-datagrid "X - Y of Z" pattern) ---------- */
 
 const summaryText = computed(() => {
@@ -498,7 +511,7 @@ const summaryText = computed(() => {
           />
         </cds-grid-column>
 
-        <cds-grid-column :width="'18%'">
+        <cds-grid-column :width="'14%'">
           {{ locale.t('agents.col.name') }}
           <span class="col-head-actions">
             <cds-button-action
@@ -534,7 +547,7 @@ const summaryText = computed(() => {
           </span>
         </cds-grid-column>
 
-        <cds-grid-column :width="'14%'">
+        <cds-grid-column :width="'10%'">
           {{ locale.t('agents.col.type') }}
           <span class="col-head-actions">
             <cds-button-action
@@ -570,7 +583,7 @@ const summaryText = computed(() => {
           </span>
         </cds-grid-column>
 
-        <cds-grid-column :width="'10%'">
+        <cds-grid-column :width="'9%'">
           {{ locale.t('agents.col.status') }}
           <span class="col-head-actions">
             <cds-button-action
@@ -606,7 +619,7 @@ const summaryText = computed(() => {
           </span>
         </cds-grid-column>
 
-        <cds-grid-column :width="'18%'">
+        <cds-grid-column :width="'14%'">
           {{ locale.t('agents.col.key') }}
           <span class="col-head-actions">
             <cds-button-action
@@ -642,7 +655,7 @@ const summaryText = computed(() => {
           </span>
         </cds-grid-column>
 
-        <cds-grid-column :width="'10%'">
+        <cds-grid-column :width="'9%'">
           {{ locale.t('agents.col.owner') }}
           <span class="col-head-actions">
             <cds-button-action
@@ -678,7 +691,65 @@ const summaryText = computed(() => {
           </span>
         </cds-grid-column>
 
-        <cds-grid-column :width="'22%'">
+        <cds-grid-column :width="'12%'">
+          {{ locale.t('agents.col.createdAt') }}
+          <span class="col-head-actions">
+            <cds-button-action
+              :aria-label="`sort ${locale.t('agents.col.createdAt')}`"
+              @click="(e: MouseEvent) => onSortClick('CREATED_AT')"
+            >
+              <cds-icon
+                v-if="sortStateFor('CREATED_AT') === 'ascending'"
+                shape="angle"
+                direction="up"
+                size="sm"
+              ></cds-icon>
+              <cds-icon
+                v-else-if="sortStateFor('CREATED_AT') === 'descending'"
+                shape="angle"
+                direction="down"
+                size="sm"
+              ></cds-icon>
+              <cds-icon
+                v-else
+                shape="two-way-arrows"
+                class="col-sort-rotated"
+                size="sm"
+              ></cds-icon>
+            </cds-button-action>
+          </span>
+        </cds-grid-column>
+
+        <cds-grid-column :width="'12%'">
+          {{ locale.t('agents.col.updatedAt') }}
+          <span class="col-head-actions">
+            <cds-button-action
+              :aria-label="`sort ${locale.t('agents.col.updatedAt')}`"
+              @click="(e: MouseEvent) => onSortClick('UPDATED_AT')"
+            >
+              <cds-icon
+                v-if="sortStateFor('UPDATED_AT') === 'ascending'"
+                shape="angle"
+                direction="up"
+                size="sm"
+              ></cds-icon>
+              <cds-icon
+                v-else-if="sortStateFor('UPDATED_AT') === 'descending'"
+                shape="angle"
+                direction="down"
+                size="sm"
+              ></cds-icon>
+              <cds-icon
+                v-else
+                shape="two-way-arrows"
+                class="col-sort-rotated"
+                size="sm"
+              ></cds-icon>
+            </cds-button-action>
+          </span>
+        </cds-grid-column>
+
+        <cds-grid-column :width="'20%'">
           <div class="col-head col-actions">
             <span>{{ locale.t('agents.col.actions') }}</span>
           </div>
@@ -724,6 +795,8 @@ const summaryText = computed(() => {
           <cds-grid-cell>
             <span>{{ agent.owner?.displayName ?? '—' }}</span>
           </cds-grid-cell>
+          <cds-grid-cell class="muted time-cell">{{ fmtDateTime(agent.createdAt) }}</cds-grid-cell>
+          <cds-grid-cell class="muted time-cell">{{ fmtDateTime(agent.updatedAt) }}</cds-grid-cell>
           <cds-grid-cell>
             <span class="actions-cell">
               <cds-button action="outline" size="sm" @click="onVisit(agent)">
@@ -1183,6 +1256,14 @@ const summaryText = computed(() => {
 .cell-name {
   font-weight: 500;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
+}
+
+/* 创建时间 / 更新时间 列: 数字等宽 + 灰字色 + 不换行,
+   跟 ModelGatewayView 的 .time-cell 一致,避免列宽 12% 时换行破坏对齐。 */
+.time-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--cds-alias-typography-color-300, #565656);
 }
 
 .key-cell {

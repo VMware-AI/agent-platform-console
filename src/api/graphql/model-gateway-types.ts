@@ -6,19 +6,29 @@ export type ModelGatewaySyncState = 'SYNCED' | 'SYNCING' | 'PARTIAL' | 'FAILED' 
 
 export type LoadBalancingStrategy = 'ROUND_ROBIN'
 
+export type ModelGatewaySortField = 'NAME' | 'ENDPOINT' | 'STATUS' | 'CREATED_AT' | 'UPDATED_AT'
+
+export type SortDirection = 'ASC' | 'DESC'
+
+export interface ModelGatewaySort {
+  field: ModelGatewaySortField
+  direction: SortDirection
+}
+
 export interface ModelGateway {
   id: string
   name: string
   provider: ModelGatewayProvider
   endpoint: string
   status: ModelGatewayStatus
-  backendModelCount: number
   loadBalancingStrategy: LoadBalancingStrategy
   latencyMs: number | null
   adminUrl: string | null
   lastSyncAt: string | null
   lastSyncStatus: ModelGatewaySyncState
   lastSyncMessage: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export interface ModelGatewayConnection {
@@ -47,6 +57,7 @@ export interface PageInput {
 export interface ModelGatewaysQueryVars {
   filter?: ModelGatewayFilterInput | null
   page: PageInput
+  sort?: ModelGatewaySort | null
 }
 
 export interface ModelGatewaysQueryResult {

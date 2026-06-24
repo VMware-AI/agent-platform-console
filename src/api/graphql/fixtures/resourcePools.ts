@@ -26,6 +26,7 @@ export const poolsStore: ResourcePool[] = [
     connectionStatus: 'CONNECTED',
     datacenterCount: 3, clusterCount: 8,
     esxiHostCount: 24, vmInstanceCount: 412,
+    syncStatus: 'NEVER', lastSyncedAt: null,
     createdAt: '2026-06-22T08:00:00Z', updatedAt: '2026-06-22T08:00:00Z',
   },
   {
@@ -34,6 +35,7 @@ export const poolsStore: ResourcePool[] = [
     connectionStatus: 'CONNECTED',
     datacenterCount: 2, clusterCount: 6,
     esxiHostCount: 18, vmInstanceCount: 287,
+    syncStatus: 'NEVER', lastSyncedAt: null,
     createdAt: '2026-06-22T08:05:00Z', updatedAt: '2026-06-22T08:05:00Z',
   },
   {
@@ -42,6 +44,7 @@ export const poolsStore: ResourcePool[] = [
     connectionStatus: 'DISCONNECTED',
     datacenterCount: 1, clusterCount: 4,
     esxiHostCount: 12, vmInstanceCount: 156,
+    syncStatus: 'SYNCED', lastSyncedAt: '2026-06-22T08:10:00Z',
     createdAt: '2026-06-22T08:10:00Z', updatedAt: '2026-06-22T08:10:00Z',
   },
   {
@@ -50,6 +53,7 @@ export const poolsStore: ResourcePool[] = [
     connectionStatus: 'CONNECTED',
     datacenterCount: 1, clusterCount: 3,
     esxiHostCount: 9, vmInstanceCount: 128,
+    syncStatus: 'SYNCED', lastSyncedAt: '2026-06-20T08:00:00Z',
     createdAt: '2026-02-15T02:00:00Z', updatedAt: '2026-06-20T08:00:00Z',
   },
   {
@@ -58,6 +62,7 @@ export const poolsStore: ResourcePool[] = [
     connectionStatus: 'DISCONNECTED',
     datacenterCount: 2, clusterCount: 5,
     esxiHostCount: 15, vmInstanceCount: 203,
+    syncStatus: 'FAILED', lastSyncedAt: '2026-06-19T10:00:00Z',
     createdAt: '2026-03-01T02:00:00Z', updatedAt: '2026-06-19T10:00:00Z',
   },
   {
@@ -66,6 +71,7 @@ export const poolsStore: ResourcePool[] = [
     connectionStatus: 'CONNECTED',
     datacenterCount: 2, clusterCount: 7,
     esxiHostCount: 21, vmInstanceCount: 348,
+    syncStatus: 'SYNCED', lastSyncedAt: '2026-06-21T03:40:00Z',
     createdAt: '2026-03-12T02:00:00Z', updatedAt: '2026-06-21T03:40:00Z',
   },
   {
@@ -74,6 +80,7 @@ export const poolsStore: ResourcePool[] = [
     connectionStatus: 'CONNECTED',
     datacenterCount: 1, clusterCount: 4,
     esxiHostCount: 12, vmInstanceCount: 174,
+    syncStatus: 'SYNCED', lastSyncedAt: '2026-06-21T03:42:00Z',
     createdAt: '2026-03-20T02:00:00Z', updatedAt: '2026-06-21T03:42:00Z',
   },
   {
@@ -82,6 +89,7 @@ export const poolsStore: ResourcePool[] = [
     connectionStatus: 'DISCONNECTED',
     datacenterCount: 1, clusterCount: 3,
     esxiHostCount: 8, vmInstanceCount: 92,
+    syncStatus: 'FAILED', lastSyncedAt: '2026-06-17T15:00:00Z',
     createdAt: '2026-04-02T02:00:00Z', updatedAt: '2026-06-17T15:00:00Z',
   },
   {
@@ -90,6 +98,7 @@ export const poolsStore: ResourcePool[] = [
     connectionStatus: 'CONNECTED',
     datacenterCount: 3, clusterCount: 9,
     esxiHostCount: 27, vmInstanceCount: 489,
+    syncStatus: 'SYNCED', lastSyncedAt: '2026-06-21T03:45:00Z',
     createdAt: '2026-04-15T02:00:00Z', updatedAt: '2026-06-21T03:45:00Z',
   },
   {
@@ -98,6 +107,7 @@ export const poolsStore: ResourcePool[] = [
     connectionStatus: 'CONNECTED',
     datacenterCount: 2, clusterCount: 6,
     esxiHostCount: 18, vmInstanceCount: 256,
+    syncStatus: 'SYNCED', lastSyncedAt: '2026-06-21T03:50:00Z',
     createdAt: '2026-04-28T02:00:00Z', updatedAt: '2026-06-21T03:50:00Z',
   },
   {
@@ -106,6 +116,7 @@ export const poolsStore: ResourcePool[] = [
     connectionStatus: 'DISCONNECTED',
     datacenterCount: 1, clusterCount: 2,
     esxiHostCount: 6, vmInstanceCount: 73,
+    syncStatus: 'SYNCED', lastSyncedAt: '2026-06-19T09:00:00Z',
     createdAt: '2026-05-10T02:00:00Z', updatedAt: '2026-06-19T09:00:00Z',
   },
   {
@@ -114,6 +125,7 @@ export const poolsStore: ResourcePool[] = [
     connectionStatus: 'CONNECTED',
     datacenterCount: 2, clusterCount: 5,
     esxiHostCount: 15, vmInstanceCount: 211,
+    syncStatus: 'SYNCED', lastSyncedAt: '2026-06-21T03:55:00Z',
     createdAt: '2026-05-25T02:00:00Z', updatedAt: '2026-06-21T03:55:00Z',
   },
 ]
@@ -198,6 +210,8 @@ export function createResourcePoolInFixture(input: CreateResourcePoolInput, now:
     clusterCount: input.clusterCount ?? 0,
     esxiHostCount: 0,
     vmInstanceCount: 0,
+    syncStatus: 'NEVER',
+    lastSyncedAt: null,
     createdAt: now,
     updatedAt: now,
   }
@@ -231,6 +245,8 @@ export function syncResourcePoolInFixture(id: string, now: string): { pool: Reso
   const p = poolsStore.find((x) => x.id === id)
   if (!p) throw new Error(`资源池不存在: ${id}`)
   p.connectionStatus = 'CONNECTED'
+  p.syncStatus = 'SYNCED'
+  p.lastSyncedAt = now
   p.updatedAt = now
   return { pool: p, syncedAt: now }
 }

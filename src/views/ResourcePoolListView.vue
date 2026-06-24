@@ -162,6 +162,12 @@ const summaryText = computed(() => {
     .replace('{total}', String(total))
 })
 
+/** 端点是否为可点击的 http(s) URL — 协议缺失时保持纯文本展示,
+ *  否则浏览器会把相对路径拼到当前路由上,反而误导用户。 */
+function isClickableEndpoint(value: string): boolean {
+  return /^https?:\/\//i.test(value)
+}
+
 function fmtDateTime(iso: string): string {
   try {
     return new Intl.DateTimeFormat('zh-CN', {
@@ -174,9 +180,10 @@ function fmtDateTime(iso: string): string {
 }
 
 /** "X 分钟前" / "X 小时前" / "X 天前" — used by the 同步状态 column. */
-function fmtSyncAgo(iso: string, nowMs: number = Date.now()): string {
+function fmtSyncAgo(iso: string | null | undefined, nowMs: number = Date.now()): string {
+  if (!iso) return '—'
   const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return iso
+  if (Number.isNaN(then)) return '—'
   const diffSec = Math.max(0, Math.round((nowMs - then) / 1000))
   if (diffSec < 60) return '刚刚'
   const diffMin = Math.round(diffSec / 60)
@@ -189,19 +196,18 @@ function fmtSyncAgo(iso: string, nowMs: number = Date.now()): string {
 }
 
 /** "同步状态" badge mapping — green (success) when the pool has been
- *  synced at least once, gray (neutral) when updatedAt === createdAt
- *  (i.e. never synced). */
+ *  synced at least once, gray (neutral) when syncStatus === 'NEVER'. */
 function syncBadgeFor(p: ResourcePool): 'success' | 'neutral' {
-  return p.updatedAt === p.createdAt ? 'neutral' : 'success'
+  return p.syncStatus === 'NEVER' ? 'neutral' : 'success'
 }
 
 function syncBadgeText(p: ResourcePool): string {
-  if (p.updatedAt === p.createdAt) {
+  if (p.syncStatus === 'NEVER') {
     return locale.t('resources.status.neverSynced')
   }
   return locale
     .t('resources.status.syncedAgo')
-    .replace('{ago}', fmtSyncAgo(p.updatedAt))
+    .replace('{ago}', fmtSyncAgo(p.lastSyncedAt))
 }
 
 /* ---------- Mutations ---------- */
@@ -415,7 +421,15 @@ async function doDelete() {
       <cds-grid-row v-for="p in pools" :key="p.id">
         <cds-grid-cell>{{ p.name }}</cds-grid-cell>
         <cds-grid-cell class="endpoint-cell">
-          <span class="muted">{{ p.endpoint }}</span>
+          <a
+            v-if="isClickableEndpoint(p.endpoint)"
+            class="endpoint-link"
+            :href="p.endpoint"
+            target="_blank"
+            rel="noopener noreferrer"
+            :title="p.endpoint"
+          >{{ p.endpoint }}</a>
+          <span v-else class="muted" :title="p.endpoint">{{ p.endpoint }}</span>
         </cds-grid-cell>
         <cds-grid-cell class="muted">
           <!-- The "连接状态" column now shows last sync time. When the pool
@@ -687,6 +701,14 @@ async function doDelete() {
 .endpoint-cell {
   word-break: break-all;
   font-size: 12px;
+}
+
+.endpoint-link {
+  color: var(--cds-alias-object-interaction-color, #0072a3);
+  text-decoration: none;
+}
+.endpoint-link:hover {
+  text-decoration: underline;
 }
 
 .status-badge {

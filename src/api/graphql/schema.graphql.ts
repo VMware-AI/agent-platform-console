@@ -122,6 +122,7 @@ export const typeDefs = /* GraphQL */ `
 
   # ---------- Resource Pool Access ----------
   enum PoolConnectionStatus { CONNECTED DISCONNECTED }
+  enum ResourcePoolSyncState { SYNCED SYNCING PARTIAL FAILED NEVER }
   enum ResourcePoolSortField {
     NAME ENDPOINT CONNECTION_STATUS
     DATACENTER_COUNT CLUSTER_COUNT ESXI_HOST_COUNT VM_INSTANCE_COUNT
@@ -136,6 +137,8 @@ export const typeDefs = /* GraphQL */ `
     clusterCount: Int!
     esxiHostCount: Int!
     vmInstanceCount: Int!
+    syncStatus: ResourcePoolSyncState!
+    lastSyncedAt: DateTime
     createdAt: DateTime!
     updatedAt: DateTime!
   }

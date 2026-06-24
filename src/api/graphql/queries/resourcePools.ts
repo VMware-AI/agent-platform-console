@@ -10,6 +10,8 @@ const RESOURCE_POOL_FIELDS = /* GraphQL */ `
     clusterCount
     esxiHostCount
     vmInstanceCount
+    syncStatus
+    lastSyncedAt
     createdAt
     updatedAt
   }

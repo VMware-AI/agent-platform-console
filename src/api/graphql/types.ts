@@ -314,6 +314,8 @@ export interface AssignUsersToRoleVars {
 export type PoolConnectionStatus = 'CONNECTED' | 'DISCONNECTED'
 export type PoolConnectionStatusKey = 'connected' | 'disconnected'
 
+export type ResourcePoolSyncState = 'SYNCED' | 'SYNCING' | 'PARTIAL' | 'FAILED' | 'NEVER'
+
 export const POOL_CONNECTION_FROM_GQL: Record<PoolConnectionStatus, PoolConnectionStatusKey> = {
   CONNECTED: 'connected',
   DISCONNECTED: 'disconnected',
@@ -328,6 +330,8 @@ export interface ResourcePool {
   clusterCount: number
   esxiHostCount: number
   vmInstanceCount: number
+  syncStatus: ResourcePoolSyncState
+  lastSyncedAt: string | null
   createdAt: string
   updatedAt: string
 }

@@ -16,13 +16,14 @@ const INITIAL_GATEWAYS: ModelGateway[] = [
     provider: 'LITELLM',
     endpoint: 'https://litellm.router.vcon',
     status: 'CONNECTED',
-    backendModelCount: 3,
     loadBalancingStrategy: 'ROUND_ROBIN',
     latencyMs: 120,
     adminUrl: 'https://litellm.router.vcon/ui',
     lastSyncAt: '2026-06-23T07:45:00Z',
     lastSyncStatus: 'SYNCED',
     lastSyncMessage: '模型目录、轮询策略与连接状态同步完成。',
+    createdAt: '2026-06-20T03:10:00Z',
+    updatedAt: '2026-06-23T07:45:00Z',
   },
   {
     id: 'gw-02',
@@ -30,13 +31,14 @@ const INITIAL_GATEWAYS: ModelGateway[] = [
     provider: 'LITELLM',
     endpoint: 'https://litellm.router.vcon',
     status: 'DISCONNECTED',
-    backendModelCount: 3,
     loadBalancingStrategy: 'ROUND_ROBIN',
-    latencyMs: 120,
+    latencyMs: null,
     adminUrl: 'https://litellm.router.vcon/ui',
-    lastSyncAt: '2026-06-23T07:40:00Z',
-    lastSyncStatus: 'FAILED',
-    lastSyncMessage: '无法连接到 LiteLLM Proxy。',
+    lastSyncAt: null,
+    lastSyncStatus: 'NEVER',
+    lastSyncMessage: '网关已保存，等待首次同步。',
+    createdAt: '2026-06-20T03:10:00Z',
+    updatedAt: '2026-06-20T03:10:00Z',
   },
   {
     id: 'gw-03',
@@ -44,13 +46,14 @@ const INITIAL_GATEWAYS: ModelGateway[] = [
     provider: 'LITELLM',
     endpoint: 'https://litellm.router.vcon',
     status: 'DISCONNECTED',
-    backendModelCount: 2,
     loadBalancingStrategy: 'ROUND_ROBIN',
-    latencyMs: 120,
+    latencyMs: null,
     adminUrl: 'https://litellm.router.vcon/ui',
-    lastSyncAt: '2026-06-23T07:35:00Z',
-    lastSyncStatus: 'FAILED',
-    lastSyncMessage: '连接测试超时。',
+    lastSyncAt: null,
+    lastSyncStatus: 'NEVER',
+    lastSyncMessage: '网关已保存，等待首次同步。',
+    createdAt: '2026-06-20T03:10:00Z',
+    updatedAt: '2026-06-20T03:10:00Z',
   },
   {
     id: 'gw-04',
@@ -58,13 +61,14 @@ const INITIAL_GATEWAYS: ModelGateway[] = [
     provider: 'LITELLM',
     endpoint: 'https://litellm.router.vcon',
     status: 'DISCONNECTED',
-    backendModelCount: 3,
     loadBalancingStrategy: 'ROUND_ROBIN',
     latencyMs: 120,
     adminUrl: 'https://litellm.router.vcon/ui',
     lastSyncAt: '2026-06-23T07:30:00Z',
     lastSyncStatus: 'FAILED',
     lastSyncMessage: '连接测试超时。',
+    createdAt: '2026-06-20T03:10:00Z',
+    updatedAt: '2026-06-23T07:30:00Z',
   },
 ]
 
@@ -127,6 +131,29 @@ export function modelGatewaysFixture(vars: ModelGatewaysQueryVars) {
       gateway.endpoint.toLocaleLowerCase().includes(search)
     )
   })
+
+  const sort = vars.sort
+  if (sort) {
+    const dir = sort.direction === 'ASC' ? 1 : -1
+    const compare = (a: ModelGateway, b: ModelGateway): number => {
+      switch (sort.field) {
+        case 'NAME':
+          return a.name.localeCompare(b.name) * dir
+        case 'ENDPOINT':
+          return a.endpoint.localeCompare(b.endpoint) * dir
+        case 'STATUS':
+          return a.status.localeCompare(b.status) * dir
+        case 'CREATED_AT':
+          return (a.lastSyncAt ?? '').localeCompare(b.lastSyncAt ?? '') * dir
+        case 'UPDATED_AT':
+          return (a.lastSyncAt ?? '').localeCompare(b.lastSyncAt ?? '') * dir
+        default:
+          return 0
+      }
+    }
+    filtered.sort(compare)
+  }
+
   const offset = Math.max(0, vars.page?.offset ?? 0)
   const limit = Math.max(1, vars.page?.limit ?? 10)
   return {
@@ -146,11 +173,12 @@ export function createModelGatewayFixture(vars: CreateModelGatewayVars) {
     ...safe,
     adminUrl: safe.adminUrl ?? null,
     status: 'DISCONNECTED',
-    backendModelCount: 0,
     latencyMs: null,
     lastSyncAt: now,
     lastSyncStatus: 'NEVER',
     lastSyncMessage: '网关已保存，等待连接测试。',
+    createdAt: now,
+    updatedAt: now,
   }
   gateways = [gateway, ...gateways]
   return { createModelGateway: gatewayResult(gateway) }
@@ -165,6 +193,7 @@ export function updateModelGatewayFixture(vars: UpdateModelGatewayVars) {
     ...safe,
     adminUrl: safe.adminUrl ?? null,
     lastSyncMessage: '网关配置已更新，等待重新测试。',
+    updatedAt: new Date().toISOString(),
   }
   gateways = gateways.map((gateway, gatewayIndex) => (gatewayIndex === index ? updated : gateway))
   return { updateModelGateway: gatewayResult(updated) }
@@ -186,7 +215,6 @@ export function testModelGatewayConnectionFixture(vars: TestModelGatewayConnecti
     ...gateways[index],
     status: 'CONNECTED',
     latencyMs: 120,
-    backendModelCount: Math.max(gateways[index].backendModelCount, 3),
     lastSyncAt: testedAt,
     lastSyncStatus: 'SYNCED',
     lastSyncMessage: '连接测试成功，LiteLLM 配置已同步。',

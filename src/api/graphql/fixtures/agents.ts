@@ -1,20 +1,28 @@
 import type {
   Agent,
   AgentConnection,
+  AgentFilter,
+  AgentSort,
+  AgentSortField,
+  AgentType,
+  AgentStatus,
   AgentsQueryVars,
 } from '../types'
 
 /**
  * Local fixture for the Agents query.
  *
- * Apollo client wires a fixtureLink that intercepts the `Agents` operation
- * and returns this data with a small simulated latency. Once the real backend
- * is reachable, drop the fixtureLink and the data layer stays identical.
+ * Modeled on `model-gateways.ts`: a module-level mutable store with
+ * monotonic ID assignment, and explicit `createAgentFixture` /
+ * `updateAgentFixture` / `deleteAgentFixture` helpers that mutate the
+ * store in place. The next `agentsFixture` call reflects the change
+ * immediately — same shape the real backend will give us, so swapping
+ * fixtureLink for HttpLink is a one-line change in `client.ts`.
  *
  * The 12 records mirror the design-image sample distribution (3 statuses,
  * 5 type enums, 5 owners, 4 key names) so the page can be demoed as-is.
  */
-const AGENTS: Agent[] = [
+const INITIAL_AGENTS: Agent[] = [
   {
     id: 'a01',
     name: 'OpenClaw_Robot',
@@ -161,7 +169,10 @@ const AGENTS: Agent[] = [
   },
 ]
 
-const TYPE_LABEL_DISPLAY: Record<string, string> = {
+let agents = INITIAL_AGENTS.map((agent) => ({ ...agent }))
+let nextID = 13
+
+const TYPE_LABEL_DISPLAY: Record<AgentType, string> = {
   PYTHON_AUTOMATION: 'Python自动化',
   GENERAL_CHAT: '通用聊天',
   CODE_ANALYSIS: '代码解析',
@@ -169,74 +180,74 @@ const TYPE_LABEL_DISPLAY: Record<string, string> = {
   IMAGE_GENERATION: '图像生成',
 }
 
-function applyFilter(arr: Agent[], filter?: AgentsQueryVars['filter']): Agent[] {
+const STATUS_RANK: Record<AgentStatus, number> = {
+  RUNNING: 0,
+  STOPPED: 1,
+  ERROR: 2,
+}
+
+/* ---------- Pure query helpers ---------- */
+
+function applyFilter(arr: Agent[], filter?: AgentFilter | null): Agent[] {
   if (!filter) return arr
   return arr.filter((a) => {
     if (filter.status && a.status !== filter.status) return false
     if (filter.type && a.type !== filter.type) return false
+    if (filter.nameKeyword && !a.name.toLowerCase().includes(filter.nameKeyword.toLowerCase())) {
+      return false
+    }
+    if (filter.keyKeyword) {
+      const kw = filter.keyKeyword.toLowerCase()
+      const name = a.apiKey?.name?.toLowerCase() ?? ''
+      if (!name.includes(kw)) return false
+    }
+    if (filter.ownerKeyword) {
+      const kw = filter.ownerKeyword.toLowerCase()
+      const display = a.owner?.displayName?.toLowerCase() ?? ''
+      const email = a.owner?.email?.toLowerCase() ?? ''
+      if (!display.includes(kw) && !email.includes(kw)) return false
+    }
     return true
   })
 }
 
-function applySort(
-  arr: Agent[],
-  sort?: AgentsQueryVars['sort'],
-): Agent[] {
+function compareBy(field: AgentSortField, a: Agent, b: Agent): number {
+  switch (field) {
+    case 'NAME':
+      return a.name.localeCompare(b.name)
+    case 'TYPE':
+      return (TYPE_LABEL_DISPLAY[a.type] ?? a.type).localeCompare(TYPE_LABEL_DISPLAY[b.type] ?? b.type)
+    case 'STATUS':
+      return STATUS_RANK[a.status] - STATUS_RANK[b.status]
+    case 'API_KEY_NAME':
+      return (a.apiKey?.name ?? '').localeCompare(b.apiKey?.name ?? '')
+    case 'OWNER':
+      return (a.owner?.displayName ?? '').localeCompare(b.owner?.displayName ?? '')
+    case 'CREATED_AT':
+      return a.createdAt.localeCompare(b.createdAt)
+    case 'UPDATED_AT':
+      return a.updatedAt.localeCompare(b.updatedAt)
+    default:
+      return 0
+  }
+}
+
+function applySort(arr: Agent[], sort?: AgentSort | null): Agent[] {
   if (!sort) return arr
-  const out = [...arr]
-  const dir = sort.direction === 'ASC' ? 1 : -1
-  out.sort((a, b) => {
-    let av: string
-    let bv: string
-    switch (sort.field) {
-      case 'NAME':
-        av = a.name
-        bv = b.name
-        break
-      case 'TYPE':
-        av = TYPE_LABEL_DISPLAY[a.type] ?? a.type
-        bv = TYPE_LABEL_DISPLAY[b.type] ?? b.type
-        break
-      case 'STATUS':
-        av = a.status
-        bv = b.status
-        break
-      case 'API_KEY_NAME':
-        av = a.apiKey?.name ?? ''
-        bv = b.apiKey?.name ?? ''
-        break
-      case 'OWNER':
-        av = a.owner?.displayName ?? ''
-        bv = b.owner?.displayName ?? ''
-        break
-      case 'CREATED_AT':
-        av = a.createdAt
-        bv = b.createdAt
-        break
-      case 'UPDATED_AT':
-        av = a.updatedAt
-        bv = b.updatedAt
-        break
-      default:
-        return 0
-    }
-    return av.localeCompare(bv) * dir
-  })
-  return out
+  const dir = sort.direction === 'DESC' ? -1 : 1
+  return [...arr].sort((a, b) => dir * compareBy(sort.field, a, b))
 }
 
 export function agentsFixture(vars?: AgentsQueryVars): AgentConnection {
-  const filtered = applySort(applyFilter(AGENTS, vars?.filter), vars?.sort)
-
+  const filtered = applyFilter(agents, vars?.filter)
+  const sorted = applySort(filtered, vars?.sort)
   const page = vars?.pagination?.page ?? 1
   const pageSize = vars?.pagination?.pageSize ?? 10
-  const totalCount = filtered.length
-  const start = (page - 1) * pageSize
-  const nodes = filtered.slice(start, start + pageSize)
+  const totalCount = sorted.length
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
-
+  const start = (page - 1) * pageSize
   return {
-    nodes,
+    nodes: sorted.slice(start, start + pageSize),
     totalCount,
     pageInfo: { page, pageSize, totalPages },
   }
