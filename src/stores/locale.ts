@@ -673,6 +673,10 @@ const STRINGS: Dict = {
   'rateLimit.toast.deleted': { zh: '已删除 {count} 条限流策略', en: 'Deleted {count} policies' },
   'rateLimit.toast.apply': { zh: '正在配置“{name}”的应用范围', en: 'Configuring targets for “{name}”' },
   'rateLimit.toast.refreshed': { zh: '限流策略列表已刷新', en: 'Rate-limit policy list refreshed' },
+  'rateLimit.toast.saveFailed': { zh: '保存限流策略失败', en: 'Failed to save policy' },
+  'rateLimit.toast.deleteFailed': { zh: '删除限流策略失败', en: 'Failed to delete policy' },
+  'rateLimit.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
+  'rateLimit.form.nameLockedHint': { zh: '编辑时名称不可更改', en: 'Name cannot be changed when editing' },
 }
 
 export const useLocaleStore = defineStore('locale', () => {

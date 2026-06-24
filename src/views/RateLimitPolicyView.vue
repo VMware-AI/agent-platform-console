@@ -1,126 +1,32 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useQuery } from '@vue/apollo-composable'
+import { apolloClient } from '@/api/graphql/client'
 import AppDropdown from '@/components/AppDropdown.vue'
 import RateLimitPolicyFormModal from '@/components/RateLimitPolicyFormModal.vue'
 import ConfirmDialog from '@/views/user-role/ConfirmDialog.vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
-import type { RateLimitPolicy, RateLimitPolicyDraft } from '@/types/rate-limit-policy'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
+import type { RateLimitPolicy, RateLimitPolicyDraft, RateLimitType } from '@/types/rate-limit-policy'
+import {
+  RATE_LIMIT_POLICIES_QUERY,
+  UPSERT_RATE_LIMIT_POLICY,
+  SET_RATE_LIMIT_POLICY_ENABLED,
+  DELETE_RATE_LIMIT_POLICY,
+  type RateLimitPoliciesResult,
+  type RateLimitPolicyNode,
+  type UpsertRateLimitPolicyResult,
+  type UpsertRateLimitPolicyVars,
+  type SetRateLimitPolicyEnabledResult,
+  type SetRateLimitPolicyEnabledVars,
+  type DeleteRateLimitPolicyResult,
+  type DeleteRateLimitPolicyVars,
+} from '@/api/graphql/queries/rate-limit-policies'
 import '@/components/icons'
 
 const locale = useLocaleStore()
 const toast = useToast()
-
-const INITIAL_POLICIES: RateLimitPolicy[] = [
-  {
-    id: 'policy-1',
-    name: 'global_api_limit',
-    type: 'COMBINED',
-    tokenLimitPerMinute: 500_000,
-    requestLimitPerMinute: 5_000,
-    enabled: true,
-    appliedAgentCount: 18,
-  },
-  {
-    id: 'policy-2',
-    name: 'agent_openclaw_limit',
-    type: 'TOKEN',
-    tokenLimitPerMinute: 120_000,
-    requestLimitPerMinute: 0,
-    enabled: true,
-    appliedAgentCount: 3,
-  },
-  {
-    id: 'policy-3',
-    name: 'agent_openclaw_limit',
-    type: 'REQUEST',
-    tokenLimitPerMinute: 0,
-    requestLimitPerMinute: 1_200,
-    enabled: true,
-    appliedAgentCount: 2,
-  },
-  {
-    id: 'policy-4',
-    name: 'agent_openclaw_limit',
-    type: 'COMBINED',
-    tokenLimitPerMinute: 80_000,
-    requestLimitPerMinute: 800,
-    enabled: false,
-    appliedAgentCount: 1,
-  },
-  {
-    id: 'policy-5',
-    name: 'agent_openclaw_limit',
-    type: 'TOKEN',
-    tokenLimitPerMinute: 160_000,
-    requestLimitPerMinute: 0,
-    enabled: true,
-    appliedAgentCount: 4,
-  },
-  {
-    id: 'policy-6',
-    name: 'agent_openclaw_limit',
-    type: 'COMBINED',
-    tokenLimitPerMinute: 100_000,
-    requestLimitPerMinute: 1_000,
-    enabled: true,
-    appliedAgentCount: 3,
-  },
-  {
-    id: 'policy-7',
-    name: 'agent_openclaw_limit',
-    type: 'REQUEST',
-    tokenLimitPerMinute: 0,
-    requestLimitPerMinute: 950,
-    enabled: true,
-    appliedAgentCount: 2,
-  },
-  {
-    id: 'policy-8',
-    name: 'agent_openclaw_limit',
-    type: 'TOKEN',
-    tokenLimitPerMinute: 90_000,
-    requestLimitPerMinute: 0,
-    enabled: false,
-    appliedAgentCount: 1,
-  },
-  {
-    id: 'policy-9',
-    name: 'agent_openclaw_limit',
-    type: 'COMBINED',
-    tokenLimitPerMinute: 140_000,
-    requestLimitPerMinute: 1_400,
-    enabled: true,
-    appliedAgentCount: 5,
-  },
-  {
-    id: 'policy-10',
-    name: 'agent_openclaw_limit',
-    type: 'REQUEST',
-    tokenLimitPerMinute: 0,
-    requestLimitPerMinute: 700,
-    enabled: false,
-    appliedAgentCount: 0,
-  },
-  {
-    id: 'policy-11',
-    name: 'document_analysis_limit',
-    type: 'TOKEN',
-    tokenLimitPerMinute: 220_000,
-    requestLimitPerMinute: 0,
-    enabled: true,
-    appliedAgentCount: 2,
-  },
-  {
-    id: 'policy-12',
-    name: 'sandbox_api_limit',
-    type: 'COMBINED',
-    tokenLimitPerMinute: 40_000,
-    requestLimitPerMinute: 300,
-    enabled: false,
-    appliedAgentCount: 4,
-  },
-]
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const
 const STATUS_FILTER_OPTIONS = ['ALL', 'ENABLED', 'DISABLED'] as const
@@ -129,11 +35,45 @@ type PolicyColumn = 'NAME' | 'STATUS'
 type SortDirection = 'ASC' | 'DESC'
 type BatchAction = 'enable' | 'disable' | 'delete'
 
-const policies = ref<RateLimitPolicy[]>(INITIAL_POLICIES.map((policy) => ({ ...policy })))
+// The backend stores raw rpm/tpm caps; the UI models a `type` derived from which
+// caps are set (COMBINED = both, REQUEST = rpm only, TOKEN = tpm only).
+function toUiPolicy(node: RateLimitPolicyNode): RateLimitPolicy {
+  const tokenLimitPerMinute = node.tpm ?? 0
+  const requestLimitPerMinute = node.rpm ?? 0
+  const type: RateLimitType =
+    tokenLimitPerMinute > 0 && requestLimitPerMinute > 0
+      ? 'COMBINED'
+      : requestLimitPerMinute > 0
+        ? 'REQUEST'
+        : 'TOKEN'
+  return {
+    id: node.id,
+    name: node.name,
+    type,
+    tokenLimitPerMinute,
+    requestLimitPerMinute,
+    enabled: node.enabled,
+  }
+}
+
+// `type` is a UI concept; persist it as the rpm/tpm pair the backend stores.
+function toUpsertInput(draft: RateLimitPolicyDraft): UpsertRateLimitPolicyVars['input'] {
+  return {
+    name: draft.name,
+    tpm: draft.type === 'REQUEST' ? 0 : draft.tokenLimitPerMinute,
+    rpm: draft.type === 'TOKEN' ? 0 : draft.requestLimitPerMinute,
+    enabled: draft.enabled,
+  }
+}
+
+const { result, loading, refetch } = useQuery<RateLimitPoliciesResult>(RATE_LIMIT_POLICIES_QUERY)
+const policies = computed<RateLimitPolicy[]>(() =>
+  (result.value?.rateLimitPolicies ?? []).map(toUiPolicy),
+)
+
 const selectedIds = ref<Set<string>>(new Set())
 const pageSize = ref<PageSize>(10)
 const currentPage = ref(1)
-const loading = ref(false)
 const formOpen = ref(false)
 const editingPolicy = ref<RateLimitPolicy | null>(null)
 const saving = ref(false)
@@ -144,8 +84,6 @@ const nameFilter = ref('')
 const statusFilter = ref<'ALL' | 'ENABLED' | 'DISABLED'>('ALL')
 const filterMenuAnchor = ref<HTMLElement | null>(null)
 const filterMenuKey = ref<PolicyColumn | null>(null)
-let nextPolicyId = 13
-let refreshTimer: ReturnType<typeof setTimeout> | null = null
 
 const filteredPolicies = computed(() => {
   const nameKeyword = nameFilter.value.trim().toLocaleLowerCase()
@@ -200,10 +138,6 @@ const deleteDialogBody = computed(() => {
   }
   const target = policies.value.find((policy) => policy.id === pendingDeleteIds.value[0])
   return locale.t('rateLimit.confirm.deleteBody').replace('{name}', target?.name ?? '')
-})
-
-onBeforeUnmount(() => {
-  if (refreshTimer) clearTimeout(refreshTimer)
 })
 
 function toggleSelect(id: string, checked: boolean) {
@@ -289,46 +223,51 @@ function closeForm() {
   editingPolicy.value = null
 }
 
-function submitPolicy(draft: RateLimitPolicyDraft) {
+async function submitPolicy(draft: RateLimitPolicyDraft) {
   if (saving.value) return
+  const isEditing = Boolean(editingPolicy.value)
   saving.value = true
-  if (editingPolicy.value) {
-    const id = editingPolicy.value.id
-    policies.value = policies.value.map((policy) =>
-      policy.id === id ? { ...policy, ...draft } : policy,
-    )
-    toast.success(locale.t('rateLimit.toast.updated'))
-  } else {
-    policies.value = [
-      {
-        id: `policy-${nextPolicyId++}`,
-        appliedAgentCount: 0,
-        ...draft,
-      },
-      ...policies.value,
-    ]
-    currentPage.value = 1
-    toast.success(locale.t('rateLimit.toast.created'))
+  try {
+    await apolloClient.mutate<UpsertRateLimitPolicyResult, UpsertRateLimitPolicyVars>({
+      mutation: UPSERT_RATE_LIMIT_POLICY,
+      variables: { input: toUpsertInput(draft) },
+    })
+    toast.success(locale.t(isEditing ? 'rateLimit.toast.updated' : 'rateLimit.toast.created'))
+    if (!isEditing) currentPage.value = 1
+    formOpen.value = false
+    editingPolicy.value = null
+    await refetch()
+  } catch (error) {
+    toast.error(graphqlErrorMessage(error, locale.t('rateLimit.toast.saveFailed')))
+  } finally {
+    saving.value = false
   }
-  saving.value = false
-  formOpen.value = false
-  editingPolicy.value = null
 }
 
-function setEnabled(ids: string[], enabled: boolean) {
-  const idSet = new Set(ids)
-  policies.value = policies.value.map((policy) =>
-    idSet.has(policy.id) ? { ...policy, enabled } : policy,
-  )
-  toast.success(
-    locale
-      .t(enabled ? 'rateLimit.toast.enabled' : 'rateLimit.toast.disabled')
-      .replace('{count}', String(ids.length)),
-  )
+async function setEnabled(ids: string[], enabled: boolean) {
+  if (ids.length === 0) return
+  try {
+    await Promise.all(
+      ids.map((id) =>
+        apolloClient.mutate<SetRateLimitPolicyEnabledResult, SetRateLimitPolicyEnabledVars>({
+          mutation: SET_RATE_LIMIT_POLICY_ENABLED,
+          variables: { id, enabled },
+        }),
+      ),
+    )
+    toast.success(
+      locale
+        .t(enabled ? 'rateLimit.toast.enabled' : 'rateLimit.toast.disabled')
+        .replace('{count}', String(ids.length)),
+    )
+    await refetch()
+  } catch (error) {
+    toast.error(graphqlErrorMessage(error, locale.t('rateLimit.toast.saveFailed')))
+  }
 }
 
 function toggleEnabled(policy: RateLimitPolicy) {
-  setEnabled([policy.id], !policy.enabled)
+  void setEnabled([policy.id], !policy.enabled)
 }
 
 function performBatch(action: BatchAction, close: () => void) {
@@ -339,8 +278,9 @@ function performBatch(action: BatchAction, close: () => void) {
     pendingDeleteIds.value = ids
     return
   }
-  setEnabled(ids, action === 'enable')
-  selectedIds.value = new Set()
+  void setEnabled(ids, action === 'enable').then(() => {
+    selectedIds.value = new Set()
+  })
 }
 
 function requestDelete(policy: RateLimitPolicy) {
@@ -351,28 +291,45 @@ function closeDelete() {
   pendingDeleteIds.value = []
 }
 
-function confirmDelete() {
-  const ids = new Set(pendingDeleteIds.value)
-  const count = ids.size
-  policies.value = policies.value.filter((policy) => !ids.has(policy.id))
-  selectedIds.value = new Set([...selectedIds.value].filter((id) => !ids.has(id)))
+async function confirmDelete() {
+  const ids = [...pendingDeleteIds.value]
   pendingDeleteIds.value = []
+  if (ids.length === 0) return
+  const outcomes = await Promise.allSettled(
+    ids.map((id) =>
+      apolloClient.mutate<DeleteRateLimitPolicyResult, DeleteRateLimitPolicyVars>({
+        mutation: DELETE_RATE_LIMIT_POLICY,
+        variables: { id },
+      }),
+    ),
+  )
+  const deletedIds = ids.filter((_, index) => outcomes[index].status === 'fulfilled')
+  const failures = outcomes.filter(
+    (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected',
+  )
+  if (deletedIds.length > 0) {
+    toast.success(locale.t('rateLimit.toast.deleted').replace('{count}', String(deletedIds.length)))
+  }
+  if (failures.length > 0) {
+    toast.error(graphqlErrorMessage(failures[0].reason, locale.t('rateLimit.toast.deleteFailed')))
+  }
+  selectedIds.value = new Set([...selectedIds.value].filter((id) => !deletedIds.includes(id)))
+  await refetch()
   if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
-  toast.success(locale.t('rateLimit.toast.deleted').replace('{count}', String(count)))
 }
 
 function applyPolicy(policy: RateLimitPolicy) {
   toast.info(locale.t('rateLimit.toast.apply').replace('{name}', policy.name))
 }
 
-function refreshPolicies() {
+async function refreshPolicies() {
   if (loading.value) return
-  loading.value = true
-  if (refreshTimer) clearTimeout(refreshTimer)
-  refreshTimer = setTimeout(() => {
-    loading.value = false
+  try {
+    await refetch()
     toast.success(locale.t('rateLimit.toast.refreshed'))
-  }, 500)
+  } catch (error) {
+    toast.error(graphqlErrorMessage(error, locale.t('rateLimit.toast.refreshFailed')))
+  }
 }
 
 function onPageSizeChange(event: Event) {

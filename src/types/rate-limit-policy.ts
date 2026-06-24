@@ -7,7 +7,6 @@ export interface RateLimitPolicy {
   tokenLimitPerMinute: number
   requestLimitPerMinute: number
   enabled: boolean
-  appliedAgentCount: number
 }
 
 export interface RateLimitPolicyDraft {
