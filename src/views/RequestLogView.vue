@@ -18,45 +18,30 @@ const toast = useToast()
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const
 type PageSize = (typeof PAGE_SIZE_OPTIONS)[number]
-type FilterColumn = 'STATUS' | 'MODEL' | 'AGENT' | 'REQUEST'
+type TimeWindow = '1h' | '6h' | 'custom'
+type StatusFilter = 'all' | '200' | '4xx' | '5xx'
 
-// HTTP status families drive the badge colour. 2xx → success, 4xx → warning,
-// 5xx → danger, anything else (incl. 0/unknown) → neutral.
-type StatusFamily = 'success' | 'warning' | 'danger' | 'neutral'
-function statusFamily(code: number): StatusFamily {
-  if (code >= 200 && code < 300) return 'success'
-  if (code >= 400 && code < 500) return 'warning'
-  if (code >= 500) return 'danger'
-  return 'neutral'
-}
-
-// ---- Filters (wired to RequestLogFilter) ----------------------------------
-// Each filter is committed to a separate "applied" ref so editing the draft in
-// the dropdown does not refetch on every keystroke — it applies on confirm.
-const statusCodeInput = ref('')
+const timeWindow = ref<TimeWindow>('1h')
+const statusFilter = ref<StatusFilter>('all')
 const modelInput = ref('')
 const agentIdInput = ref('')
 const requestIdInput = ref('')
 
-const appliedStatusCode = ref<number | null>(null)
 const appliedModel = ref('')
 const appliedAgentId = ref('')
 const appliedRequestId = ref('')
 
-const filterMenuAnchor = ref<HTMLElement | null>(null)
-const filterMenuKey = ref<FilterColumn | null>(null)
-
-// ---- Pagination (offset/limit via PageInput) ------------------------------
-// The op returns a bare list with no total, so "has more" is inferred from the
-// returned row count: a full page (== limit) implies another page may exist.
-const pageSize = ref<PageSize>(20)
+const pageSize = ref<PageSize>(10)
 const currentPage = ref(1)
+const expandedId = ref<string | null>(null)
 
 const offset = computed(() => (currentPage.value - 1) * pageSize.value)
 
+const serverStatusCode = computed<number | null>(() => (statusFilter.value === '200' ? 200 : null))
+
 const filter = computed<RequestLogFilterInput | null>(() => {
   const next: RequestLogFilterInput = {}
-  if (appliedStatusCode.value !== null) next.statusCode = appliedStatusCode.value
+  if (serverStatusCode.value !== null) next.statusCode = serverStatusCode.value
   if (appliedModel.value.trim()) next.model = appliedModel.value.trim()
   if (appliedAgentId.value.trim()) next.agentId = appliedAgentId.value.trim()
   if (appliedRequestId.value.trim()) next.requestId = appliedRequestId.value.trim()
@@ -81,53 +66,154 @@ onError((error) => {
 const logs = computed<RequestLogNode[]>(() => result.value?.requestLogs ?? [])
 const hasNextPage = computed(() => logs.value.length === pageSize.value)
 const hasPrevPage = computed(() => currentPage.value > 1)
-const isEmpty = computed(() => !loading.value && logs.value.length === 0)
+
+function matchesTimeWindow(log: RequestLogNode): boolean {
+  if (timeWindow.value === 'custom') return true
+  const createdAt = new Date(log.createdAt).getTime()
+  if (Number.isNaN(createdAt)) return true
+  const hours = timeWindow.value === '1h' ? 1 : 6
+  return Date.now() - createdAt <= hours * 60 * 60 * 1000
+}
+
+function matchesStatusFilter(log: RequestLogNode): boolean {
+  if (statusFilter.value === 'all') return true
+  if (statusFilter.value === '200') return log.statusCode === 200
+  if (statusFilter.value === '4xx') return log.statusCode >= 400 && log.statusCode < 500
+  if (statusFilter.value === '5xx') return log.statusCode >= 500 && log.statusCode < 600
+  return true
+}
+
+const visibleLogs = computed(() => logs.value.filter(matchesTimeWindow).filter(matchesStatusFilter))
+const isEmpty = computed(() => !loading.value && visibleLogs.value.length === 0)
 
 const rangeText = computed(() => {
-  if (logs.value.length === 0) return locale.t('requestLog.pagination.empty')
+  if (visibleLogs.value.length === 0) return locale.t('requestLog.pagination.empty')
   const start = offset.value + 1
-  const end = offset.value + logs.value.length
+  const end = offset.value + visibleLogs.value.length
   return locale
     .t('requestLog.pagination.range')
     .replace('{start}', String(start))
     .replace('{end}', String(end))
 })
 
-// ---- Formatting ------------------------------------------------------------
+const anyFilterActive = computed(
+  () =>
+    statusFilter.value !== 'all' ||
+    timeWindow.value !== '1h' ||
+    Boolean(appliedModel.value.trim()) ||
+    Boolean(appliedAgentId.value.trim()) ||
+    Boolean(appliedRequestId.value.trim()),
+)
+
+function applyToolbarFilters() {
+  appliedModel.value = modelInput.value.trim()
+  appliedAgentId.value = agentIdInput.value.trim()
+  appliedRequestId.value = requestIdInput.value.trim()
+  currentPage.value = 1
+}
+
+function clearAllFilters() {
+  timeWindow.value = '1h'
+  statusFilter.value = 'all'
+  modelInput.value = ''
+  agentIdInput.value = ''
+  requestIdInput.value = ''
+  appliedModel.value = ''
+  appliedAgentId.value = ''
+  appliedRequestId.value = ''
+  currentPage.value = 1
+}
+
+function selectTimeWindow(next: TimeWindow) {
+  timeWindow.value = next
+  currentPage.value = 1
+}
+
+function selectStatusFilter(next: StatusFilter) {
+  statusFilter.value = statusFilter.value === next ? 'all' : next
+  currentPage.value = 1
+}
+
+function onStatusSelect(event: Event) {
+  statusFilter.value = (event.target as HTMLSelectElement).value as StatusFilter
+  currentPage.value = 1
+}
+
+function onPageSizeChange(event: Event) {
+  const next = Number((event.target as HTMLSelectElement).value)
+  if (!PAGE_SIZE_OPTIONS.includes(next as PageSize)) return
+  pageSize.value = next as PageSize
+  currentPage.value = 1
+}
+
+function goPrev() {
+  if (!hasPrevPage.value) return
+  currentPage.value -= 1
+  expandedId.value = null
+}
+
+function goNext() {
+  if (!hasNextPage.value) return
+  currentPage.value += 1
+  expandedId.value = null
+}
+
+async function refreshLogs() {
+  if (loading.value) return
+  applyToolbarFilters()
+  try {
+    await refetch()
+    toast.success(locale.t('requestLog.toast.refreshed'))
+  } catch (error) {
+    toast.error(graphqlErrorMessage(error, locale.t('requestLog.toast.refreshFailed')))
+  }
+}
+
+function pad(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
 function formatDateTime(value: string): string {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
-  return new Intl.DateTimeFormat(locale.locale, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(parsed)
+  const year = parsed.getFullYear()
+  const month = pad(parsed.getMonth() + 1)
+  const day = pad(parsed.getDate())
+  const hour = pad(parsed.getHours())
+  const minute = pad(parsed.getMinutes())
+  const second = pad(parsed.getSeconds())
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`
 }
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat(locale.locale === 'zh' ? 'zh-CN' : 'en-US').format(value)
 }
 
-function formatLatency(ms: number): string {
-  return locale.t('requestLog.value.latency').replace('{ms}', formatNumber(ms))
-}
-
 function dash(value: string | null): string {
   return value && value.trim() ? value : '—'
 }
 
-// ---- Detail expand ---------------------------------------------------------
-const expandedId = ref<string | null>(null)
+function statusTone(code: number): 'success' | 'warning' | 'danger' | 'neutral' {
+  if (code >= 200 && code < 300) return 'success'
+  if (code >= 400 && code < 500) return 'warning'
+  if (code >= 500) return 'danger'
+  return 'neutral'
+}
+
+function detailText(detail: string | null): string {
+  if (!detail) return ''
+  try {
+    return JSON.stringify(JSON.parse(detail), null, 2)
+  } catch {
+    return detail
+  }
+}
+
 function toggleDetail(log: RequestLogNode) {
   if (!log.detail) return
   expandedId.value = expandedId.value === log.id ? null : log.id
 }
 
-// ---- Copy requestId --------------------------------------------------------
 function copyWithFallback(value: string) {
   const textarea = document.createElement('textarea')
   textarea.value = value
@@ -157,254 +243,179 @@ async function copyRequestId(value: string) {
     toast.error(locale.t('requestLog.toast.copyFailed'))
   }
 }
-
-// ---- Filter menu -----------------------------------------------------------
-function openFilterMenu(key: FilterColumn, event: MouseEvent) {
-  filterMenuKey.value = key
-  filterMenuAnchor.value = event.currentTarget as HTMLElement
-  // Seed the draft inputs from the applied state so re-opening keeps the value.
-  statusCodeInput.value = appliedStatusCode.value === null ? '' : String(appliedStatusCode.value)
-  modelInput.value = appliedModel.value
-  agentIdInput.value = appliedAgentId.value
-  requestIdInput.value = appliedRequestId.value
-}
-
-function closeFilterMenu() {
-  filterMenuKey.value = null
-  filterMenuAnchor.value = null
-}
-
-function hasFilter(key: FilterColumn): boolean {
-  switch (key) {
-    case 'STATUS':
-      return appliedStatusCode.value !== null
-    case 'MODEL':
-      return Boolean(appliedModel.value.trim())
-    case 'AGENT':
-      return Boolean(appliedAgentId.value.trim())
-    case 'REQUEST':
-      return Boolean(appliedRequestId.value.trim())
-  }
-}
-
-const anyFilterActive = computed(
-  () =>
-    appliedStatusCode.value !== null ||
-    Boolean(appliedModel.value.trim()) ||
-    Boolean(appliedAgentId.value.trim()) ||
-    Boolean(appliedRequestId.value.trim()),
-)
-
-function applyActiveFilter() {
-  const key = filterMenuKey.value
-  if (!key) return
-  if (key === 'STATUS') {
-    const raw = statusCodeInput.value.trim()
-    if (!raw) {
-      appliedStatusCode.value = null
-    } else {
-      const parsed = Number(raw)
-      if (!Number.isInteger(parsed) || parsed < 0) {
-        toast.warning(locale.t('requestLog.filter.statusInvalid'))
-        return
-      }
-      appliedStatusCode.value = parsed
-    }
-  } else if (key === 'MODEL') {
-    appliedModel.value = modelInput.value.trim()
-  } else if (key === 'AGENT') {
-    appliedAgentId.value = agentIdInput.value.trim()
-  } else if (key === 'REQUEST') {
-    appliedRequestId.value = requestIdInput.value.trim()
-  }
-  currentPage.value = 1
-  closeFilterMenu()
-}
-
-function clearActiveFilter() {
-  const key = filterMenuKey.value
-  if (!key) return
-  if (key === 'STATUS') {
-    statusCodeInput.value = ''
-    appliedStatusCode.value = null
-  } else if (key === 'MODEL') {
-    modelInput.value = ''
-    appliedModel.value = ''
-  } else if (key === 'AGENT') {
-    agentIdInput.value = ''
-    appliedAgentId.value = ''
-  } else if (key === 'REQUEST') {
-    requestIdInput.value = ''
-    appliedRequestId.value = ''
-  }
-  currentPage.value = 1
-  closeFilterMenu()
-}
-
-function clearAllFilters() {
-  appliedStatusCode.value = null
-  appliedModel.value = ''
-  appliedAgentId.value = ''
-  appliedRequestId.value = ''
-  statusCodeInput.value = ''
-  modelInput.value = ''
-  agentIdInput.value = ''
-  requestIdInput.value = ''
-  currentPage.value = 1
-}
-
-// ---- Pagination handlers ---------------------------------------------------
-function onPageSizeChange(event: Event) {
-  const next = Number((event.target as HTMLSelectElement).value)
-  if (!PAGE_SIZE_OPTIONS.includes(next as PageSize)) return
-  pageSize.value = next as PageSize
-  currentPage.value = 1
-}
-
-function goPrev() {
-  if (!hasPrevPage.value) return
-  currentPage.value -= 1
-}
-
-function goNext() {
-  if (!hasNextPage.value) return
-  currentPage.value += 1
-}
-
-async function refreshLogs() {
-  if (loading.value) return
-  try {
-    await refetch()
-    toast.success(locale.t('requestLog.toast.refreshed'))
-  } catch (error) {
-    toast.error(graphqlErrorMessage(error, locale.t('requestLog.toast.refreshFailed')))
-  }
-}
 </script>
 
 <template>
   <section class="request-log-page">
-    <header class="page-head">
-      <h1 cds-text="title" class="heading">{{ locale.t('requestLog.title') }}</h1>
-      <p cds-text="body" class="desc muted">{{ locale.t('requestLog.description') }}</p>
-    </header>
+    <h1 cds-text="title" class="heading">{{ locale.t('requestLog.title') }}</h1>
 
-    <div class="content-card">
-      <div class="toolbar">
-        <span v-if="anyFilterActive" class="filter-summary">
-          {{ locale.t('requestLog.filter.activeHint') }}
-          <button type="button" class="link-button" @click="clearAllFilters">
-            {{ locale.t('requestLog.filter.clearAll') }}
+    <div class="log-shell">
+      <div class="toolbar" :aria-label="locale.t('requestLog.filter.toolbar')">
+        <div class="time-tabs" role="group" :aria-label="locale.t('requestLog.filter.timeRange')">
+          <button
+            type="button"
+            class="time-tab"
+            :class="{ active: timeWindow === '1h' }"
+            @click="selectTimeWindow('1h')"
+          >
+            <cds-icon shape="calendar" size="sm" aria-hidden="true"></cds-icon>
+            {{ locale.t('requestLog.filter.last1h') }}
           </button>
-        </span>
+          <button
+            type="button"
+            class="time-tab"
+            :class="{ active: timeWindow === '6h' }"
+            @click="selectTimeWindow('6h')"
+          >
+            {{ locale.t('requestLog.filter.last6h') }}
+          </button>
+          <button
+            type="button"
+            class="time-tab"
+            :class="{ active: timeWindow === 'custom' }"
+            @click="selectTimeWindow('custom')"
+          >
+            {{ locale.t('requestLog.filter.customRange') }}
+          </button>
+        </div>
 
         <cds-button
-          action="ghost"
-          class="refresh-button"
+          action="outline"
+          class="icon-refresh"
           :disabled="loading"
           :aria-label="locale.t('requestLog.action.refresh')"
           :title="locale.t('requestLog.action.refresh')"
           @click="refreshLogs"
         >
-          <cds-icon shape="refresh" size="md" :class="{ spinning: loading }"></cds-icon>
+          <cds-icon shape="refresh" size="sm" :class="{ spinning: loading }"></cds-icon>
+        </cds-button>
+
+        <cds-button
+          action="solid"
+          status="primary"
+          class="primary-refresh"
+          :disabled="loading"
+          @click="refreshLogs"
+        >
+          <cds-icon shape="refresh" size="sm" :class="{ spinning: loading }"></cds-icon>
           <span>{{ locale.t('requestLog.action.refresh') }}</span>
         </cds-button>
+
+        <div class="toolbar-spacer"></div>
+
+        <input
+          v-model="agentIdInput"
+          class="control-input agent-input"
+          type="text"
+          :placeholder="locale.t('requestLog.filter.agentPlaceholder')"
+          :aria-label="locale.t('requestLog.filter.agentPlaceholder')"
+          @keyup.enter="applyToolbarFilters"
+          @change="applyToolbarFilters"
+        />
+        <input
+          v-model="modelInput"
+          class="control-input model-input"
+          type="text"
+          :placeholder="locale.t('requestLog.filter.modelPlaceholder')"
+          :aria-label="locale.t('requestLog.filter.modelPlaceholder')"
+          @keyup.enter="applyToolbarFilters"
+          @change="applyToolbarFilters"
+        />
+        <cds-select control-width="shrink" class="status-select">
+          <select
+            :value="statusFilter"
+            :aria-label="locale.t('requestLog.filter.status')"
+            @change="onStatusSelect"
+          >
+            <option value="all">{{ locale.t('requestLog.filter.allStatus') }}</option>
+            <option value="200">200</option>
+            <option value="4xx">4xx</option>
+            <option value="5xx">5xx</option>
+          </select>
+        </cds-select>
+        <div class="status-chips" :aria-label="locale.t('requestLog.filter.statusGroup')">
+          <button
+            type="button"
+            class="status-chip"
+            :class="{ active: statusFilter === '200' }"
+            @click="selectStatusFilter('200')"
+          >
+            <span class="chip-check" aria-hidden="true"></span>
+            200
+          </button>
+          <button
+            type="button"
+            class="status-chip"
+            :class="{ active: statusFilter === '4xx' }"
+            @click="selectStatusFilter('4xx')"
+          >
+            <span class="chip-check" aria-hidden="true"></span>
+            4xx
+          </button>
+          <button
+            type="button"
+            class="status-chip"
+            :class="{ active: statusFilter === '5xx' }"
+            @click="selectStatusFilter('5xx')"
+          >
+            <span class="chip-check" aria-hidden="true"></span>
+            5xx
+          </button>
+        </div>
+        <label class="search-box">
+          <cds-icon shape="search" size="sm" aria-hidden="true"></cds-icon>
+          <input
+            v-model="requestIdInput"
+            type="search"
+            :placeholder="locale.t('requestLog.filter.requestPlaceholder')"
+            :aria-label="locale.t('requestLog.filter.requestPlaceholder')"
+            @keyup.enter="applyToolbarFilters"
+            @change="applyToolbarFilters"
+          />
+        </label>
       </div>
 
-      <div class="grid-card">
-        <cds-grid
-          border="row"
-          column-layout="flex"
-          role="grid"
-          :aria-label="locale.t('requestLog.table.label')"
-        >
-          <cds-grid-column width="15%">{{ locale.t('requestLog.col.time') }}</cds-grid-column>
+      <div v-if="anyFilterActive" class="filter-summary">
+        <span>{{ locale.t('requestLog.filter.activeHint') }}</span>
+        <button type="button" class="link-button" @click="clearAllFilters">
+          {{ locale.t('requestLog.filter.clearAll') }}
+        </button>
+      </div>
 
-          <cds-grid-column width="15%">
-            <div class="column-head">
-              <span>{{ locale.t('requestLog.col.model') }}</span>
-              <cds-button-action
-                shape="filter"
-                :expanded="hasFilter('MODEL')"
-                :aria-label="locale.t('requestLog.filter.aria').replace('{column}', locale.t('requestLog.col.model'))"
-                @click="(event: MouseEvent) => openFilterMenu('MODEL', event)"
-              ></cds-button-action>
-            </div>
-          </cds-grid-column>
-
-          <cds-grid-column width="13%">
-            <div class="column-head">
-              <span>{{ locale.t('requestLog.col.agent') }}</span>
-              <cds-button-action
-                shape="filter"
-                :expanded="hasFilter('AGENT')"
-                :aria-label="locale.t('requestLog.filter.aria').replace('{column}', locale.t('requestLog.col.agent'))"
-                @click="(event: MouseEvent) => openFilterMenu('AGENT', event)"
-              ></cds-button-action>
-            </div>
-          </cds-grid-column>
-
-          <cds-grid-column width="9%">
-            <div class="column-head">
-              <span>{{ locale.t('requestLog.col.status') }}</span>
-              <cds-button-action
-                shape="filter"
-                :expanded="hasFilter('STATUS')"
-                :aria-label="locale.t('requestLog.filter.aria').replace('{column}', locale.t('requestLog.col.status'))"
-                @click="(event: MouseEvent) => openFilterMenu('STATUS', event)"
-              ></cds-button-action>
-            </div>
-          </cds-grid-column>
-
-          <cds-grid-column width="10%">{{ locale.t('requestLog.col.latency') }}</cds-grid-column>
-          <cds-grid-column width="14%">{{ locale.t('requestLog.col.tokens') }}</cds-grid-column>
-
-          <cds-grid-column width="24%">
-            <div class="column-head">
-              <span>{{ locale.t('requestLog.col.requestId') }}</span>
-              <cds-button-action
-                shape="filter"
-                :expanded="hasFilter('REQUEST')"
-                :aria-label="locale.t('requestLog.filter.aria').replace('{column}', locale.t('requestLog.col.requestId'))"
-                @click="(event: MouseEvent) => openFilterMenu('REQUEST', event)"
-              ></cds-button-action>
-            </div>
-          </cds-grid-column>
-
-          <template v-for="log in logs" :key="log.id">
-            <cds-grid-row>
-              <cds-grid-cell>
-                <span class="mono nowrap">{{ formatDateTime(log.createdAt) }}</span>
-              </cds-grid-cell>
-              <cds-grid-cell>
-                <span :title="dash(log.model)" class="ellipsis">{{ dash(log.model) }}</span>
-              </cds-grid-cell>
-              <cds-grid-cell>
-                <span :title="dash(log.agentId)" class="ellipsis mono">{{ dash(log.agentId) }}</span>
-              </cds-grid-cell>
-              <cds-grid-cell>
-                <cds-badge :status="statusFamily(log.statusCode)" class="status-badge">
-                  {{ log.statusCode }}
-                </cds-badge>
-              </cds-grid-cell>
-              <cds-grid-cell>
-                <span class="nowrap tabular">{{ formatLatency(log.latencyMs) }}</span>
-              </cds-grid-cell>
-              <cds-grid-cell>
-                <span
-                  class="nowrap tabular"
-                  :title="locale.t('requestLog.value.tokensTitle')
-                    .replace('{in}', formatNumber(log.inputTokens))
-                    .replace('{out}', formatNumber(log.outputTokens))"
-                >
-                  {{ formatNumber(log.inputTokens) }} / {{ formatNumber(log.outputTokens) }}
-                </span>
-              </cds-grid-cell>
-              <cds-grid-cell>
-                <div class="request-id-cell">
+      <div class="table-wrap">
+        <table class="log-table" :aria-label="locale.t('requestLog.table.label')">
+          <colgroup>
+            <col class="time-col" />
+            <col class="request-col" />
+            <col class="agent-col" />
+            <col class="model-col" />
+            <col class="token-col" />
+            <col class="token-col" />
+            <col class="latency-col" />
+            <col class="status-col" />
+            <col class="action-col" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">{{ locale.t('requestLog.col.time') }}</th>
+              <th scope="col">{{ locale.t('requestLog.col.requestId') }}</th>
+              <th scope="col">{{ locale.t('requestLog.col.agentId') }}</th>
+              <th scope="col">{{ locale.t('requestLog.col.model') }}</th>
+              <th scope="col">{{ locale.t('requestLog.col.inputTokens') }}</th>
+              <th scope="col">{{ locale.t('requestLog.col.outputTokens') }}</th>
+              <th scope="col">{{ locale.t('requestLog.col.latencyMs') }}</th>
+              <th scope="col">{{ locale.t('requestLog.col.status') }}</th>
+              <th scope="col">{{ locale.t('requestLog.col.actions') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="log in visibleLogs" :key="log.id">
+              <tr class="data-row" :class="{ expanded: expandedId === log.id }">
+                <td class="mono nowrap">{{ formatDateTime(log.createdAt) }}</td>
+                <td>
                   <button
                     type="button"
-                    class="copy-button"
+                    class="request-copy"
                     :title="locale.t('requestLog.action.copy')"
                     :aria-label="locale.t('requestLog.action.copy')"
                     @click="copyRequestId(log.requestId)"
@@ -412,10 +423,27 @@ async function refreshLogs() {
                     <span class="mono ellipsis">{{ log.requestId }}</span>
                     <cds-icon shape="copy" size="sm" aria-hidden="true"></cds-icon>
                   </button>
+                </td>
+                <td>
+                  <span class="ellipsis" :title="dash(log.agentId)">{{ dash(log.agentId) }}</span>
+                </td>
+                <td>
+                  <span class="ellipsis" :title="dash(log.model)">{{ dash(log.model) }}</span>
+                </td>
+                <td class="tabular">{{ formatNumber(log.inputTokens) }}</td>
+                <td class="tabular">{{ formatNumber(log.outputTokens) }}</td>
+                <td class="tabular">{{ formatNumber(log.latencyMs) }}</td>
+                <td>
+                  <span class="status-pill" :data-tone="statusTone(log.statusCode)">
+                    <span class="status-dot" aria-hidden="true"></span>
+                    {{ log.statusCode }}
+                  </span>
+                </td>
+                <td class="action-cell">
                   <button
-                    v-if="log.detail"
                     type="button"
-                    class="detail-toggle"
+                    class="row-action"
+                    :disabled="!log.detail"
                     :aria-expanded="expandedId === log.id"
                     :title="locale.t('requestLog.action.toggleDetail')"
                     :aria-label="locale.t('requestLog.action.toggleDetail')"
@@ -423,139 +451,68 @@ async function refreshLogs() {
                   >
                     <cds-icon
                       shape="angle"
-                      :direction="expandedId === log.id ? 'down' : 'right'"
+                      :direction="expandedId === log.id ? 'up' : 'down'"
                       size="sm"
                     ></cds-icon>
                   </button>
-                </div>
-              </cds-grid-cell>
-            </cds-grid-row>
+                </td>
+              </tr>
+              <tr v-if="expandedId === log.id && log.detail" class="detail-row">
+                <td colspan="9">
+                  <pre class="detail-text">{{ detailText(log.detail) }}</pre>
+                </td>
+              </tr>
+            </template>
 
-            <cds-grid-row v-if="expandedId === log.id && log.detail" class="detail-row">
-              <cds-grid-cell class="detail-cell">
-                <div class="detail-panel">
-                  <span class="detail-label">{{ locale.t('requestLog.col.detail') }}</span>
-                  <pre class="detail-text">{{ log.detail }}</pre>
-                </div>
-              </cds-grid-cell>
-            </cds-grid-row>
-          </template>
-
-          <cds-grid-placeholder v-if="loading && logs.length === 0">
-            <cds-icon shape="history" size="xl"></cds-icon>
-            <p cds-text="subsection">{{ locale.t('requestLog.loading') }}</p>
-          </cds-grid-placeholder>
-
-          <cds-grid-placeholder v-else-if="isEmpty">
-            <cds-icon shape="filter" size="xl"></cds-icon>
-            <p cds-text="subsection">{{ locale.t('requestLog.empty') }}</p>
-            <cds-button v-if="anyFilterActive" action="outline" size="sm" @click="clearAllFilters">
-              {{ locale.t('requestLog.filter.clearAll') }}
-            </cds-button>
-          </cds-grid-placeholder>
-
-          <cds-grid-footer v-if="logs.length > 0 || hasPrevPage">
-            <div class="pager">
-              <label for="request-log-page-size">{{ locale.t('requestLog.pagination.pageSize') }}</label>
-              <cds-select control-width="shrink">
-                <select
-                  id="request-log-page-size"
-                  :value="pageSize"
-                  :aria-label="locale.t('requestLog.pagination.pageSize')"
-                  @change="onPageSizeChange"
-                >
-                  <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
-                    {{ option }}
-                  </option>
-                </select>
-              </cds-select>
-              <span class="pager-summary">{{ rangeText }}</span>
-              <cds-pagination :aria-label="locale.t('requestLog.pagination.label')">
-                <cds-pagination-button
-                  action="prev"
-                  :disabled="!hasPrevPage"
-                  :aria-label="locale.t('agents.pager.prev')"
-                  @click="goPrev"
-                ></cds-pagination-button>
-                <span class="page-indicator">{{ currentPage }}</span>
-                <cds-pagination-button
-                  action="next"
-                  :disabled="!hasNextPage"
-                  :aria-label="locale.t('agents.pager.next')"
-                  @click="goNext"
-                ></cds-pagination-button>
-              </cds-pagination>
-            </div>
-          </cds-grid-footer>
-        </cds-grid>
+            <tr v-if="loading && visibleLogs.length === 0">
+              <td colspan="9" class="placeholder-cell">
+                <cds-icon shape="history" size="xl" class="placeholder-icon"></cds-icon>
+                {{ locale.t('requestLog.loading') }}
+              </td>
+            </tr>
+            <tr v-else-if="isEmpty">
+              <td colspan="9" class="placeholder-cell">
+                <cds-icon shape="filter" size="xl" class="placeholder-icon"></cds-icon>
+                {{ locale.t('requestLog.empty') }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-    </div>
 
-    <cds-dropdown
-      v-if="filterMenuAnchor && filterMenuKey"
-      :hidden="false"
-      :anchor="filterMenuAnchor"
-      closable
-      @closeChange="closeFilterMenu"
-    >
-      <div class="filter-panel">
-        <input
-          v-if="filterMenuKey === 'STATUS'"
-          class="filter-input"
-          type="number"
-          inputmode="numeric"
-          :value="statusCodeInput"
-          :placeholder="locale.t('requestLog.filter.statusPlaceholder')"
-          :aria-label="locale.t('requestLog.filter.statusPlaceholder')"
-          @input="statusCodeInput = ($event.target as HTMLInputElement).value"
-          @keyup.enter="applyActiveFilter"
-        />
-        <input
-          v-else-if="filterMenuKey === 'MODEL'"
-          class="filter-input"
-          type="text"
-          :value="modelInput"
-          :placeholder="locale.t('requestLog.filter.modelPlaceholder')"
-          :aria-label="locale.t('requestLog.filter.modelPlaceholder')"
-          @input="modelInput = ($event.target as HTMLInputElement).value"
-          @keyup.enter="applyActiveFilter"
-        />
-        <input
-          v-else-if="filterMenuKey === 'AGENT'"
-          class="filter-input"
-          type="text"
-          :value="agentIdInput"
-          :placeholder="locale.t('requestLog.filter.agentPlaceholder')"
-          :aria-label="locale.t('requestLog.filter.agentPlaceholder')"
-          @input="agentIdInput = ($event.target as HTMLInputElement).value"
-          @keyup.enter="applyActiveFilter"
-        />
-        <input
-          v-else
-          class="filter-input"
-          type="text"
-          :value="requestIdInput"
-          :placeholder="locale.t('requestLog.filter.requestPlaceholder')"
-          :aria-label="locale.t('requestLog.filter.requestPlaceholder')"
-          @input="requestIdInput = ($event.target as HTMLInputElement).value"
-          @keyup.enter="applyActiveFilter"
-        />
-
-        <div class="filter-footer">
-          <cds-button
-            v-if="hasFilter(filterMenuKey)"
-            action="outline"
-            size="sm"
-            @click="clearActiveFilter"
-          >
-            {{ locale.t('requestLog.filter.clear') }}
-          </cds-button>
-          <cds-button action="solid" status="primary" size="sm" @click="applyActiveFilter">
-            {{ locale.t('requestLog.filter.apply') }}
-          </cds-button>
+      <footer class="table-footer">
+        <div class="page-size">
+          <span>{{ locale.t('requestLog.pagination.pageSize') }}</span>
+          <cds-select control-width="shrink">
+            <select
+              :value="pageSize"
+              :aria-label="locale.t('requestLog.pagination.pageSize')"
+              @change="onPageSizeChange"
+            >
+              <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
+                {{ option }}
+              </option>
+            </select>
+          </cds-select>
         </div>
-      </div>
-    </cds-dropdown>
+        <span class="range-label">{{ rangeText }}</span>
+        <cds-pagination :aria-label="locale.t('requestLog.pagination.label')">
+          <cds-pagination-button
+            action="prev"
+            :disabled="!hasPrevPage"
+            :aria-label="locale.t('agents.pager.prev')"
+            @click="goPrev"
+          ></cds-pagination-button>
+          <span class="page-indicator">{{ currentPage }}</span>
+          <cds-pagination-button
+            action="next"
+            :disabled="!hasNextPage"
+            :aria-label="locale.t('agents.pager.next')"
+            @click="goNext"
+          ></cds-pagination-button>
+        </cds-pagination>
+      </footer>
+    </div>
   </section>
 </template>
 
@@ -566,52 +523,175 @@ async function refreshLogs() {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-.page-head {
-  flex: 0 0 auto;
+  gap: 10px;
 }
 .heading {
+  flex: 0 0 auto;
   margin: 0;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 28px;
-  line-height: 1.3;
+  font-size: 24px;
+  line-height: 1.25;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
-.desc {
-  margin: 12px 0 0;
-  color: var(--cds-alias-typography-color-300, #565656);
-  font-size: 14px;
-  line-height: 1.5;
-  max-width: 720px;
-}
-.content-card {
+.log-shell {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+  border: 1px solid var(--cds-alias-object-border-color, #b3b3b3);
   border-radius: 6px;
   background: var(--cds-alias-object-container-background, #fff);
-  margin-top: 20px;
+  overflow: hidden;
 }
 .toolbar {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 32px;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid var(--cds-alias-object-border-color, #d8d8d8);
+  background: var(--cds-alias-object-container-background, #fff);
+  overflow-x: auto;
 }
-.filter-summary {
+.time-tabs,
+.status-chips {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: var(--cds-alias-typography-color-300, #565656);
+  flex: 0 0 auto;
+}
+.time-tabs {
+  border: 1px solid var(--cds-alias-object-border-color, #c8c8c8);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.time-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-right: 1px solid var(--cds-alias-object-border-color, #c8c8c8);
+  background: var(--cds-alias-object-container-background, #fff);
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  font: inherit;
   font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.time-tab:last-child {
+  border-right: 0;
+}
+.time-tab:hover,
+.time-tab.active {
+  background: var(--cds-alias-object-app-background, #f1f5f8);
+}
+.icon-refresh,
+.primary-refresh {
+  flex: 0 0 auto;
+}
+.icon-refresh {
+  --padding: 0;
+  min-width: 32px;
+}
+.primary-refresh span {
+  margin-left: 4px;
+}
+.toolbar-spacer {
+  flex: 1 1 auto;
+  min-width: 24px;
+}
+.control-input,
+.search-box {
+  min-height: 30px;
+  border: 1px solid var(--cds-alias-object-border-color, #c8c8c8);
+  border-radius: 3px;
+  background: var(--cds-alias-object-container-background, #fff);
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  font: inherit;
+  font-size: 13px;
+}
+.control-input {
+  flex: 0 0 auto;
+  width: 160px;
+  padding: 5px 9px;
+}
+.agent-input {
+  width: 210px;
+}
+.model-input {
+  width: 110px;
+}
+.control-input:focus,
+.search-box:focus-within {
+  border-color: var(--cds-alias-object-interaction-color, #0072a3);
+  outline: 2px solid color-mix(in srgb, var(--cds-alias-object-interaction-color, #0072a3) 20%, transparent);
+  outline-offset: 1px;
+}
+.status-select {
+  flex: 0 0 auto;
+}
+.status-chips {
+  gap: 4px;
+}
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--cds-alias-object-border-color, #c8c8c8);
+  border-radius: 3px;
+  background: var(--cds-alias-object-container-background, #fff);
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.status-chip.active {
+  border-color: var(--cds-alias-object-interaction-color, #0072a3);
+  background: var(--cds-alias-object-interaction-background-selected, #e5f1f6);
+}
+.chip-check {
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--cds-alias-object-border-color, #a5a5a5);
+  border-radius: 2px;
+  background: var(--cds-alias-object-container-background, #fff);
+}
+.status-chip.active .chip-check {
+  border-color: var(--cds-alias-object-interaction-color, #0072a3);
+  background: var(--cds-alias-object-interaction-color, #0072a3);
+  box-shadow: inset 0 0 0 2px var(--cds-alias-object-container-background, #fff);
+}
+.search-box {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  width: 190px;
+  padding: 0 8px;
+}
+.search-box input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.filter-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--cds-alias-object-border-color, #e5e5e5);
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 12px;
 }
 .link-button {
   border: 0;
@@ -622,33 +702,68 @@ async function refreshLogs() {
   padding: 0;
   text-decoration: underline;
 }
-.refresh-button {
-  margin-left: auto;
-}
-.grid-card {
+.table-wrap {
   flex: 1 1 auto;
   min-height: 0;
-  min-width: 0;
   overflow: auto;
-  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
-  border-radius: 4px;
 }
-.request-log-page cds-grid {
-  display: block;
+.log-table {
   width: 100%;
-  min-width: 920px;
-  min-height: 100%;
+  min-width: 1040px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
-.column-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  width: 100%;
-  min-width: 0;
+.time-col {
+  width: 170px;
+}
+.request-col {
+  width: 150px;
+}
+.agent-col {
+  width: 220px;
+}
+.model-col {
+  width: 100px;
+}
+.token-col {
+  width: 96px;
+}
+.latency-col {
+  width: 112px;
+}
+.status-col {
+  width: 90px;
+}
+.action-col {
+  width: 64px;
+}
+.log-table th,
+.log-table td {
+  height: 32px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--cds-alias-object-border-color, #e2e2e2);
+  text-align: left;
+  vertical-align: middle;
+}
+.log-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--cds-alias-object-app-background, #f4f7f9);
+  color: var(--cds-alias-typography-color-400, #313131);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.data-row:hover {
+  background: var(--cds-alias-object-interaction-background-hover, #eef4f7);
+}
+.data-row.expanded {
+  background: var(--cds-alias-object-app-background, #f5f7fa);
 }
 .mono {
-  font-family: var(--cds-global-typography-monospace-font-family, monospace);
+  font-family: var(--cds-global-typography-monospace-font-family, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
 }
 .tabular {
   font-variant-numeric: tabular-nums;
@@ -664,128 +779,128 @@ async function refreshLogs() {
   white-space: nowrap;
   vertical-align: bottom;
 }
-.status-badge {
-  min-width: 44px;
-  justify-content: center;
-  font-variant-numeric: tabular-nums;
-}
-.request-id-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-.copy-button {
+.request-copy {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  width: 100%;
   min-width: 0;
-  padding: 4px 6px;
+  padding: 2px 0;
   border: 0;
-  border-radius: 3px;
   background: transparent;
   color: var(--cds-alias-object-interaction-color, #006e9c);
   font: inherit;
-  font-size: 12px;
   cursor: pointer;
 }
-.copy-button:hover {
-  background: var(--cds-alias-object-app-background, #f4f4f4);
-}
-.copy-button cds-icon {
+.request-copy cds-icon {
   flex: 0 0 auto;
+  color: var(--cds-alias-object-app-foreground, #313131);
 }
-.detail-toggle {
+.status-pill {
   display: inline-flex;
   align-items: center;
-  flex: 0 0 auto;
-  padding: 4px;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--cds-alias-status-neutral, #6a6a6a);
+}
+.status-pill[data-tone='success'] {
+  color: var(--cds-alias-status-success, #247144);
+}
+.status-pill[data-tone='success'] .status-dot {
+  background: var(--cds-alias-status-success, #247144);
+}
+.status-pill[data-tone='warning'] {
+  color: var(--cds-alias-status-danger, #b53d35);
+}
+.status-pill[data-tone='warning'] .status-dot {
+  background: var(--cds-alias-status-danger, #b53d35);
+}
+.status-pill[data-tone='danger'] {
+  color: var(--cds-alias-status-danger, #b53d35);
+}
+.status-pill[data-tone='danger'] .status-dot {
+  background: var(--cds-alias-status-danger, #b53d35);
+}
+.action-cell {
+  text-align: center;
+}
+.row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
   border: 0;
   border-radius: 3px;
   background: transparent;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
   cursor: pointer;
 }
-.detail-toggle:hover {
-  background: var(--cds-alias-object-app-background, #f4f4f4);
+.row-action:hover:not(:disabled) {
+  background: var(--cds-alias-object-app-background, #edf2f5);
 }
-.detail-row {
-  background: var(--cds-alias-object-app-background, #f7f7f7);
+.row-action:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
-.detail-cell {
-  grid-column: 1 / -1;
-}
-.detail-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 4px;
-  width: 100%;
-}
-.detail-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--cds-alias-typography-color-300, #565656);
+.detail-row td {
+  height: auto;
+  padding: 8px 10px 10px;
+  background: var(--cds-alias-object-app-background, #f5f7fa);
 }
 .detail-text {
   margin: 0;
-  padding: 8px 10px;
+  min-height: 72px;
   max-height: 220px;
   overflow: auto;
-  border: 1px solid var(--cds-alias-object-border-color, #e0e0e0);
-  border-radius: 3px;
-  background: var(--cds-alias-object-container-background, #fff);
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-family: var(--cds-global-typography-monospace-font-family, monospace);
+  font-family: var(--cds-global-typography-monospace-font-family, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
 }
-.pager {
+.placeholder-cell {
+  height: 180px !important;
+  text-align: center !important;
+  color: var(--cds-alias-typography-color-300, #565656);
+}
+.placeholder-icon {
+  display: block;
+  margin: 0 auto 8px;
+  color: var(--cds-alias-typography-color-300, #565656);
+}
+.table-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-height: 38px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--cds-alias-object-border-color, #d8d8d8);
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 12px;
+}
+.page-size {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  white-space: nowrap;
+  gap: 6px;
 }
-.pager > label,
-.pager-summary {
-  color: var(--cds-alias-typography-color-300, #565656);
+.range-label {
+  white-space: nowrap;
 }
 .page-indicator {
   min-width: 24px;
   text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-.filter-panel {
-  min-width: 250px;
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.filter-input {
-  width: 100%;
-  min-height: 32px;
-  padding: 6px 9px;
-  border: 1px solid var(--cds-alias-object-border-color, #8c8c8c);
-  border-radius: 3px;
-  background: var(--cds-alias-object-container-background, #fff);
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font: inherit;
-}
-.filter-input:focus {
-  border-color: var(--cds-alias-object-interaction-color, #0072a3);
-  outline: 2px solid color-mix(in srgb, var(--cds-alias-object-interaction-color, #0072a3) 20%, transparent);
-  outline-offset: 1px;
-}
-.filter-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding-top: 4px;
-  border-top: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
+  font-variant-numeric: tabular-nums;
 }
 .spinning {
   animation: request-log-spin 1s linear infinite;
@@ -796,9 +911,30 @@ async function refreshLogs() {
     transform: rotate(360deg);
   }
 }
-@media (max-width: 900px) {
-  .refresh-button span {
+@media (max-width: 1080px) {
+  .toolbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .toolbar-spacer {
     display: none;
+  }
+  .agent-input,
+  .model-input,
+  .search-box {
+    flex: 1 1 180px;
+  }
+}
+@media (max-width: 720px) {
+  .heading {
+    font-size: 21px;
+  }
+  .primary-refresh span,
+  .page-size {
+    display: none;
+  }
+  .table-footer {
+    justify-content: space-between;
   }
 }
 @media (prefers-reduced-motion: reduce) {
