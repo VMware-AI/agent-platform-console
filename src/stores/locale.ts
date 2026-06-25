@@ -6,7 +6,10 @@ const STORAGE_KEY = 'clarity-locale'
 
 type Dict = Record<string, { zh: string; en: string }>
 
-const STRINGS: Dict = {
+// Exported as the single source of truth for the locale dictionary so contract
+// tests (src/stores/__tests__/locale-*.test.ts) can assert i18n completeness,
+// enum→key coverage, and locale integrity without duplicating the keys.
+export const STRINGS: Dict = {
   'app.title':         { zh: '智能体管理平台',             en: 'Agent Management Platform' },
   'app.brand':         { zh: '智能体管理平台',             en: 'Agent Management Platform' },
   'nav.dashboard':     { zh: '仪表盘',                    en: 'Dashboard' },
