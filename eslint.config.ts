@@ -23,5 +23,25 @@ export default [
       'vue/no-deprecated-slot-attribute': 'off',
     },
   },
+  {
+    // Vitest globals for test files. Tests also import these explicitly from
+    // 'vitest', but vitest.config sets `globals: true`, so declare them here so
+    // `eslint .` stays green if a test omits an import.
+    name: 'app/vitest-test-files',
+    files: ['**/*.{test,spec}.{ts,mts,tsx}', '**/__tests__/**/*.{ts,mts,tsx}'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        vi: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+      },
+    },
+  },
   skipFormatting,
 ]

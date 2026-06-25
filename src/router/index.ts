@@ -73,10 +73,32 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
-  const auth = useAuthStore()
-  if (to.meta.public) {
-    if (auth.isAuthenticated && to.name === 'login') {
+// The route-meta fields the guard reads. Kept narrow so the decision can be
+// unit-tested with plain objects (no full router / view-chunk loading).
+export interface GuardRouteMeta {
+  readonly public?: boolean
+  readonly admin?: boolean
+  readonly roles?: readonly string[]
+}
+
+// The auth facts the guard reads.
+export interface GuardAuthState {
+  readonly isAuthenticated: boolean
+  readonly role: string | null
+}
+
+/**
+ * Pure permission decision for a navigation. Returns `true` to allow, or a
+ * redirect target (`{ name }`) to bounce. Exported so the logic is unit-tested
+ * directly — `beforeEach` below is a thin adapter over it.
+ */
+export function resolveGuard(
+  meta: GuardRouteMeta,
+  routeName: string | null | undefined,
+  auth: GuardAuthState,
+): true | { name: string } {
+  if (meta.public) {
+    if (auth.isAuthenticated && routeName === 'login') {
       return { name: 'overview' }
     }
     return true
@@ -91,18 +113,26 @@ router.beforeEach((to) => {
   // meta.admin for @hasRole(any:[admin]) pages, meta.roles for @hasPermission /
   // @hasRole(any:[admin,...]) pages, and no guard for any-auth / owner-or-admin
   // pages (agents.list/config/snapshots).
-  if (to.meta.admin && auth.role !== 'admin') {
+  if (meta.admin && auth.role !== 'admin') {
     return { name: 'overview' }
   }
   // Permission-scoped routes (meta.roles): an allowlist of backend role names that
   // hold the gating permission. Used for pages gated by @hasPermission rather than
   // @hasRole(any:[admin]) — e.g. audit:view is held by admin/observability/
   // tenant_admin. A role outside the list is bounced before its queries can error.
-  const allowedRoles = to.meta.roles as readonly string[] | undefined
-  if (allowedRoles && !allowedRoles.includes(auth.role ?? '')) {
+  if (meta.roles && !meta.roles.includes(auth.role ?? '')) {
     return { name: 'overview' }
   }
   return true
+}
+
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+  return resolveGuard(
+    to.meta as GuardRouteMeta,
+    typeof to.name === 'string' ? to.name : null,
+    { isAuthenticated: auth.isAuthenticated, role: auth.role },
+  )
 })
 
 export default router
