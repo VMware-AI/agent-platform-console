@@ -38,6 +38,8 @@ const groups: Group[] = [
       { name: 'agents.list',        label: '智能体列表',   icon: 'atom',    to: '/agents/list' },
       { name: 'agents.config',      label: '智能体配置',   icon: 'details', to: '/agents/config' },
       { name: 'agents.marketplace', label: '智能体市场',   icon: 'store',   to: '/agents/marketplace' },
+      { name: 'agents.templates',   label: '智能体模板',   icon: 'book',    to: '/agents/templates' },
+      { name: 'agents.snapshots',   label: '快照与生命周期', icon: 'history', to: '/agents/snapshots' },
     ],
   },
   {
@@ -47,6 +49,8 @@ const groups: Group[] = [
       { name: 'mg.route', label: '模型路由', icon: 'forking', to: '/model-gateway/route' },
       { name: 'mg.key',   label: '虚拟密钥', icon: 'key',     to: '/model-gateway/key' },
       { name: 'mg.policy', label: '网关策略', icon: 'filter',  to: '/model-gateway/policy' },
+      { name: 'mg.connections', label: '网关连接', icon: 'internet-of-things', to: '/model-gateway/connections' },
+      { name: 'mg.upstreams', label: '上游与路由分层', icon: 'cpu', to: '/model-gateway/upstreams' },
     ],
   },
   {
@@ -66,6 +70,11 @@ const groups: Group[] = [
       { name: 'platform.resources', label: '资源池接入', icon: 'resource-pool', to: '/platform/resources' },
       { name: 'platform.gateway', label: '模型网关接入',   icon: 'router', to: '/platform/gateway' },
       { name: 'platform.users',   label: '用户与权限', icon: 'users',  to: '/platform/users' },
+      { name: 'platform.departments', label: '部门与成员', icon: 'blocks-group', to: '/platform/departments' },
+      { name: 'platform.roles',   label: '自定义角色与权限', icon: 'shield-check', to: '/platform/roles' },
+      { name: 'platform.artifacts', label: '制品库', icon: 'details', to: '/platform/artifacts' },
+      { name: 'platform.skills',  label: '技能管理', icon: 'wrench', to: '/platform/skills' },
+      { name: 'platform.images',  label: '镜像管理', icon: 'storage', to: '/platform/images' },
     ],
   },
 ]
