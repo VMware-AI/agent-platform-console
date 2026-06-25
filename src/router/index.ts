@@ -3,7 +3,6 @@ import { useAuthStore } from '@/stores/auth'
 import AppShell from '@/components/AppShell.vue'
 import LoginView from '@/views/LoginView.vue'
 import DashboardView from '@/views/DashboardView.vue'
-import ComingSoon from '@/views/ComingSoon.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -34,7 +33,7 @@ const router = createRouter({
 
         // 可观测性
         { path: 'observability/metering', name: 'obs.metering', component: () => import('@/views/MeteringCenterView.vue') },
-        { path: 'observability/monitor',  name: 'obs.monitor',   component: ComingSoon, props: { title: '实时监控' } },
+        { path: 'observability/monitor',  name: 'obs.monitor',   component: () => import('@/views/RealtimeMonitorView.vue'), meta: { roles: ['admin', 'observability', 'tenant_admin'] } },
         // 请求日志 / 审计日志 are gated by @hasPermission("audit:view"), which the
         // backend grants to admin, observability AND tenant_admin (rbac.go) — NOT
         // admin alone. Guard on the role allowlist (meta.roles), not meta.admin,
