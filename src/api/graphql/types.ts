@@ -592,7 +592,8 @@ export interface DeployAgentInput {
   /** Target vCenter resource pool. */
   resourcePoolId: string
   /**
-   * Optional vSphere resource-pool name to place the VM clone in. A true OVA
+   * Optional vSphere resource-pool inventory PATH to place the VM clone in
+   * (VsphereResourcePool.path, e.g. "/DC0/host/DC0_C0/Resources"). A true OVA
    * template has no source resource pool, so a real deploy must supply one or
    * the clone fails ("source has no resource pool; specify resourcePool").
    * Empty = inherit the source template's pool (only valid for regular-VM sources).
@@ -614,4 +615,22 @@ export interface DeployAgentPayload {
 
 export interface DeployAgentVars {
   input: DeployAgentInput
+}
+
+/**
+ * A vCenter resource pool offered as a placement target for the cloned VM.
+ * `path` is the inventory path (e.g. "/DC0/host/DC0_C0/Resources") sent as
+ * DeployAgentInput.targetResourcePool; `name` is the human label.
+ */
+export interface VsphereResourcePool {
+  name: string
+  path: string
+}
+
+export interface VsphereResourcePoolsQueryVars {
+  resourcePoolId: string
+}
+
+export interface VsphereResourcePoolsQueryResult {
+  vsphereResourcePools: VsphereResourcePool[]
 }

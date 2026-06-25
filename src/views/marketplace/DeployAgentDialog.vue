@@ -9,13 +9,18 @@
  * (DeployedAgent.virtualKeySecret), surfaced afterward in a reveal dialog
  * (see AgentMarketplaceView → VirtualKeySecretDialog).
  */
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
+import { VSPHERE_RESOURCE_POOLS_QUERY } from '@/api/graphql/queries/vsphere'
 import type {
   DeployAgentInput,
   OvaTemplateFamily,
   OvaTemplateVersion,
   ResourcePool,
+  VsphereResourcePool,
+  VsphereResourcePoolsQueryResult,
+  VsphereResourcePoolsQueryVars,
 } from '@/api/graphql/types'
 import '@/components/icons'
 
@@ -36,6 +41,7 @@ const locale = useLocaleStore()
 const templateVersionId = ref<string>('')
 const resourcePoolId = ref<string>('')
 const name = ref('')
+// The selected vSphere placement pool's inventory PATH (sent as targetResourcePool).
 const targetResourcePool = ref('')
 const hostname = ref('')
 const maxBudget = ref('')
@@ -59,6 +65,33 @@ watch(
   { immediate: true },
 )
 
+/* ---- Live vSphere placement pools (keyed off the selected platform pool) ----
+   Re-queries whenever the platform resource pool changes. Only enabled while the
+   dialog is open with a pool selected, so we don't dial vCenter unnecessarily. */
+const vsphereVars = computed<VsphereResourcePoolsQueryVars>(() => ({
+  resourcePoolId: resourcePoolId.value,
+}))
+const vsphereEnabled = computed(() => props.open && !!resourcePoolId.value)
+const {
+  result: vsphereResult,
+  loading: vspherePoolsLoading,
+} = useQuery<VsphereResourcePoolsQueryResult, VsphereResourcePoolsQueryVars>(
+  VSPHERE_RESOURCE_POOLS_QUERY,
+  vsphereVars,
+  () => ({ enabled: vsphereEnabled.value, fetchPolicy: 'cache-and-network' }),
+)
+const vspherePools = computed<VsphereResourcePool[]>(
+  () => vsphereResult.value?.vsphereResourcePools ?? [],
+)
+
+// When the available pools change (pool switched / first load), keep the
+// selection valid: clear it if the previously picked path is no longer offered.
+watch(vspherePools, (pools) => {
+  if (targetResourcePool.value && !pools.some((p) => p.path === targetResourcePool.value)) {
+    targetResourcePool.value = ''
+  }
+})
+
 const versionValid = () => !!templateVersionId.value
 const poolValid = () => !!resourcePoolId.value
 const nameValid = () => name.value.trim().length > 0
@@ -67,9 +100,14 @@ const budgetValid = () => {
   const n = Number(maxBudget.value)
   return Number.isFinite(n) && n >= 0
 }
+// A placement pool is required when vCenter offers any (a real OVA template has
+// no source pool). When the list is empty (vcsim / regular-VM sources), an empty
+// selection is allowed — the clone inherits the source template's pool.
+const targetPoolValid = () =>
+  vspherePools.value.length === 0 || !!targetResourcePool.value
 
 function formValid(): boolean {
-  return versionValid() && poolValid() && nameValid() && budgetValid()
+  return versionValid() && poolValid() && nameValid() && targetPoolValid() && budgetValid()
 }
 
 function submit() {
@@ -81,9 +119,10 @@ function submit() {
     templateFamilyId: props.template?.id ?? '',
     templateVersionId: templateVersionId.value,
     resourcePoolId: resourcePoolId.value,
-    // A true OVA template has no source resource pool, so a real deploy must name
-    // a vSphere placement pool here; empty inherits the source's pool (regular VMs).
-    targetResourcePool: targetResourcePool.value.trim() || null,
+    // The picked vSphere pool's inventory PATH. A true OVA template has no source
+    // resource pool, so a real deploy must place the clone here; empty inherits
+    // the source's pool (only valid for regular-VM sources, e.g. vcsim).
+    targetResourcePool: targetResourcePool.value || null,
     hostname: hostname.value.trim() || null,
     maxBudget: budget,
   })
@@ -182,14 +221,39 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
           />
         </cds-input>
 
-        <!-- vSphere 资源池（可选）：真实 OVA 模板无源资源池，部署必须指定 -->
-        <cds-input>
+        <!-- vSphere 放置资源池：真实 OVA 模板无源资源池，部署必须指定一个放置池。
+             列表来自所选平台资源池对应 vCenter 的实时枚举；为空（vcsim/常规 VM）时
+             允许不选，克隆继承源模板所在池。 -->
+        <cds-select
+          class="full-row"
+          :status="attempted && !targetPoolValid() ? 'error' : 'neutral'"
+        >
           <label>{{ locale.t('marketplace.deploy.targetPool') }}</label>
-          <input
+          <select
             v-model="targetResourcePool"
-            :placeholder="locale.t('marketplace.deploy.targetPoolPlaceholder')"
-          />
-        </cds-input>
+            :disabled="vspherePoolsLoading || vspherePools.length === 0"
+          >
+            <option value="">
+              {{
+                vspherePoolsLoading
+                  ? locale.t('marketplace.deploy.targetPoolLoading')
+                  : vspherePools.length === 0
+                    ? locale.t('marketplace.deploy.targetPoolEmpty')
+                    : locale.t('marketplace.deploy.targetPoolPlaceholder')
+              }}
+            </option>
+            <option
+              v-for="p in vspherePools"
+              :key="p.path"
+              :value="p.path"
+            >
+              {{ p.name }} — {{ p.path }}
+            </option>
+          </select>
+          <cds-control-message v-if="attempted && !targetPoolValid()" status="error">
+            {{ locale.t('marketplace.deploy.error.targetPool') }}
+          </cds-control-message>
+        </cds-select>
 
         <!-- 预算上限（可选） -->
         <cds-input :status="attempted && !budgetValid() ? 'error' : 'neutral'">
