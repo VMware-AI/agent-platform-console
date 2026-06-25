@@ -82,7 +82,6 @@ let emailTimer: number | null = null
    any JS property on cds-modal — its internal `hidden` state initializes
    to `false` on first connect, and the close button emits `closeChange`
    which we forward to the parent. */
-const modalRef = ref<HTMLElement | null>(null)
 
 watch(
   () => props.open,

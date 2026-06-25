@@ -24,8 +24,12 @@ export interface AgentApiKey {
 }
 
 export interface AgentCredentials {
+  /**
+   * Run-as username for the agent's VM. The backend sources this from the
+   * owning user (the agent has no separate OS account today); the password is
+   * never returned by the API.
+   */
   username: string
-  passwordHash: string
 }
 
 export interface Agent {
@@ -34,7 +38,8 @@ export interface Agent {
   type: AgentType
   status: AgentStatus
   apiKey: AgentApiKey | null
-  credentials: AgentCredentials
+  /** Nullable: resolver-computed; null if the owning user is gone. */
+  credentials: AgentCredentials | null
   createdAt: string
   updatedAt: string
   endpoint: string | null
@@ -570,87 +575,39 @@ export interface AddOvaTemplateVersionVars {
 }
 
 /* ============================================================
- * VirtualKey
+ * Deploy Agent (create-from-OVA)
+ *
+ * The marketplace deploys a NEW agent from an OVA template version. Deploy ISSUES
+ * the gateway key itself and returns its secret ONCE via `virtualKeySecret` — the
+ * marketplace has no separate VirtualKey concept (that collided with the real
+ * LiteLLM VirtualKey type; see queries/virtual-keys.ts + VirtualKeyView.vue).
  * ============================================================ */
-
-export type VirtualKeyStatus = 'AVAILABLE' | 'BOUND' | 'REVOKED'
-
-export interface ModelGatewayRef {
-  id: string
-  name: string
-  endpoint: string
-}
-
-export interface VirtualKey {
-  id: string
-  name: string
-  secret: string
-  modelGatewayId: string
-  modelGateway: ModelGatewayRef
-  status: VirtualKeyStatus
-  boundAgentId: string | null
-  boundAgent: Agent | null
-  createdAt: string
-  boundAt: string | null
-}
-
-export interface VirtualKeyConnection {
-  nodes: VirtualKey[]
-  totalCount: number
-  pageInfo: PageInfo
-}
-
-export interface VirtualKeyFilter {
-  status?: VirtualKeyStatus | null
-  modelGatewayId?: string | null
-  nameKeyword?: string | null
-}
-
-export interface VirtualKeysQueryVars {
-  filter?: VirtualKeyFilter | null
-  pagination?: Pagination | null
-}
-
-export interface VirtualKeysQueryResult {
-  virtualKeys: VirtualKeyConnection
-}
-
-export interface CreateVirtualKeyInput {
-  name: string
-  modelGatewayId: string
-}
-
-export interface CreateVirtualKeyPayload {
-  key: VirtualKey
-  secret: string
-}
-
-export interface CreateVirtualKeyVars {
-  input: CreateVirtualKeyInput
-}
-
-/* ============================================================
- * Deploy Agent
- * ============================================================ */
-
-export type VirtualKeyMode = 'USE_EXISTING' | 'CREATE_NEW'
 
 export interface DeployAgentInput {
-  templateVersionId: string
-  resourcePoolId: string
-  modelGatewayId: string
-  virtualKeyMode: VirtualKeyMode
-  existingVirtualKeyId?: string | null
-  newVirtualKeyName?: string | null
+  /** Display name for the new agent (and its cloned VM). */
   name: string
-  username: string
-  password: string
-  description?: string | null
+  /** OVA family (its type becomes the agent kind) + the version to clone from. */
+  templateFamilyId: string
+  templateVersionId: string
+  /** Target vCenter resource pool. */
+  resourcePoolId: string
+  /**
+   * Optional vSphere resource-pool name to place the VM clone in. A true OVA
+   * template has no source resource pool, so a real deploy must supply one or
+   * the clone fails ("source has no resource pool; specify resourcePool").
+   * Empty = inherit the source template's pool (only valid for regular-VM sources).
+   */
+  targetResourcePool?: string | null
+  /** Optional cloud-init hostname for the VM. */
+  hostname?: string | null
+  /** Optional per-key spend cap handed to the gateway. */
+  maxBudget?: number | null
 }
 
 export interface DeployAgentPayload {
   agent: Agent
-  virtualKey: VirtualKey
+  /** The issued virtual-key secret — returned ONCE; show in a reveal dialog. */
+  virtualKeySecret: string
   templateVersion: OvaTemplateVersion
   resourcePool: ResourcePool
 }

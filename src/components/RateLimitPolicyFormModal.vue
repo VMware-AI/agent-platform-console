@@ -92,11 +92,15 @@ function submit() {
             :value="name"
             maxlength="64"
             autocomplete="off"
+            :readonly="isEditing"
             :placeholder="locale.t('rateLimit.form.namePlaceholder')"
             @input="name = ($event.target as HTMLInputElement).value"
           />
           <cds-control-message v-if="attempted && !nameValid" status="error">
             {{ locale.t('rateLimit.form.nameError') }}
+          </cds-control-message>
+          <cds-control-message v-else-if="isEditing" status="neutral">
+            {{ locale.t('rateLimit.form.nameLockedHint') }}
           </cds-control-message>
         </cds-input>
 

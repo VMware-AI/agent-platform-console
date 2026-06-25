@@ -18,7 +18,10 @@ const router = createRouter({
         // 智能体中心
         { path: 'agents/list',        name: 'agents.list',        component: () => import('@/views/AgentListView.vue') },
         { path: 'agents/config',      name: 'agents.config',      component: ComingSoon, props: { title: '智能体配置' } },
-        { path: 'agents/marketplace', name: 'agents.marketplace', component: () => import('@/views/AgentMarketplaceView.vue') },
+        // 智能体市场 is admin-only: it browses the OVA catalog (admin-gated queries)
+        // and deploys agents (deployAgent is @hasRole(any: [admin])). A non-admin
+        // would otherwise reach the page only for its queries to error.
+        { path: 'agents/marketplace', name: 'agents.marketplace', component: () => import('@/views/AgentMarketplaceView.vue'), meta: { admin: true } },
 
         // 模型网关配置
         { path: 'model-gateway/route', name: 'mg.route', component: () => import('@/views/ModelRouteView.vue') },
@@ -51,6 +54,15 @@ router.beforeEach((to) => {
   }
   if (!auth.isAuthenticated) {
     return { name: 'login' }
+  }
+  // Admin-only routes (meta.admin): the backend role enum serializes admins as
+  // 'admin' (see auth store `role`). Non-admins are bounced to the overview so
+  // they never hit an admin-gated page whose queries would only error.
+  // TODO: the other admin pages (platform/users, platform/gateway,
+  // platform/resources) are not yet meta.admin-gated; gate them the same way
+  // once their backend ops are confirmed admin-only.
+  if (to.meta.admin && auth.role !== 'admin') {
+    return { name: 'overview' }
   }
   return true
 })
