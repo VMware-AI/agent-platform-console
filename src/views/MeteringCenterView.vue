@@ -1,9 +1,27 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
+import { useToast } from '@/composables/useToast'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
+import {
+  METERING_OVERVIEW_QUERY,
+  type AgentUsageRow,
+  type DailyUsageRow,
+  type MeteringOverview,
+  type MeteringOverviewResult,
+  type MeteringOverviewVars,
+  type MeteringTimeRange,
+  type ModelUsageRow,
+} from '@/api/graphql/queries/metering'
 import '@/components/icons'
 
-type TimeRange = '7d' | '30d' | 'month' | 'custom'
+// UI time-range keys vs. backend MeteringTimeRange. The backend supports exactly
+// three ranges, so the UI only exposes those three. A "custom" date-range tab is
+// intentionally NOT rendered: it would have no server equivalent today and would
+// silently behave like the 7-day window. Re-introduce it only once the backend
+// accepts explicit from/to dates and a date picker is wired up.
+type TimeRange = '7d' | '30d' | 'month'
 type UsageStatus = 'normal' | 'warning'
 
 interface AgentUsage {
@@ -34,108 +52,287 @@ interface DailyUsage {
 }
 
 const locale = useLocaleStore()
+const toast = useToast()
+
 const selectedRange = ref<TimeRange>('7d')
 const selectedAgent = ref('ALL')
 const selectedModel = ref('ALL')
 
+// Only ranges with a real backend equivalent are offered. The "custom" tab is
+// deliberately omitted — see the TimeRange comment above.
 const timeRanges: Array<{ key: TimeRange; label: string }> = [
   { key: '7d', label: 'metering.range.7d' },
   { key: '30d', label: 'metering.range.30d' },
   { key: 'month', label: 'metering.range.month' },
-  { key: 'custom', label: 'metering.range.custom' },
 ]
 
-const agents: AgentUsage[] = [
-  {
-    id: 'Agent_10000001',
-    name: 'gpt-4o',
-    template: 'OVA 模板',
-    totalTokens: 22_000,
-    inputTokens: 468,
-    outputTokens: 3_500,
-    requests: 37,
-    status: 'warning',
-  },
-  {
-    id: 'Agent_10000002',
-    name: 'AgentCole_son',
-    template: 'OVA Suling',
-    totalTokens: 13_000,
-    inputTokens: 300,
-    outputTokens: 2_000,
-    requests: 34,
-    status: 'warning',
-  },
-  {
-    id: 'Agent_30000003',
-    name: 'Hermes',
-    template: 'OVA Suling',
-    totalTokens: 10_000,
-    inputTokens: 300,
-    outputTokens: 1_000,
-    requests: 6,
-    status: 'warning',
-  },
-  {
-    id: 'Agent_30000004',
-    name: 'Opendode',
-    template: 'OVA Suling',
-    totalTokens: 4_000,
-    inputTokens: 120,
-    outputTokens: 800,
-    requests: 0,
-    status: 'warning',
-  },
-  {
-    id: 'Agent_30000005',
-    name: 'OpenCode_synt',
-    template: 'OVA 模板',
-    totalTokens: 1_500,
-    inputTokens: 130,
-    outputTokens: 500,
-    requests: 0,
-    status: 'warning',
-  },
-]
+const RANGE_TO_BACKEND: Record<TimeRange, MeteringTimeRange> = {
+  '7d': 'LAST_7_DAYS',
+  '30d': 'LAST_30_DAYS',
+  month: 'THIS_MONTH',
+}
 
-const models: ModelUsage[] = [
-  { name: 'gpt-4o', totalTokens: 22_000, inputTokens: 460, outputTokens: 3_500, status: 'normal' },
-  { name: 'gpt-go', totalTokens: 12_000, inputTokens: 300, outputTokens: 2_000, status: 'normal' },
-  { name: 'gptl-fo', totalTokens: 10_000, inputTokens: 300, outputTokens: 1_000, status: 'normal' },
-  { name: 'listLLL-R', totalTokens: 7_500, inputTokens: 120, outputTokens: 800, status: 'normal' },
-]
+// Reactive GraphQL variables — useQuery re-fetches whenever the selected range
+// changes. `userId` is left null to aggregate across the whole org.
+const variables = computed<MeteringOverviewVars>(() => ({
+  range: RANGE_TO_BACKEND[selectedRange.value],
+  userId: null,
+}))
 
-const dailyUsage: DailyUsage[] = [
-  { date: '2026-06-18', totalTokens: 12_000, inputTokens: 468, outputTokens: 3_500, status: 'normal' },
-  { date: '2026-06-19', totalTokens: 12_000, inputTokens: 300, outputTokens: 2_000, status: 'normal' },
-  { date: '2026-06-20', totalTokens: 4_200, inputTokens: 300, outputTokens: 1_000, status: 'normal' },
-  { date: '2026-06-21', totalTokens: 1_000, inputTokens: 120, outputTokens: 800, status: 'normal' },
-  { date: '2026-06-22', totalTokens: 500, inputTokens: 100, outputTokens: 300, status: 'normal' },
-]
+const { result, onError } = useQuery<MeteringOverviewResult, MeteringOverviewVars>(
+  METERING_OVERVIEW_QUERY,
+  variables,
+)
+
+onError((error) => {
+  toast.error(graphqlErrorMessage(error, locale.t('metering.title')))
+})
+
+const overview = computed<MeteringOverview | null>(() => result.value?.meteringOverview ?? null)
+
+// The backend rows carry no status flag; derive a data-driven one so the
+// existing status column keeps rendering — a row with zero requests is flagged
+// as a warning (idle / no traffic), otherwise it is normal.
+function statusFromRequests(requests: number): UsageStatus {
+  return requests > 0 ? 'normal' : 'warning'
+}
+
+const agents = computed<AgentUsage[]>(() =>
+  (overview.value?.byAgent ?? []).map((row: AgentUsageRow) => ({
+    id: row.agentId,
+    name: row.agentName,
+    // Backend metering rows do not expose the agent's OVA template; show a dash.
+    template: '—',
+    totalTokens: row.totalTokens,
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    requests: row.requests,
+    status: statusFromRequests(row.requests),
+  })),
+)
+
+const models = computed<ModelUsage[]>(() =>
+  (overview.value?.byModel ?? []).map((row: ModelUsageRow) => ({
+    name: row.model,
+    totalTokens: row.totalTokens,
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    status: statusFromRequests(row.requests),
+  })),
+)
+
+const dailyUsage = computed<DailyUsage[]>(() =>
+  (overview.value?.byDay ?? []).map((row: DailyUsageRow) => ({
+    date: row.date,
+    totalTokens: row.totalTokens,
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    status: statusFromRequests(row.requests),
+  })),
+)
+
+// Client-side filters over the fetched rows (the backend query has no per-agent
+// / per-model filter variable). Options are derived from the real result.
+const filteredAgents = computed<AgentUsage[]>(() =>
+  selectedAgent.value === 'ALL'
+    ? agents.value
+    : agents.value.filter((agent) => agent.id === selectedAgent.value),
+)
+
+const filteredModels = computed<ModelUsage[]>(() =>
+  selectedModel.value === 'ALL'
+    ? models.value
+    : models.value.filter((model) => model.name === selectedModel.value),
+)
 
 const agentOptions = computed(() => [
   { value: 'ALL', label: locale.t('metering.filter.allAgents') },
-  ...agents.map((agent) => ({ value: agent.id, label: `${agent.id} · ${agent.name}` })),
+  ...agents.value.map((agent) => ({ value: agent.id, label: `${agent.id} · ${agent.name}` })),
 ])
 
 const modelOptions = computed(() => [
   { value: 'ALL', label: locale.t('metering.filter.allModels') },
-  ...models.map((model) => ({ value: model.name, label: model.name })),
+  ...models.value.map((model) => ({ value: model.name, label: model.name })),
 ])
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat(locale.locale === 'zh' ? 'zh-CN' : 'en-US').format(value)
 }
 
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat(locale.locale === 'zh' ? 'zh-CN' : 'en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(value)
+}
+
+// Guard every hop after an optional: `cost` may be absent on a partial result.
+const totalCost = computed(() => formatCurrency(overview.value?.cost?.totalCost ?? 0))
+const monthlyCost = computed(
+  () => `${formatCurrency(overview.value?.cost?.monthlyCost ?? 0)}/${locale.t('metering.cost.month')}`,
+)
+
 function statusText(status: UsageStatus): string {
   return locale.t(`metering.status.${status}`)
 }
+
+// Footer text: real row count, no fabricated paginator. Reuses the existing
+// `metering.table.showing` key ("显示中"/"Showing") and composes the count in the
+// component, since the locale helper does not interpolate placeholders.
+function footerText(count: number): string {
+  const unit = locale.locale === 'zh' ? '条' : count === 1 ? 'row' : 'rows'
+  return `${locale.t('metering.table.showing')} ${formatNumber(count)} ${unit}`
+}
+
+// ---- SVG chart geometry (data-driven) -------------------------------------
+// Both charts share the same viewBox (0 0 560 190). The plot area is the box
+// bounded by the existing grid lines: x ∈ [PLOT_LEFT, PLOT_RIGHT],
+// y ∈ [PLOT_TOP, PLOT_BOTTOM]. Values are scaled linearly against the max value
+// present in the real data, so the highest point/bar always reaches the top.
+const PLOT_LEFT = 44
+const PLOT_RIGHT = 545
+const PLOT_TOP = 25
+const PLOT_BOTTOM = 165
+const TICK_COUNT = 4 // gridlines below the top line → 5 labelled ticks incl. 0
+
+// Round a max value up to a "nice" number so axis ticks read cleanly.
+function niceCeil(value: number): number {
+  if (value <= 0) return 0
+  const exponent = Math.floor(Math.log10(value))
+  const magnitude = Math.pow(10, exponent)
+  const fraction = value / magnitude
+  const niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10
+  return niceFraction * magnitude
+}
+
+// Map a value in [0, max] to a y coordinate (inverted: 0 at bottom).
+function scaleY(value: number, max: number): number {
+  if (max <= 0) return PLOT_BOTTOM
+  const ratio = Math.min(Math.max(value / max, 0), 1)
+  return PLOT_BOTTOM - ratio * (PLOT_BOTTOM - PLOT_TOP)
+}
+
+// Render the short M/D label the design uses (e.g. "6/22") from an ISO date.
+function shortDate(iso: string): string {
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return iso
+  return `${parsed.getMonth() + 1}/${parsed.getDate()}`
+}
+
+const hasTrendData = computed(() => dailyUsage.value.length > 0)
+
+// Nice max across both series so the input and output lines share one scale.
+const trendMax = computed(() =>
+  niceCeil(
+    dailyUsage.value.reduce(
+      (max, day) => Math.max(max, day.inputTokens, day.outputTokens),
+      0,
+    ),
+  ),
+)
+
+// Y-axis ticks (top → 0). Values from the real max, positions on the grid.
+const trendTicks = computed(() =>
+  Array.from({ length: TICK_COUNT + 1 }, (_, i) => {
+    const value = (trendMax.value / TICK_COUNT) * (TICK_COUNT - i)
+    return { value, y: scaleY(value, trendMax.value) }
+  }),
+)
+
+// Evenly spaced x for each day across the plot width (single point → centred).
+function trendX(index: number, length: number): number {
+  if (length <= 1) return (PLOT_LEFT + PLOT_RIGHT) / 2
+  return PLOT_LEFT + (index / (length - 1)) * (PLOT_RIGHT - PLOT_LEFT)
+}
+
+interface TrendPoint {
+  x: number
+  inputY: number
+  outputY: number
+  label: string
+}
+
+const trendPoints = computed<TrendPoint[]>(() => {
+  const days = dailyUsage.value
+  return days.map((day, index) => ({
+    x: trendX(index, days.length),
+    inputY: scaleY(day.inputTokens, trendMax.value),
+    outputY: scaleY(day.outputTokens, trendMax.value),
+    label: shortDate(day.date),
+  }))
+})
+
+const trendInputLine = computed(() =>
+  trendPoints.value.map((p) => `${p.x},${p.inputY}`).join(' '),
+)
+const trendOutputLine = computed(() =>
+  trendPoints.value.map((p) => `${p.x},${p.outputY}`).join(' '),
+)
+
+// Filled area under the input line, closed back along the baseline.
+const trendAreaPath = computed(() => {
+  const points = trendPoints.value
+  if (points.length === 0) return ''
+  const top = points.map((p) => `${p.x} ${p.inputY}`).join(' L ')
+  const first = points[0]
+  const last = points[points.length - 1]
+  return `M ${first.x} ${first.inputY} L ${top} L ${last.x} ${PLOT_BOTTOM} L ${first.x} ${PLOT_BOTTOM} Z`
+})
+
+// ---- Ranking bar chart -----------------------------------------------------
+const RANKING_TOP_N = 5
+const BAR_WIDTH = 52
+
+const rankedAgents = computed(() =>
+  [...agents.value].sort((a, b) => b.totalTokens - a.totalTokens).slice(0, RANKING_TOP_N),
+)
+
+const hasRankingData = computed(() => rankedAgents.value.length > 0)
+
+const rankingMax = computed(() =>
+  niceCeil(rankedAgents.value.reduce((max, agent) => Math.max(max, agent.totalTokens), 0)),
+)
+
+const rankingTicks = computed(() =>
+  Array.from({ length: TICK_COUNT + 1 }, (_, i) => {
+    const value = (rankingMax.value / TICK_COUNT) * (TICK_COUNT - i)
+    return { value, y: scaleY(value, rankingMax.value) }
+  }),
+)
+
+interface RankingBar {
+  x: number
+  y: number
+  height: number
+  centerX: number
+  label: string
+}
+
+const rankingBars = computed<RankingBar[]>(() => {
+  const list = rankedAgents.value
+  if (list.length === 0) return []
+  // Distribute bars evenly across the plot width, centring each slot.
+  const slot = (PLOT_RIGHT - PLOT_LEFT) / list.length
+  return list.map((agent, index) => {
+    const centerX = PLOT_LEFT + slot * (index + 0.5)
+    const top = scaleY(agent.totalTokens, rankingMax.value)
+    return {
+      x: centerX - BAR_WIDTH / 2,
+      y: top,
+      height: Math.max(PLOT_BOTTOM - top, 0),
+      centerX,
+      label: agent.name,
+    }
+  })
+})
 </script>
 
 <template>
   <section class="metering-page">
     <header class="page-header">
-      <h1 cds-text="title" class="heading">{{ locale.t('metering.title') }}</h1>
+      <h1 class="heading" :title="locale.t('metering.title')">
+        {{ locale.t('metering.title') }}
+      </h1>
     </header>
 
     <div class="filter-toolbar">
@@ -207,32 +404,28 @@ function statusText(status: UsageStatus): string {
               <line x1="44" y1="130" x2="545" y2="130" />
               <line x1="44" y1="165" x2="545" y2="165" />
             </g>
-            <g class="axis-labels">
-              <text x="4" y="29">20000</text>
-              <text x="4" y="64">15000</text>
-              <text x="12" y="99">10000</text>
-              <text x="18" y="134">5000</text>
-              <text x="30" y="169">0</text>
-              <text x="37" y="184">6/16</text>
-              <text x="112" y="184">6/17</text>
-              <text x="190" y="184">6/18</text>
-              <text x="268" y="184">6/19</text>
-              <text x="347" y="184">6/20</text>
-              <text x="426" y="184">6/21</text>
-              <text x="515" y="184">6/22</text>
-            </g>
-            <path
-              d="M44 151 L112 112 L190 119 L268 58 L347 58 L426 87 L486 80 L520 32 L545 42 L545 165 L44 165 Z"
-              fill="url(#meteringArea)"
-            />
-            <polyline
-              class="trend-line input-line"
-              points="44,151 112,112 190,119 268,58 347,58 426,87 486,80 520,32 545,42"
-            />
-            <polyline
-              class="trend-line output-line"
-              points="44,158 112,139 190,142 268,112 347,105 426,126 486,119 520,78 545,83"
-            />
+            <template v-if="hasTrendData">
+              <g class="axis-labels">
+                <text v-for="tick in trendTicks" :key="`ty-${tick.value}`" x="4" :y="tick.y + 4">
+                  {{ formatNumber(Math.round(tick.value)) }}
+                </text>
+                <text
+                  v-for="point in trendPoints"
+                  :key="`tx-${point.label}-${point.x}`"
+                  :x="point.x"
+                  y="184"
+                  class="date-label"
+                >
+                  {{ point.label }}
+                </text>
+              </g>
+              <path :d="trendAreaPath" fill="url(#meteringArea)" />
+              <polyline class="trend-line input-line" :points="trendInputLine" />
+              <polyline class="trend-line output-line" :points="trendOutputLine" />
+            </template>
+            <text v-else class="chart-empty" x="280" y="95">
+              {{ locale.t('agents.empty') }}
+            </text>
           </svg>
         </div>
       </cds-card>
@@ -254,28 +447,37 @@ function statusText(status: UsageStatus): string {
               <line x1="45" y1="137" x2="545" y2="137" />
               <line x1="45" y1="165" x2="545" y2="165" />
             </g>
-            <g class="axis-labels">
-              <text x="7" y="29">2500</text>
-              <text x="7" y="57">2000</text>
-              <text x="7" y="85">1500</text>
-              <text x="7" y="113">1000</text>
-              <text x="15" y="141">500</text>
-              <text x="29" y="169">0</text>
-            </g>
-            <g class="bars">
-              <rect x="70" y="38" width="52" height="127" />
-              <rect x="170" y="60" width="52" height="105" />
-              <rect x="270" y="78" width="52" height="87" />
-              <rect x="370" y="113" width="52" height="52" />
-              <rect x="470" y="114" width="52" height="51" />
-            </g>
-            <g class="bar-labels">
-              <text x="96" y="184">Agent 1</text>
-              <text x="196" y="184">AgentCole_son</text>
-              <text x="296" y="184">gptl-fo</text>
-              <text x="396" y="184">Agent 4</text>
-              <text x="496" y="184">Agent 5</text>
-            </g>
+            <template v-if="hasRankingData">
+              <g class="axis-labels">
+                <text v-for="tick in rankingTicks" :key="`ry-${tick.value}`" x="7" :y="tick.y + 4">
+                  {{ formatNumber(Math.round(tick.value)) }}
+                </text>
+              </g>
+              <g class="bars">
+                <rect
+                  v-for="bar in rankingBars"
+                  :key="`bar-${bar.label}-${bar.x}`"
+                  :x="bar.x"
+                  :y="bar.y"
+                  :width="BAR_WIDTH"
+                  :height="bar.height"
+                />
+              </g>
+              <g class="bar-labels">
+                <text
+                  v-for="bar in rankingBars"
+                  :key="`barlabel-${bar.label}-${bar.centerX}`"
+                  :x="bar.centerX"
+                  y="184"
+                >
+                  <title>{{ bar.label }}</title>
+                  {{ bar.label }}
+                </text>
+              </g>
+            </template>
+            <text v-else class="chart-empty" x="280" y="95">
+              {{ locale.t('agents.empty') }}
+            </text>
           </svg>
         </div>
       </cds-card>
@@ -300,7 +502,7 @@ function statusText(status: UsageStatus): string {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="agent in agents" :key="agent.id">
+                <tr v-for="agent in filteredAgents" :key="agent.id">
                   <td :title="agent.id">{{ agent.id }}</td>
                   <td :title="agent.name">{{ agent.name }}</td>
                   <td>{{ agent.template }}</td>
@@ -314,11 +516,7 @@ function statusText(status: UsageStatus): string {
             </table>
           </div>
           <div class="table-footer">
-            <span>{{ locale.t('metering.table.showing') }}</span>
-            <button type="button" disabled>‹</button>
-            <button type="button" class="active">1</button>
-            <button type="button">2</button>
-            <button type="button">›</button>
+            <span>{{ footerText(filteredAgents.length) }}</span>
           </div>
         </div>
       </cds-card>
@@ -338,7 +536,7 @@ function statusText(status: UsageStatus): string {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="model in models" :key="model.name">
+                <tr v-for="model in filteredModels" :key="model.name">
                   <td>{{ model.name }}</td>
                   <td>{{ formatNumber(model.totalTokens) }}</td>
                   <td>{{ formatNumber(model.inputTokens) }}</td>
@@ -349,11 +547,7 @@ function statusText(status: UsageStatus): string {
             </table>
           </div>
           <div class="table-footer">
-            <span>{{ locale.t('metering.table.showing') }}</span>
-            <button type="button" disabled>‹</button>
-            <button type="button" class="active">1</button>
-            <button type="button">2</button>
-            <button type="button">›</button>
+            <span>{{ footerText(filteredModels.length) }}</span>
           </div>
         </div>
       </cds-card>
@@ -384,11 +578,7 @@ function statusText(status: UsageStatus): string {
             </table>
           </div>
           <div class="table-footer">
-            <span>{{ locale.t('metering.table.showing') }}</span>
-            <button type="button" disabled>‹</button>
-            <button type="button" class="active">1</button>
-            <button type="button">2</button>
-            <button type="button">›</button>
+            <span>{{ footerText(dailyUsage.length) }}</span>
           </div>
         </div>
       </cds-card>
@@ -400,11 +590,11 @@ function statusText(status: UsageStatus): string {
         <div class="cost-grid">
           <div class="cost-summary">
             <span>{{ locale.t('metering.cost.total') }}</span>
-            <strong>$5,000.00</strong>
+            <strong>{{ totalCost }}</strong>
           </div>
           <div class="cost-summary">
             <span>{{ locale.t('metering.cost.monthly') }}</span>
-            <strong>$1,204.00/{{ locale.t('metering.cost.month') }}</strong>
+            <strong>{{ monthlyCost }}</strong>
           </div>
         </div>
       </div>
@@ -424,14 +614,24 @@ function statusText(status: UsageStatus): string {
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
 .page-header {
+  width: 100%;
+  min-width: 0;
   flex: 0 0 auto;
+  overflow: visible;
 }
 .heading {
+  display: block;
+  width: 100%;
+  min-height: 32px;
   margin: 0;
   font-size: 24px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: keep-all;
 }
 .filter-toolbar {
   display: flex;
@@ -491,7 +691,10 @@ function statusText(status: UsageStatus): string {
   font-weight: 400;
 }
 .metering-page :deep(cds-card) {
+  --padding: 0;
+  --overflow: hidden;
   display: block;
+  box-sizing: border-box;
   min-width: 0;
   background: var(--cds-alias-object-container-background, #fff);
   border: 1px solid var(--cds-alias-object-border-color, #b3b3b3);
@@ -499,8 +702,8 @@ function statusText(status: UsageStatus): string {
   box-shadow: none;
 }
 .card-content {
+  box-sizing: border-box;
   min-width: 0;
-  height: 100%;
   padding: 10px 12px;
 }
 .card-content h2 {
@@ -516,7 +719,13 @@ function statusText(status: UsageStatus): string {
   gap: 12px;
   flex: 1 1 38%;
 }
+.chart-card,
+.table-card {
+  height: 100%;
+  min-height: 0;
+}
 .chart-content {
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -567,6 +776,15 @@ function statusText(status: UsageStatus): string {
   text-anchor: middle;
   font-size: 9px;
 }
+.axis-labels .date-label {
+  text-anchor: middle;
+}
+.chart-empty {
+  fill: currentColor;
+  opacity: 0.55;
+  font-size: 11px;
+  text-anchor: middle;
+}
 .trend-line {
   fill: none;
   stroke-width: 2;
@@ -586,6 +804,7 @@ function statusText(status: UsageStatus): string {
   flex: 1 1 34%;
 }
 .table-content {
+  height: 100%;
   display: flex;
   flex-direction: column;
   padding: 8px 9px;
@@ -642,30 +861,14 @@ function statusText(status: UsageStatus): string {
   padding-top: 5px;
   font-size: 8px;
 }
-.table-footer button {
-  min-width: 20px;
-  height: 20px;
-  padding: 0 4px;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-.table-footer button.active {
-  border-color: var(--cds-alias-object-border-color, #b3b3b3);
-  background: var(--cds-alias-object-app-background, #f4f4f4);
-}
-.table-footer button:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
 .cost-card {
+  --height: auto;
+  height: auto;
   min-height: 102px;
   flex: 0 0 auto;
 }
 .cost-content {
+  min-height: 100px;
   display: flex;
   flex-direction: column;
 }

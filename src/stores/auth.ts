@@ -1,148 +1,161 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { User } from '@/types/auth'
-import { apolloClient } from '@/api/graphql/client'
+import { apolloClient, TOKEN_STORAGE_KEY } from '@/api/graphql/client'
 import {
   LOGIN_MUTATION,
+  LOGOUT_MUTATION,
+  ME_QUERY,
+  type AuthUser,
   type LoginMutationResult,
   type LoginMutationVars,
+  type MeQueryResult,
 } from '@/api/graphql/queries/auth'
 
-// Mock credentials — swap the body of `login()` for a real fetch later.
-const MOCK_USERS: Record<string, { password: string; displayName: string }> = {
-  'admin@example.com': { password: 'admin123', displayName: 'admin' },
-  'user@example.com': { password: 'password', displayName: 'user' },
+// Persisted display copy of the user, so a remembered session can paint the
+// shell on reload before `me` round-trips. The token is the source of truth for
+// *being* authenticated; this copy is only for first paint and is always
+// re-validated against `me`.
+const USER_STORAGE_KEY = 'clarity-auth-user'
+
+function toUser(u: AuthUser): User {
+  return { email: u.email, displayName: u.displayName || u.username }
 }
 
-const STORAGE_KEY = 'clarity-auth'
-const TOKEN_STORAGE_KEY = 'clarity-auth-token'
-const SIMULATED_LATENCY_MS = 600
-// Default to the in-memory mock user list so the local demo works out of the
-// box. Set VITE_AUTH_MODE=api to switch to the GraphQL backend.
-const authMode = import.meta.env.VITE_AUTH_MODE === 'api' ? 'api' : 'mock'
+function readStoredToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY) ?? sessionStorage.getItem(TOKEN_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
 
-interface PersistedAuth {
-  user: User
-  rememberMe?: boolean
+function readStoredUser(): User | null {
+  try {
+    const raw = localStorage.getItem(USER_STORAGE_KEY) ?? sessionStorage.getItem(USER_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as User
+    return parsed?.email ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function persistSession(token: string, user: User, remember: boolean): void {
+  try {
+    const primary = remember ? localStorage : sessionStorage
+    const secondary = remember ? sessionStorage : localStorage
+    secondary.removeItem(TOKEN_STORAGE_KEY)
+    secondary.removeItem(USER_STORAGE_KEY)
+    primary.setItem(TOKEN_STORAGE_KEY, token)
+    primary.setItem(USER_STORAGE_KEY, JSON.stringify(user))
+  } catch {
+    // Storage unavailable — the session lives in memory for this tab only.
+  }
+}
+
+function clearStoredSession(): void {
+  try {
+    localStorage.removeItem(TOKEN_STORAGE_KEY)
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY)
+    localStorage.removeItem(USER_STORAGE_KEY)
+    sessionStorage.removeItem(USER_STORAGE_KEY)
+  } catch {
+    // ignore unavailable storage
+  }
 }
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
-  const rememberMe = ref(false)
+  const role = ref<string | null>(null)
+  const mustChangePassword = ref(false)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
   const isAuthenticated = computed(() => user.value !== null)
 
-  async function loginWithAPI(
-    email: string,
-    password: string,
-    remember: boolean,
-  ): Promise<boolean> {
+  async function login(email: string, password: string, remember: boolean): Promise<boolean> {
+    error.value = null
+    isLoading.value = true
     try {
-      const response = await apolloClient.mutate<LoginMutationResult, LoginMutationVars>({
+      const { data } = await apolloClient.mutate<LoginMutationResult, LoginMutationVars>({
         mutation: LOGIN_MUTATION,
-        variables: { input: { email: email.trim().toLowerCase(), password } },
+        // Do NOT lowercase — the identifier may be a case-sensitive username.
+        variables: { input: { email: email.trim(), password } },
       })
-      const payload = response.data?.login
-      if (!payload?.token || !payload.user) throw new Error('Invalid login response')
-
-      user.value = {
-        email: payload.user.email,
-        displayName: payload.user.displayName || payload.user.username,
+      const payload = data?.login
+      if (!payload?.token || !payload.user) {
+        error.value = 'Invalid email or password.'
+        return false
       }
-      rememberMe.value = remember
-      const storage = remember ? localStorage : sessionStorage
-      const otherStorage = remember ? sessionStorage : localStorage
-      storage.setItem(TOKEN_STORAGE_KEY, payload.token)
-      otherStorage.removeItem(TOKEN_STORAGE_KEY)
-      if (remember) {
-        const persisted: PersistedAuth = { user: user.value, rememberMe: true }
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted))
-      } else {
-        localStorage.removeItem(STORAGE_KEY)
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ user: user.value }))
-      }
+      const nextUser = toUser(payload.user)
+      user.value = nextUser
+      role.value = payload.user.role
+      mustChangePassword.value = Boolean(payload.mustChangePassword)
+      persistSession(payload.token, nextUser, remember)
       return true
-    } catch {
-      error.value = 'Invalid email or password.'
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Login failed.'
       return false
     } finally {
       isLoading.value = false
     }
   }
 
-  function loginWithMock(email: string, password: string, remember: boolean): Promise<boolean> {
-    error.value = null
-
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const match = MOCK_USERS[email.trim().toLowerCase()]
-        if (match && match.password === password) {
-          localStorage.removeItem(TOKEN_STORAGE_KEY)
-          sessionStorage.removeItem(TOKEN_STORAGE_KEY)
-          user.value = { email: email.trim().toLowerCase(), displayName: match.displayName }
-          rememberMe.value = remember
-          if (remember) {
-            const payload: PersistedAuth = { user: user.value, rememberMe: true }
-            sessionStorage.removeItem(STORAGE_KEY)
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
-          } else {
-            localStorage.removeItem(STORAGE_KEY)
-            sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ user: user.value }))
-          }
-          isLoading.value = false
-          resolve(true)
-        } else {
-          error.value = 'Invalid email or password.'
-          isLoading.value = false
-          resolve(false)
-        }
-      }, SIMULATED_LATENCY_MS)
-    })
-  }
-
-  function login(email: string, password: string, remember: boolean): Promise<boolean> {
-    error.value = null
-    isLoading.value = true
-    return authMode === 'mock'
-      ? loginWithMock(email, password, remember)
-      : loginWithAPI(email, password, remember)
-  }
-
-  function logout() {
-    user.value = null
-    rememberMe.value = false
-    error.value = null
-    localStorage.removeItem(STORAGE_KEY)
-    sessionStorage.removeItem(STORAGE_KEY)
-    localStorage.removeItem(TOKEN_STORAGE_KEY)
-    sessionStorage.removeItem(TOKEN_STORAGE_KEY)
-    void apolloClient.clearStore()
-  }
-
-  function clearError() {
-    error.value = null
-  }
-
-  // Called once on app boot from main.ts.
-  function restore() {
+  async function logout(): Promise<void> {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY) ?? sessionStorage.getItem(STORAGE_KEY)
-      if (!raw) return
-      const parsed = JSON.parse(raw) as PersistedAuth
-      if (parsed?.user?.email) {
-        user.value = parsed.user
-        rememberMe.value = Boolean(parsed.rememberMe)
+      await apolloClient.mutate({ mutation: LOGOUT_MUTATION })
+    } catch {
+      // Best-effort server-side invalidation; clear local state regardless.
+    }
+    user.value = null
+    role.value = null
+    mustChangePassword.value = false
+    error.value = null
+    clearStoredSession()
+    await apolloClient.clearStore()
+  }
+
+  function clearError(): void {
+    error.value = null
+  }
+
+  // Rehydrate the session on boot (called once from main.ts before mount). Paints
+  // from the persisted copy first, then validates the token via `me`; a missing
+  // or rejected token drops cleanly to logged-out.
+  async function restore(): Promise<void> {
+    if (!readStoredToken()) {
+      clearStoredSession()
+      return
+    }
+    user.value = readStoredUser()
+    try {
+      const { data } = await apolloClient.query<MeQueryResult>({
+        query: ME_QUERY,
+        fetchPolicy: 'network-only',
+      })
+      if (data?.me) {
+        user.value = toUser(data.me)
+        role.value = data.me.role
+        mustChangePassword.value = Boolean(data.me.mustChangePassword)
+      } else {
+        user.value = null
+        role.value = null
+        mustChangePassword.value = false
+        clearStoredSession()
       }
     } catch {
-      // ignore corrupt storage
+      // Token rejected / network down — trust nothing stale.
+      user.value = null
+      role.value = null
+      clearStoredSession()
     }
   }
 
   return {
     user,
-    rememberMe,
+    role,
+    mustChangePassword,
     isLoading,
     error,
     isAuthenticated,

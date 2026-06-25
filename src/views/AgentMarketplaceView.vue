@@ -4,9 +4,9 @@
  *
  * Renders the global OvaTemplateFamily directory as a card grid. Each
  * family has multiple versions; selecting "创建智能体" opens a deploy
- * dialog where the user picks a specific version, a target resource
- * pool, a model gateway, an existing or new virtual key, and the
- * run-as username/password.
+ * dialog where the user picks a specific version, a target resource pool,
+ * and a vSphere placement pool. The backend creates + provisions the agent
+ * and issues its gateway key, whose secret is shown once after deploy.
  */
 import { computed, ref } from 'vue'
 import { useMutation, useQuery } from '@vue/apollo-composable'
@@ -19,8 +19,7 @@ import {
   DEPLOY_AGENT_MUTATION,
 } from '@/api/graphql/queries/ovaTemplates'
 import { RESOURCE_POOLS_QUERY } from '@/api/graphql/queries/resourcePools'
-import { MODEL_GATEWAYS_QUERY } from '@/api/graphql/queries/model-gateways'
-import { modelGatewaysRef } from '@/api/graphql/fixtures/virtualKeys'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
 import type {
   AgentType,
   OvaTemplateFamily,
@@ -33,7 +32,6 @@ import type {
   DeployAgentInput,
   DeployAgentPayload,
   DeployAgentVars,
-  ModelGatewayRef,
   OvaTemplateColor,
   ResourcePool,
   ResourcePoolsQueryResult,
@@ -42,6 +40,7 @@ import type {
 import '@/components/icons'
 import AddOvaTemplateDialog from './marketplace/AddOvaTemplateDialog.vue'
 import DeployAgentDialog from './marketplace/DeployAgentDialog.vue'
+import VirtualKeySecretDialog from '@/components/VirtualKeySecretDialog.vue'
 
 const locale = useLocaleStore()
 const toast = useToast()
@@ -53,8 +52,7 @@ const nameKeyword = ref('')
 const typeFilter = ref<AgentType | 'all'>('all')
 const typeFilterAnchor = ref<HTMLElement | null>(null)
 const currentPage = ref(1)
-const PAGE_SIZE_OPTIONS = [6, 12, 18, 24] as const
-type PageSize = (typeof PAGE_SIZE_OPTIONS)[number]
+type PageSize = 6 | 12 | 18 | 24
 const pageSize = ref<PageSize>(6)
 
 const filter = computed<OvaTemplateFamilyFilter | null>(() => {
@@ -93,22 +91,6 @@ const poolsResult = useQuery<ResourcePoolsQueryResult, ResourcePoolsQueryVars>(
   () => ({ fetchPolicy: 'cache-and-network' }),
 )
 const pools = computed<ResourcePool[]>(() => poolsResult.result.value?.resourcePools.nodes ?? [])
-
-/* ---- Model Gateways (for deploy dialog dropdown) ----
- * Use the model-gateways fixture-backed query if it exists, otherwise
- * fall back to the static `modelGatewaysRef` exposed by the virtualKeys
- * fixture. The latter is good enough for the demo. */
-const modelGateways = computed<ModelGatewayRef[]>(() => {
-  const result = gatewaysResult.result.value as { modelGateways?: { nodes: ModelGatewayRef[] } } | null
-  const nodes = result?.modelGateways?.nodes
-  if (nodes && nodes.length > 0) return nodes
-  return modelGatewaysRef
-})
-const gatewaysResult = useQuery<{ modelGateways: { nodes: ModelGatewayRef[] } }>(
-  MODEL_GATEWAYS_QUERY,
-  () => ({}),
-  () => ({ fetchPolicy: 'cache-and-network' }),
-)
 
 /* ---- Pager helpers ---- */
 function goToPage(p: number) {
@@ -165,7 +147,7 @@ const summaryText = computed(() => {
 })
 
 /* ---- Create template ---- */
-const { mutate: createMutate, loading: creating } = useMutation<CreateOvaTemplateFamilyPayload, CreateOvaTemplateFamilyVars>(
+const { mutate: createMutate, loading: creating } = useMutation<{ createOvaTemplateFamily: CreateOvaTemplateFamilyPayload }, CreateOvaTemplateFamilyVars>(
   CREATE_OVA_TEMPLATE_FAMILY_MUTATION,
 )
 const createDialogOpen = ref(false)
@@ -178,7 +160,7 @@ function closeCreateDialog() {
 async function onSubmitCreate(payload: CreateOvaTemplateFamilyInput) {
   try {
     const r = await createMutate({ input: payload })
-    const fam = r?.data?.family
+    const fam = r?.data?.createOvaTemplateFamily?.family
     if (fam) {
       toast.success(
         locale.t('marketplace.toast.createFamilyOk').replace('{name}', fam.name),
@@ -190,34 +172,27 @@ async function onSubmitCreate(payload: CreateOvaTemplateFamilyInput) {
   } catch (err) {
      
     console.error('[marketplace] create failed', err)
-    const code = (err as { graphQLErrors?: Array<{ extensions?: { code?: string } }> })?.graphQLErrors?.[0]?.extensions?.code
-    if (code === 'OVA_NAME_TAKEN') {
-      toast.error(locale.t('marketplace.form.error.nameTaken'))
-    } else if (code === 'OVA_IDENTIFIER_FORMAT') {
-      toast.error(locale.t('marketplace.form.error.ovaIdentifierFormat'))
-    } else {
-      toast.error(locale.t('marketplace.toast.createFamilyFail'))
-    }
+    toast.error(graphqlErrorMessage(err, locale.t('marketplace.toast.createFamilyFail')))
   }
 }
 
 /* ---- Deploy agent ---- */
-const { mutate: deployMutate, loading: deploying } = useMutation<DeployAgentPayload, DeployAgentVars>(
+const { mutate: deployMutate, loading: deploying } = useMutation<{ deployAgent: DeployAgentPayload }, DeployAgentVars>(
   DEPLOY_AGENT_MUTATION,
 )
 const deployDialogOpen = ref(false)
 const deployingTemplate = ref<OvaTemplateFamily | null>(null)
 
-function onViewDetails(_t: OvaTemplateFamily) {
+/* ---- One-time virtual-key secret reveal (after a successful deploy) ---- */
+const secretDialogOpen = ref(false)
+const issuedSecret = ref('')
+
+function onViewDetails() {
   toast.info(locale.t('marketplace.toast.viewPlaceholder'))
 }
 function onCreateAgent(t: OvaTemplateFamily) {
   if (pools.value.length === 0) {
     toast.warning(locale.t('marketplace.toast.deployPoolEmpty'))
-    return
-  }
-  if (modelGateways.value.length === 0) {
-    toast.warning(locale.t('marketplace.toast.deployGatewayEmpty'))
     return
   }
   deployingTemplate.value = t
@@ -230,40 +205,32 @@ function closeDeployDialog() {
 async function onSubmitDeploy(payload: DeployAgentInput) {
   try {
     const r = await deployMutate({ input: payload })
-    const agent = r?.data?.agent
-    if (agent) {
+    const result = r?.data?.deployAgent
+    if (result?.agent) {
+      const { agent, virtualKeySecret } = result
       toast.success(
         locale
           .t('marketplace.toast.deployOk')
           .replace('{name}', agent.name)
-          .replace('{username}', agent.credentials.username),
-      )
-      // 把用户名+密码一次性 toast 出来（vSphere 上跑只能看这一次）
-      toast.info(
-        locale
-          .t('marketplace.toast.credentialsReveal')
-          .replace('{name}', agent.name)
-          .replace('{username}', agent.credentials.username)
-          .replace('{password}', payload.password),
+          .replace('{username}', agent.credentials?.username ?? '—'),
       )
       closeDeployDialog()
-      await router.push({ name: 'agents.list' })
+      // Surface the issued gateway key ONCE — the backend never returns it again.
+      issuedSecret.value = virtualKeySecret
+      secretDialogOpen.value = true
     }
   } catch (err) {
-     
+
     console.error('[marketplace] deploy failed', err)
-    const code = (err as { graphQLErrors?: Array<{ extensions?: { code?: string } }> })?.graphQLErrors?.[0]?.extensions?.code
-    if (code === 'DEPLOY_FAILED') {
-      const msg = (err as { graphQLErrors?: Array<{ message?: string }> })?.graphQLErrors?.[0]?.message ?? ''
-      if (msg.includes('用户名已被占用')) {
-        toast.error(locale.t('marketplace.deploy.error.usernameTaken'))
-      } else {
-        toast.error(msg || locale.t('marketplace.toast.deployFail'))
-      }
-    } else {
-      toast.error(locale.t('marketplace.toast.deployFail'))
-    }
+    toast.error(graphqlErrorMessage(err, locale.t('marketplace.toast.deployFail')))
   }
+}
+
+// Dismissing the secret reveal navigates to the agent list (the deploy is done).
+async function onSecretDialogClose() {
+  secretDialogOpen.value = false
+  issuedSecret.value = ''
+  await router.push({ name: 'agents.list' })
 }
 
 /* ---- Card icon styling ---- */
@@ -481,7 +448,7 @@ const typeFilterLabel = computed(() => {
               </select>
             </cds-select>
             <div class="tpl-actions-buttons">
-              <cds-button action="outline" @click="onViewDetails(tpl)">
+              <cds-button action="outline" @click="onViewDetails()">
                 {{ locale.t('marketplace.card.action.view') }}
               </cds-button>
               <cds-button action="outline" status="primary" @click="onCreateAgent(tpl)">
@@ -558,10 +525,14 @@ const typeFilterLabel = computed(() => {
       :open="deployDialogOpen"
       :template="deployingTemplate"
       :pools="pools"
-      :model-gateways="modelGateways"
       :deploying="deploying"
       @close="closeDeployDialog"
       @submit="onSubmitDeploy"
+    />
+    <VirtualKeySecretDialog
+      :open="secretDialogOpen"
+      :secret="issuedSecret"
+      @close="onSecretDialogClose"
     />
 
     <!-- Toolbar "按类型筛选" dropdown (anchored to the toolbar button). -->

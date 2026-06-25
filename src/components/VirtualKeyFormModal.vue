@@ -1,17 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
-import type {
-  VirtualKey,
-  VirtualKeyAgentOption,
-  VirtualKeyDraft,
-} from '@/types/virtual-key'
+import type { VirtualKeyDraft, VirtualKeyOption } from '@/types/virtual-key'
 
+// Issue-only: a virtual key is an immutable credential, so there is no edit form —
+// to change a key you revoke it and issue a new one.
 const props = defineProps<{
   open: boolean
-  virtualKey: VirtualKey | null
-  agents: VirtualKeyAgentOption[]
-  policies: string[]
+  users: VirtualKeyOption[]
+  agents: VirtualKeyOption[]
+  policies: VirtualKeyOption[]
   saving?: boolean
 }>()
 
@@ -22,45 +20,33 @@ const emit = defineEmits<{
 
 const locale = useLocaleStore()
 const name = ref('')
+const userId = ref('')
 const agentId = ref('')
-const policy = ref('')
+const policyId = ref('')
 const expiresAt = ref('')
-const enabled = ref(true)
 const attempted = ref(false)
 
-const isEditing = computed(() => Boolean(props.virtualKey))
+// alias is optional; when provided it must be a sensible length.
 const nameValid = computed(() => {
   const length = name.value.trim().length
-  return length >= 2 && length <= 64
+  return length === 0 || (length >= 2 && length <= 64)
 })
+const ownerValid = computed(() => props.users.some((user) => user.id === userId.value))
 const agentValid = computed(() => props.agents.some((agent) => agent.id === agentId.value))
-const policyValid = computed(() => props.policies.includes(policy.value))
-const expiresAtValid = computed(() => !Number.isNaN(new Date(expiresAt.value).getTime()))
-const formValid = computed(
-  () => nameValid.value && agentValid.value && policyValid.value && expiresAtValid.value,
-)
+const formValid = computed(() => nameValid.value && ownerValid.value && agentValid.value)
 const minimumDate = computed(() => new Date().toISOString().slice(0, 10))
 
-function dateInputValue(value: string | undefined): string {
-  if (!value) {
-    const date = new Date()
-    date.setFullYear(date.getFullYear() + 1)
-    return date.toISOString().slice(0, 10)
-  }
-  return new Date(value).toISOString().slice(0, 10)
-}
-
 function reset() {
-  name.value = props.virtualKey?.name ?? ''
-  agentId.value = props.virtualKey?.agentId ?? props.agents[0]?.id ?? ''
-  policy.value = props.virtualKey?.policy ?? props.policies[0] ?? ''
-  expiresAt.value = dateInputValue(props.virtualKey?.expiresAt)
-  enabled.value = props.virtualKey?.enabled ?? true
+  name.value = ''
+  userId.value = props.users[0]?.id ?? ''
+  agentId.value = props.agents[0]?.id ?? ''
+  policyId.value = ''
+  expiresAt.value = ''
   attempted.value = false
 }
 
 watch(
-  () => [props.open, props.virtualKey, props.agents, props.policies] as const,
+  () => [props.open, props.users, props.agents, props.policies] as const,
   ([open]) => {
     if (open) reset()
   },
@@ -76,10 +62,11 @@ function submit() {
   if (!formValid.value || props.saving) return
   emit('submit', {
     name: name.value.trim(),
+    userId: userId.value,
     agentId: agentId.value,
-    policy: policy.value,
-    expiresAt: new Date(`${expiresAt.value}T23:59:59`).toISOString(),
-    enabled: enabled.value,
+    policyId: policyId.value,
+    // Expire at end-of-day local when a date is picked; empty → no expiry.
+    expiresAt: expiresAt.value ? new Date(`${expiresAt.value}T23:59:59`).toISOString() : '',
   })
 }
 </script>
@@ -88,7 +75,7 @@ function submit() {
   <cds-modal :hidden="!open" :closable="!saving" size="md" @closeChange="close">
     <cds-modal-header>
       <h2 cds-text="title" class="modal-title">
-        {{ locale.t(isEditing ? 'virtualKey.form.editTitle' : 'virtualKey.form.createTitle') }}
+        {{ locale.t('virtualKey.form.createTitle') }}
       </h2>
     </cds-modal-header>
 
@@ -108,6 +95,20 @@ function submit() {
           </cds-control-message>
         </cds-input>
 
+        <cds-select :status="attempted && !ownerValid ? 'error' : 'neutral'">
+          <label>{{ locale.t('virtualKey.form.owner') }}</label>
+          <select
+            :value="userId"
+            :aria-label="locale.t('virtualKey.form.owner')"
+            @change="userId = ($event.target as HTMLSelectElement).value"
+          >
+            <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
+          </select>
+          <cds-control-message v-if="attempted && !ownerValid" status="error">
+            {{ locale.t('virtualKey.form.ownerError') }}
+          </cds-control-message>
+        </cds-select>
+
         <cds-select :status="attempted && !agentValid ? 'error' : 'neutral'">
           <label>{{ locale.t('virtualKey.form.agent') }}</label>
           <select
@@ -121,38 +122,30 @@ function submit() {
           </select>
         </cds-select>
 
-        <cds-select :status="attempted && !policyValid ? 'error' : 'neutral'">
+        <cds-select>
           <label>{{ locale.t('virtualKey.form.policy') }}</label>
           <select
-            :value="policy"
+            :value="policyId"
             :aria-label="locale.t('virtualKey.form.policy')"
-            @change="policy = ($event.target as HTMLSelectElement).value"
+            @change="policyId = ($event.target as HTMLSelectElement).value"
           >
-            <option v-for="item in policies" :key="item" :value="item">{{ item }}</option>
+            <option value="">{{ locale.t('virtualKey.form.policyNone') }}</option>
+            <option v-for="item in policies" :key="item.id" :value="item.id">{{ item.name }}</option>
           </select>
         </cds-select>
 
-        <cds-input :status="attempted && !expiresAtValid ? 'error' : 'neutral'">
+        <cds-input>
           <label>{{ locale.t('virtualKey.form.expiresAt') }}</label>
           <input
             type="date"
             :value="expiresAt"
-            :min="isEditing ? undefined : minimumDate"
+            :min="minimumDate"
             @input="expiresAt = ($event.target as HTMLInputElement).value"
           />
+          <cds-control-message status="neutral">
+            {{ locale.t('virtualKey.form.expiresHint') }}
+          </cds-control-message>
         </cds-input>
-
-        <cds-control>
-          <cds-toggle>
-            <label>{{ locale.t('virtualKey.form.enabled') }}</label>
-            <input
-              type="checkbox"
-              slot="input"
-              :checked="enabled"
-              @change="enabled = ($event.target as HTMLInputElement).checked"
-            />
-          </cds-toggle>
-        </cds-control>
       </form>
     </cds-modal-content>
 
