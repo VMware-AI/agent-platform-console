@@ -33,8 +33,10 @@ const router = createRouter({
         // 模型路由 is admin-only: modelRoutes CRUD is @hasRole(any: [admin]),
         // so guard the route like the marketplace (else a non-admin hits a dead page).
         { path: 'model-gateway/route', name: 'mg.route', component: () => import('@/views/ModelRouteView.vue'), meta: { admin: true } },
-        { path: 'model-gateway/key',   name: 'mg.key',   component: () => import('@/views/VirtualKeyView.vue') },
-        { path: 'model-gateway/policy', name: 'mg.policy', component: () => import('@/views/RateLimitPolicyView.vue') },
+        // 虚拟密钥: issueVirtualKey is @hasPermission("key:manage") — admin + tenant_admin.
+        { path: 'model-gateway/key',   name: 'mg.key',   component: () => import('@/views/VirtualKeyView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
+        // 网关策略: rate-limit mutations are @hasPermission("route:manage") — admin + tenant_admin.
+        { path: 'model-gateway/policy', name: 'mg.policy', component: () => import('@/views/RateLimitPolicyView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
         // 网关连接: gatewayConnections CRUD is @hasRole(any: [admin]) — admin-only.
         { path: 'model-gateway/connections', name: 'mg.connections', component: () => import('@/views/GatewayConnectionView.vue'), meta: { admin: true } },
         // 上游与路由分层: upstreams/routerTiers are @hasPermission("route:manage"),
@@ -42,7 +44,8 @@ const router = createRouter({
         { path: 'model-gateway/upstreams', name: 'mg.upstreams', component: () => import('@/views/UpstreamRouterView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
 
         // 可观测性
-        { path: 'observability/metering', name: 'obs.metering', component: () => import('@/views/MeteringCenterView.vue') },
+        // 计量中心: meteringOverview is @hasPermission("metering:view") — admin/observability/tenant_admin.
+        { path: 'observability/metering', name: 'obs.metering', component: () => import('@/views/MeteringCenterView.vue'), meta: { roles: ['admin', 'observability', 'tenant_admin'] } },
         { path: 'observability/monitor',  name: 'obs.monitor',   component: () => import('@/views/RealtimeMonitorView.vue'), meta: { roles: ['admin', 'observability', 'tenant_admin'] } },
         // 请求日志 / 审计日志 are gated by @hasPermission("audit:view"), which the
         // backend grants to admin, observability AND tenant_admin (rbac.go) — NOT
@@ -52,9 +55,11 @@ const router = createRouter({
         { path: 'observability/audit',    name: 'obs.audit',     component: () => import('@/views/AuditLogView.vue'), meta: { roles: ['admin', 'observability', 'tenant_admin'] } },
 
         // 平台管理
-        { path: 'platform/resources', name: 'platform.resources', component: () => import('@/views/ResourcePoolListView.vue') },
-        { path: 'platform/gateway', name: 'platform.gateway', component: () => import('@/views/ModelGatewayView.vue') },
-        { path: 'platform/users',   name: 'platform.users',   component: () => import('@/views/UserRoleView.vue') },
+        // 资源池接入 / 模型网关接入: create* ops are @hasRole(any: [admin]) — admin-only.
+        { path: 'platform/resources', name: 'platform.resources', component: () => import('@/views/ResourcePoolListView.vue'), meta: { admin: true } },
+        { path: 'platform/gateway', name: 'platform.gateway', component: () => import('@/views/ModelGatewayView.vue'), meta: { admin: true } },
+        // 用户与权限: createUser/assignUserRole are @hasPermission("user:manage") — admin + tenant_admin.
+        { path: 'platform/users',   name: 'platform.users',   component: () => import('@/views/UserRoleView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
         // 部门与成员 / 制品库 / 自定义角色: ops are @hasRole(any: [admin, tenant_admin]).
         { path: 'platform/departments', name: 'platform.departments', component: () => import('@/views/DepartmentView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
         { path: 'platform/artifacts',   name: 'platform.artifacts',   component: () => import('@/views/ArtifactView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
@@ -81,10 +86,11 @@ router.beforeEach((to) => {
   }
   // Admin-only routes (meta.admin): the backend role enum serializes admins as
   // 'admin' (see auth store `role`). Non-admins are bounced to the overview so
-  // they never hit an admin-gated page whose queries would only error.
-  // TODO: the other admin pages (platform/users, platform/gateway,
-  // platform/resources) are not yet meta.admin-gated; gate them the same way
-  // once their backend ops are confirmed admin-only.
+  // they never hit an admin-gated page whose queries would only error. Every
+  // routed page now carries the guard matching its core op's backend directive:
+  // meta.admin for @hasRole(any:[admin]) pages, meta.roles for @hasPermission /
+  // @hasRole(any:[admin,...]) pages, and no guard for any-auth / owner-or-admin
+  // pages (agents.list/config/snapshots).
   if (to.meta.admin && auth.role !== 'admin') {
     return { name: 'overview' }
   }
