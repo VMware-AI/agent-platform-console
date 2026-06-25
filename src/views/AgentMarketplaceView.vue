@@ -19,7 +19,6 @@ import {
   DEPLOY_AGENT_MUTATION,
 } from '@/api/graphql/queries/ovaTemplates'
 import { RESOURCE_POOLS_QUERY } from '@/api/graphql/queries/resourcePools'
-import { MODEL_GATEWAYS_QUERY } from '@/api/graphql/queries/model-gateways'
 import type {
   AgentType,
   OvaTemplateFamily,
@@ -32,7 +31,6 @@ import type {
   DeployAgentInput,
   DeployAgentPayload,
   DeployAgentVars,
-  ModelGatewayRef,
   OvaTemplateColor,
   ResourcePool,
   ResourcePoolsQueryResult,
@@ -41,6 +39,7 @@ import type {
 import '@/components/icons'
 import AddOvaTemplateDialog from './marketplace/AddOvaTemplateDialog.vue'
 import DeployAgentDialog from './marketplace/DeployAgentDialog.vue'
+import VirtualKeySecretDialog from '@/components/VirtualKeySecretDialog.vue'
 
 const locale = useLocaleStore()
 const toast = useToast()
@@ -92,17 +91,6 @@ const poolsResult = useQuery<ResourcePoolsQueryResult, ResourcePoolsQueryVars>(
   () => ({ fetchPolicy: 'cache-and-network' }),
 )
 const pools = computed<ResourcePool[]>(() => poolsResult.result.value?.resourcePools.nodes ?? [])
-
-/* ---- Model Gateways (for the deploy dialog dropdown), from the real backend. ---- */
-const modelGateways = computed<ModelGatewayRef[]>(() => {
-  const result = gatewaysResult.result.value as { modelGateways?: { nodes: ModelGatewayRef[] } } | null
-  return result?.modelGateways?.nodes ?? []
-})
-const gatewaysResult = useQuery<{ modelGateways: { nodes: ModelGatewayRef[] } }>(
-  MODEL_GATEWAYS_QUERY,
-  () => ({}),
-  () => ({ fetchPolicy: 'cache-and-network' }),
-)
 
 /* ---- Pager helpers ---- */
 function goToPage(p: number) {
@@ -202,16 +190,16 @@ const { mutate: deployMutate, loading: deploying } = useMutation<DeployAgentPayl
 const deployDialogOpen = ref(false)
 const deployingTemplate = ref<OvaTemplateFamily | null>(null)
 
+/* ---- One-time virtual-key secret reveal (after a successful deploy) ---- */
+const secretDialogOpen = ref(false)
+const issuedSecret = ref('')
+
 function onViewDetails(_t: OvaTemplateFamily) {
   toast.info(locale.t('marketplace.toast.viewPlaceholder'))
 }
 function onCreateAgent(t: OvaTemplateFamily) {
   if (pools.value.length === 0) {
     toast.warning(locale.t('marketplace.toast.deployPoolEmpty'))
-    return
-  }
-  if (modelGateways.value.length === 0) {
-    toast.warning(locale.t('marketplace.toast.deployGatewayEmpty'))
     return
   }
   deployingTemplate.value = t
@@ -224,27 +212,22 @@ function closeDeployDialog() {
 async function onSubmitDeploy(payload: DeployAgentInput) {
   try {
     const r = await deployMutate({ input: payload })
-    const agent = r?.data?.agent
-    if (agent) {
+    const result = r?.data
+    if (result?.agent) {
+      const { agent, virtualKeySecret } = result
       toast.success(
         locale
           .t('marketplace.toast.deployOk')
           .replace('{name}', agent.name)
-          .replace('{username}', agent.credentials.username),
-      )
-      // 把用户名+密码一次性 toast 出来（vSphere 上跑只能看这一次）
-      toast.info(
-        locale
-          .t('marketplace.toast.credentialsReveal')
-          .replace('{name}', agent.name)
-          .replace('{username}', agent.credentials.username)
-          .replace('{password}', payload.password),
+          .replace('{username}', agent.credentials?.username ?? '—'),
       )
       closeDeployDialog()
-      await router.push({ name: 'agents.list' })
+      // Surface the issued gateway key ONCE — the backend never returns it again.
+      issuedSecret.value = virtualKeySecret
+      secretDialogOpen.value = true
     }
   } catch (err) {
-     
+
     console.error('[marketplace] deploy failed', err)
     const code = (err as { graphQLErrors?: Array<{ extensions?: { code?: string } }> })?.graphQLErrors?.[0]?.extensions?.code
     if (code === 'DEPLOY_FAILED') {
@@ -258,6 +241,13 @@ async function onSubmitDeploy(payload: DeployAgentInput) {
       toast.error(locale.t('marketplace.toast.deployFail'))
     }
   }
+}
+
+// Dismissing the secret reveal navigates to the agent list (the deploy is done).
+async function onSecretDialogClose() {
+  secretDialogOpen.value = false
+  issuedSecret.value = ''
+  await router.push({ name: 'agents.list' })
 }
 
 /* ---- Card icon styling ---- */
@@ -552,10 +542,14 @@ const typeFilterLabel = computed(() => {
       :open="deployDialogOpen"
       :template="deployingTemplate"
       :pools="pools"
-      :model-gateways="modelGateways"
       :deploying="deploying"
       @close="closeDeployDialog"
       @submit="onSubmitDeploy"
+    />
+    <VirtualKeySecretDialog
+      :open="secretDialogOpen"
+      :secret="issuedSecret"
+      @close="onSecretDialogClose"
     />
 
     <!-- Toolbar "按类型筛选" dropdown (anchored to the toolbar button). -->
