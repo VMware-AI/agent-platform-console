@@ -36,6 +36,7 @@ const locale = useLocaleStore()
 const templateVersionId = ref<string>('')
 const resourcePoolId = ref<string>('')
 const name = ref('')
+const targetResourcePool = ref('')
 const hostname = ref('')
 const maxBudget = ref('')
 const attempted = ref(false)
@@ -44,10 +45,12 @@ watch(
   () => props.open,
   (o) => {
     if (o && props.template) {
-      const latest = props.template.versions[props.template.versions.length - 1]
+      // Backend returns versions NEWEST-first, so the newest is index 0.
+      const latest = props.template.versions[0]
       templateVersionId.value = latest?.id ?? ''
       resourcePoolId.value = props.pools[0]?.id ?? ''
       name.value = `${props.template.name}_${Date.now() % 100000}`
+      targetResourcePool.value = ''
       hostname.value = ''
       maxBudget.value = ''
       attempted.value = false
@@ -78,6 +81,9 @@ function submit() {
     templateFamilyId: props.template?.id ?? '',
     templateVersionId: templateVersionId.value,
     resourcePoolId: resourcePoolId.value,
+    // A true OVA template has no source resource pool, so a real deploy must name
+    // a vSphere placement pool here; empty inherits the source's pool (regular VMs).
+    targetResourcePool: targetResourcePool.value.trim() || null,
     hostname: hostname.value.trim() || null,
     maxBudget: budget,
   })
@@ -173,6 +179,15 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
           <input
             v-model="hostname"
             :placeholder="locale.t('marketplace.deploy.hostnamePlaceholder')"
+          />
+        </cds-input>
+
+        <!-- vSphere 资源池（可选）：真实 OVA 模板无源资源池，部署必须指定 -->
+        <cds-input>
+          <label>{{ locale.t('marketplace.deploy.targetPool') }}</label>
+          <input
+            v-model="targetResourcePool"
+            :placeholder="locale.t('marketplace.deploy.targetPoolPlaceholder')"
           />
         </cds-input>
 

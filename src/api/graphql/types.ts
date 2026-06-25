@@ -591,6 +591,13 @@ export interface DeployAgentInput {
   templateVersionId: string
   /** Target vCenter resource pool. */
   resourcePoolId: string
+  /**
+   * Optional vSphere resource-pool name to place the VM clone in. A true OVA
+   * template has no source resource pool, so a real deploy must supply one or
+   * the clone fails ("source has no resource pool; specify resourcePool").
+   * Empty = inherit the source template's pool (only valid for regular-VM sources).
+   */
+  targetResourcePool?: string | null
   /** Optional cloud-init hostname for the VM. */
   hostname?: string | null
   /** Optional per-key spend cap handed to the gateway. */
