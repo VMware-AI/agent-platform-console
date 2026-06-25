@@ -46,7 +46,7 @@ const groups: Group[] = [
     children: [
       { name: 'mg.route', label: '模型路由', icon: 'forking', to: '/model-gateway/route' },
       { name: 'mg.key',   label: '虚拟密钥', icon: 'key',     to: '/model-gateway/key' },
-      { name: 'mg.limit', label: '限流策略', icon: 'filter',  to: '/model-gateway/limit' },
+      { name: 'mg.policy', label: '网关策略', icon: 'filter',  to: '/model-gateway/policy' },
     ],
   },
   {

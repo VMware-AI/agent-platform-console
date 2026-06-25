@@ -7,7 +7,6 @@ export const AGENTS_QUERY = gql`
         id
         name
         type
-        typeLabel
         status
         apiKey {
           id

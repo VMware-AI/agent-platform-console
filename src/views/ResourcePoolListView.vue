@@ -260,7 +260,7 @@ async function onSubmit(payload: { mode: 'create' | 'update'; input: any }) {
     editingPool.value = null
     refetch()
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[resources] submit failed', err)
     toast.error(
       locale.t(payload.mode === 'create' ? 'resources.toast.createFail' : 'resources.toast.updateFail'),
@@ -270,7 +270,7 @@ async function onSubmit(payload: { mode: 'create' | 'update'; input: any }) {
 
 function onManage(p: ResourcePool) {
   // "管理" is a navigation-style action — for now just toast a placeholder.
-  // eslint-disable-next-line no-console
+   
   console.log('[resources] manage', { id: p.id })
   toast.info(locale.t('resources.action.manage'))
 }
@@ -284,7 +284,7 @@ async function onSync(p: ResourcePool) {
       refetch()
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[resources] sync failed', err)
     toast.error(locale.t('resources.toast.syncFail'))
   }
@@ -304,7 +304,7 @@ async function doDelete() {
     toast.success(locale.t('resources.toast.deleteOk').replace('{name}', deletedName))
     refetch()
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[resources] delete failed', err)
     toast.error(locale.t('resources.toast.deleteFail'))
   }
@@ -315,6 +315,7 @@ async function doDelete() {
   <section class="resource-pool-list">
     <header class="page-head">
       <h1 cds-text="title" class="heading">{{ locale.t('resources.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('resources.description') }}</p>
     </header>
 
     <!-- Toolbar: primary "接入资源池" (far left) + search input -->
@@ -344,7 +345,7 @@ async function doDelete() {
     </cds-alert>
 
     <cds-grid :border="'row'" :column-layout="'flex'" role="grid" aria-label="resource-pools">
-      <!-- 6 columns; widths sum to 100% -->
+      <!-- 7 columns; widths sum to 100% -->
       <cds-grid-column :width="'12%'">
         <div class="col-head">
           <span>{{ locale.t('resources.col.name') }}</span>
@@ -385,15 +386,23 @@ async function doDelete() {
         </div>
       </cds-grid-column>
 
-      <cds-grid-column :width="'8%'">
+      <cds-grid-column :width="'16%'">
         <div class="col-head">
-          <span>{{ locale.t('resources.col.datacenter') }}</span>
-        </div>
-      </cds-grid-column>
-
-      <cds-grid-column :width="'8%'">
-        <div class="col-head">
-          <span>{{ locale.t('resources.col.cluster') }}</span>
+          <span>{{ locale.t('resources.col.contentLibrary') }}</span>
+          <span class="col-head-actions">
+            <cds-button-action
+              :aria-label="`sort ${locale.t('resources.col.contentLibrary')}`"
+              @click="onSortClick('CONTENT_LIBRARY_NAME')"
+            >
+              <cds-icon
+                v-if="sortStateFor('CONTENT_LIBRARY_NAME') === 'ascending'" shape="angle" direction="up" size="sm"
+              ></cds-icon>
+              <cds-icon
+                v-else-if="sortStateFor('CONTENT_LIBRARY_NAME') === 'descending'" shape="angle" direction="down" size="sm"
+              ></cds-icon>
+              <cds-icon v-else shape="two-way-arrows" class="col-sort-rotated" size="sm"></cds-icon>
+            </cds-button-action>
+          </span>
         </div>
       </cds-grid-column>
 
@@ -432,17 +441,13 @@ async function doDelete() {
           <span v-else class="muted" :title="p.endpoint">{{ p.endpoint }}</span>
         </cds-grid-cell>
         <cds-grid-cell class="muted">
-          <!-- The "连接状态" column now shows last sync time. When the pool
-               has never been synced (updatedAt === createdAt), label it as
-          <!-- "同步状态" column — rendered as a Clarity badge. Green
-               (success) when the pool has been synced at least once,
-               gray (neutral) when updatedAt === createdAt. -->
           <cds-badge :status="syncBadgeFor(p)" class="status-badge">
             {{ syncBadgeText(p) }}
           </cds-badge>
         </cds-grid-cell>
-        <cds-grid-cell>{{ p.datacenterCount }}</cds-grid-cell>
-        <cds-grid-cell>{{ p.clusterCount }}</cds-grid-cell>
+        <cds-grid-cell class="content-library-cell" :title="p.contentLibraryName">
+          {{ p.contentLibraryName }}
+        </cds-grid-cell>
         <cds-grid-cell class="muted">{{ fmtDateTime(p.createdAt) }}</cds-grid-cell>
         <cds-grid-cell class="muted">{{ fmtDateTime(p.updatedAt) }}</cds-grid-cell>
         <cds-grid-cell>
@@ -613,16 +618,23 @@ async function doDelete() {
 
 .page-head {
   flex-shrink: 0;
-  margin-bottom: 4px;
 }
 
 .heading {
   margin: 0;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 24px;
+  font-size: 28px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+.desc {
+  margin: 12px 0 0;
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 720px;
 }
 
 .toolbar {
@@ -630,6 +642,7 @@ async function doDelete() {
   align-items: center;
   justify-content: flex-start;
   gap: 12px;
+  margin-top: 20px;
 }
 
 .toolbar :deep(.toolbar-search) {
@@ -700,6 +713,13 @@ async function doDelete() {
 
 .endpoint-cell {
   word-break: break-all;
+  font-size: 12px;
+}
+
+.content-library-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
 }
 

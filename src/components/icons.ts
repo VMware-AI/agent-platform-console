@@ -62,6 +62,7 @@ import {
   twoWayArrowsIcon,
   pencilIcon,
   banIcon,
+  calendarIcon,
   timesIcon,
   timesCircleIcon,
   ellipsisVerticalIcon
@@ -130,6 +131,7 @@ ClarityIcons.addIcons(
   twoWayArrowsIcon,
   pencilIcon,
   banIcon,
+  calendarIcon,
   timesIcon,
   timesCircleIcon,
   ellipsisVerticalIcon

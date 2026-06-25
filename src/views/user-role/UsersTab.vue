@@ -161,7 +161,7 @@ async function doReset() {
     toast.success(locale.t('users.toast.resetPwdOk'))
     refetchUsers()
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[users] reset password failed', err)
     toast.error(locale.t('users.toast.resetPwdFail'))
   }
@@ -180,7 +180,7 @@ async function doToggle() {
     )
     refetchUsers()
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[users] toggle enabled failed', err)
     toast.error(locale.t('users.toast.toggleFail'))
   }
@@ -195,7 +195,7 @@ async function doDelete() {
     toast.success(locale.t('users.toast.deleteOk').replace('{name}', target.username))
     refetchUsers()
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[users] delete user failed', err)
     toast.error(locale.t('users.toast.deleteFail'))
   }

@@ -356,6 +356,7 @@ function goToPage(page: number) {
   <section class="rate-limit-page">
     <header class="page-head">
       <h1 cds-text="title" class="heading">{{ locale.t('rateLimit.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('rateLimit.description') }}</p>
     </header>
 
     <div class="content-card">
@@ -392,8 +393,6 @@ function goToPage(page: number) {
             </button>
           </template>
         </AppDropdown>
-
-        <h2 class="section-title">{{ locale.t('rateLimit.sectionTitle') }}</h2>
 
         <cds-button
           action="ghost"
@@ -676,10 +675,17 @@ function goToPage(page: number) {
 .heading {
   margin: 0;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 24px;
+  font-size: 28px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+.desc {
+  margin: 12px 0 0;
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 720px;
 }
 .content-card {
   flex: 1 1 auto;
@@ -692,18 +698,13 @@ function goToPage(page: number) {
   border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
   border-radius: 6px;
   background: var(--cds-alias-object-container-background, #fff);
+  margin-top: 20px;
 }
 .toolbar {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 10px;
-}
-.section-title {
-  margin: 0 0 0 4px;
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
 .refresh-button {
   margin-left: auto;
@@ -874,9 +875,6 @@ function goToPage(page: number) {
   }
 }
 @media (max-width: 900px) {
-  .section-title {
-    display: none;
-  }
   .refresh-button span {
     display: none;
   }

@@ -32,7 +32,7 @@ async function copy() {
     copied.value = true
     toast.success(locale.t('users.toast.passwordCopied'))
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[users] clipboard write failed', err)
     toast.error('复制失败')
   }

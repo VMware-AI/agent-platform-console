@@ -502,6 +502,7 @@ function goToPage(page: number) {
   <section class="route-page">
     <header class="page-head">
       <h1 cds-text="title" class="heading">{{ locale.t('modelRoute.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('modelRoute.description') }}</p>
     </header>
 
     <div class="toolbar">
@@ -1094,16 +1095,24 @@ function goToPage(page: number) {
 .heading {
   margin: 0;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 24px;
+  font-size: 28px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+.desc {
+  margin: 12px 0 0;
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 720px;
 }
 .toolbar {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-top: 20px;
 }
 .refresh-button {
   margin-left: auto;

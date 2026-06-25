@@ -45,17 +45,21 @@
 
 ### 功能模块
 
-| 模块 | 页面 | 状态 |
+| 一级菜单 | 页面 | 状态 |
 |---|---|---|
 | **总览** | Dashboard | ✅ 已完成 |
 | **智能体中心** | 智能体列表 | ✅ 已完成（GraphQL + 筛选/排序/分页/批量操作/导出） |
 | | 智能体配置 | 🚧 Coming Soon |
-| | 智能体市场 | 🚧 Coming Soon |
-| **模型网关配置** | 模型路由/虚拟密钥/限流策略 | 🚧 Coming Soon |
-| **可观测性** | 计量中心/实时监控/请求日志/审计日志 | 🚧 Coming Soon |
-| **平台管理** 
-| | 资源池接入|✅ 已完成（部分显示问题待修复） |
-| | 模型网关 | ✅ 已完成 （待验证）|
+| | 智能体市场 | ✅ 已完成（订阅/部署/筛选/详情） |
+| **模型网关配置** | 模型路由 | ✅ 已完成 |
+| | 虚拟密钥 | ✅ 已完成 |
+| | 限流策略 | ✅ 已完成 |
+| **可观测性** | 计量中心 | 🚧 Coming Soon |
+| | 实时监控 | 🚧 Coming Soon |
+| | 请求日志 | 🚧 Coming Soon |
+| | 审计日志 | 🚧 Coming Soon |
+| **系统配置** | 资源池接入 | ✅ 已完成（部分显示问题待修复） |
+| | 模型网关接入 | ✅ 已完成（待验证） |
 | | 用户与权限 | ✅ 已完成（用户 CRUD、角色管理、密码重置、批量绑定） |
 ### 快速开始
 
@@ -144,15 +148,21 @@ Frontend console for the **Agent Management Platform** — a unified interface f
 
 ### Module Status
 
-| Module | Pages | Status |
+| Menu | Pages | Status |
 |---|---|---|
 | **Overview** | Dashboard | ✅ Done |
 | **Agent Center** | Agent List | ✅ Done (GraphQL + filter/sort/pagination/batch/export) |
 | | Agent Config | 🚧 Coming Soon |
-| | Agent Marketplace | 🚧 Coming Soon |
-| **Model Gateway** | Model Routing / Virtual Keys / Rate Limiting | 🚧 Coming Soon |
-| **Observability** | Metering / Monitoring / Request Logs / Audit Logs | 🚧 Coming Soon |
-| **Platform** | Resource Pools / Model Gateways | 🚧 Coming Soon |
+| | Agent Marketplace | ✅ Done (subscribe / deploy / filter / detail) |
+| **Model Gateway** | Model Routing | ✅ Done |
+| | Virtual Keys | ✅ Done |
+| | Rate Limiting | ✅ Done |
+| **Observability** | Metering | 🚧 Coming Soon |
+| | Monitoring | 🚧 Coming Soon |
+| | Request Logs | 🚧 Coming Soon |
+| | Audit Logs | 🚧 Coming Soon |
+| **System Settings** | Resource Pools | ✅ Done (minor display issues pending) |
+| | Model Gateway Integration | ✅ Done (pending verification) |
 | | Users & Permissions | ✅ Done (CRUD, role mgmt, password reset, batch bind) |
 
 

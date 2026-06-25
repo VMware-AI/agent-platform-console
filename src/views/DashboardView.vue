@@ -1,358 +1,624 @@
 <script setup lang="ts">
+import { useLocaleStore } from '@/stores/locale'
 import '@/components/icons'
 
-interface Metric {
-  key: string
-  label: string
-  icon: string
-  color: string
-  bg: string
-  value: string
-  suffix?: string
-  note: string
-  limit?: string
+type AgentStatus = 'running' | 'stopped' | 'exception'
+type NoticeStatus = 'success' | 'warning' | 'danger'
+
+interface RecentAgent {
+  id: string
+  name: string
+  agentName: string
+  createdAt: string
+  status: AgentStatus
 }
 
-const metrics: Metric[] = [
+interface SystemNotice {
+  id: string
+  text: string
+  occurredAt: string
+  status: NoticeStatus
+}
+
+const locale = useLocaleStore()
+
+const recentAgents: RecentAgent[] = [
   {
-    key: 'instances',
-    label: '实例运行',
-    icon: 'cpu',
-    color: '#1a8a4a',
-    bg: '#e6f4ea',
-    value: '0',
-    suffix: '/ 0',
-    note: '运行中 / 总数',
+    id: 'recent-1',
+    name: '[OpenClaw-Robot]',
+    agentName: 'claw-agent-v1',
+    createdAt: '2026-06-18 22:30',
+    status: 'running',
   },
   {
-    key: 'pools',
-    label: '计算池',
-    icon: 'storage',
-    color: '#1e6fcc',
-    bg: '#e3f0ff',
-    value: '1',
-    note: '已启用 1 的资源池',
+    id: 'recent-2',
+    name: '[Hermes-Assistant]',
+    agentName: 'hermes-pro',
+    createdAt: '2026-06-18 19:15',
+    status: 'stopped',
   },
   {
-    key: 'today',
-    label: '今日用量',
-    icon: 'bolt',
-    color: '#7c3aed',
-    bg: '#f0e6ff',
-    value: '0',
-    note: '0 次调用 · $0.00',
-  },
-  {
-    key: 'monthly',
-    label: '月度 Token',
-    icon: 'line-chart',
-    color: '#d97706',
-    bg: '#fff2e0',
-    value: '0',
-    note: '0% 已用',
-    limit: '上限 1.0M',
+    id: 'recent-3',
+    name: '[OpenCode-Review]',
+    agentName: 'code-v3-base',
+    createdAt: '2026-06-18 15:45',
+    status: 'exception',
   },
 ]
 
-interface Step {
-  num: number
-  title: string
-  desc: string
-}
-
-const steps: Step[] = [
-  { num: 1, title: '配置"资源池接入"', desc: '添加 vSphere 资源池并测试连接' },
-  { num: 2, title: '配置"模型网关"',   desc: '添加模型网关地址,并测试连接' },
-  { num: 3, title: '配置"模型路由"',   desc: '添加大模型地址和 api key,并测试连接' },
-  { num: 4, title: '创建"虚拟密钥"',   desc: '创建虚拟密钥,用于分配给智能体' },
-  { num: 5, title: '创建"虚拟密钥"',   desc: '创建虚拟密钥,用于分配给智能体' },
+const notices: SystemNotice[] = [
+  {
+    id: 'notice-1',
+    text: '资源池 vCenter_DC1 连接成功',
+    occurredAt: '2026-06-18 23:30',
+    status: 'success',
+  },
+  {
+    id: 'notice-2',
+    text: '新的模型路由策略已启用',
+    occurredAt: '2026-06-18 22:15',
+    status: 'warning',
+  },
+  {
+    id: 'notice-3',
+    text: '节点-1 CPU 利用率过高',
+    occurredAt: '2026-06-18 21:00',
+    status: 'danger',
+  },
 ]
+
+function statusLabel(status: AgentStatus): string {
+  return locale.t(`dashboard.status.${status}`)
+}
 </script>
 
 <template>
   <section class="dashboard">
-    <header class="dash-header">
-      <h1 cds-text="title" class="heading">总览</h1>
+    <header class="dashboard-header">
+      <h1 cds-text="title" class="heading">{{ locale.t('dashboard.overview.title') }}</h1>
     </header>
 
-    <div class="stats">
-      <cds-card v-for="m in metrics" :key="m.key">
-        <div cds-layout="vertical p:md gap:xs" class="metric">
-          <div class="metric-head">
-            <span
-              class="metric-icon"
-              :style="{ background: m.bg, color: m.color }"
-            >
-              <cds-icon :shape="m.icon" size="md"></cds-icon>
-            </span>
-            <span class="metric-label">{{ m.label }}</span>
+    <div class="metric-grid">
+      <cds-card class="metric-card">
+        <div class="metric-content">
+          <h2 class="metric-title">{{ locale.t('dashboard.metric.activeAgents') }}</h2>
+          <div class="metric-main-line">
+            <span class="health-dot success" aria-hidden="true"></span>
+            <strong class="metric-number">3</strong>
+            <span class="metric-denominator">/ 8</span>
           </div>
-          <div class="metric-value">
-            {{ m.value }}<span v-if="m.suffix" class="suffix">{{ m.suffix }}</span>
+          <p class="metric-caption">{{ locale.t('dashboard.metric.activeAgentsCaption') }}</p>
+          <p class="metric-caption">{{ locale.t('dashboard.metric.activeAgentsFoot') }}</p>
+        </div>
+      </cds-card>
+
+      <cds-card class="metric-card">
+        <div class="metric-content">
+          <h2 class="metric-title">{{ locale.t('dashboard.metric.totalCalls') }}</h2>
+          <div class="metric-main-line compact">
+            <strong class="metric-number">52k</strong>
+            <span class="metric-hint">{{ locale.t('dashboard.metric.deduplicated') }}</span>
           </div>
-          <div class="metric-foot">
-            <span class="muted">{{ m.note }}</span>
-            <span v-if="m.limit" class="muted right">{{ m.limit }}</span>
+          <p class="metric-caption">
+            {{ locale.t('dashboard.metric.today') }}: <strong>52,143</strong>
+            <span>{{ locale.t('dashboard.metric.detailedCount') }}</span>
+          </p>
+          <p class="metric-caption">
+            {{ locale.t('dashboard.metric.trend') }}:
+            <strong class="trend-up">↑15%</strong>
+            <span>{{ locale.t('dashboard.metric.vsYesterday') }}</span>
+          </p>
+        </div>
+      </cds-card>
+
+      <cds-card class="metric-card">
+        <div class="metric-content">
+          <h2 class="metric-title">{{ locale.t('dashboard.metric.monthlyToken') }}</h2>
+          <div class="metric-token-line">
+            <span class="health-dot success" aria-hidden="true"></span>
+            <strong>{{ locale.t('dashboard.metric.thisMonth') }}: 200k Token ($24.00)</strong>
           </div>
+          <div class="metric-cost-row">
+            <span>{{ locale.t('dashboard.metric.estimatedCost') }}: $120.00</span>
+            <strong>20%</strong>
+          </div>
+          <div
+            class="usage-progress"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="20"
+            :aria-label="locale.t('dashboard.metric.monthlyToken')"
+          >
+            <span></span>
+          </div>
+        </div>
+      </cds-card>
+
+      <cds-card class="metric-card">
+        <div class="metric-content">
+          <h2 class="metric-title">{{ locale.t('dashboard.metric.platformOverview') }}</h2>
+          <p class="metric-caption emphasized">{{ locale.t('dashboard.metric.totalCalls') }}</p>
+          <div class="metric-main-line compact overview-number">
+            <strong class="metric-number">52k</strong>
+          </div>
+          <p class="metric-caption">
+            {{ locale.t('dashboard.metric.today') }}: <strong>52,143</strong>
+            <span>{{ locale.t('dashboard.metric.detailedCount') }}</span>
+          </p>
+          <p class="metric-caption">
+            {{ locale.t('dashboard.metric.trend') }}:
+            <strong class="trend-up">↑15%</strong>
+            <span>{{ locale.t('dashboard.metric.vsYesterday') }}</span>
+          </p>
         </div>
       </cds-card>
     </div>
 
-    <div class="bottom">
-      <div class="status-col">
-        <cds-card>
-          <div cds-layout="vertical p:md gap:sm" class="panel">
-            <div cds-text="section" class="panel-title">实例状态分布</div>
-            <div cds-layout="vertical p:lg align:horizontal-center" class="empty">
-              <cds-icon shape="cpu" size="xl" class="empty-icon"></cds-icon>
-              <span cds-text="body" class="muted">暂无实例</span>
-            </div>
-          </div>
-        </cds-card>
-
-        <cds-card>
-          <div cds-layout="vertical p:md gap:sm" class="panel">
-            <div class="panel-head">
-              <div cds-text="section" class="panel-title">最近实例</div>
-              <a class="link" href="#">查看全部</a>
-            </div>
-            <div cds-layout="vertical p:lg gap:xs align:horizontal-center" class="empty">
-              <cds-icon shape="cpu" size="xl" class="empty-icon"></cds-icon>
-              <span cds-text="body" class="muted">暂无实例</span>
-              <a class="link" href="#">
-                <cds-icon shape="plus-circle" size="sm"></cds-icon>
-                立即创建
-              </a>
-            </div>
-          </div>
-        </cds-card>
-      </div>
-
-      <cds-card class="quickstart-card">
-        <div cds-layout="vertical p:md gap:sm" class="panel qs-panel">
-          <div class="qs-title">
-            <cds-icon shape="pop-out" size="md" class="qs-icon"></cds-icon>
-            <span cds-text="section">快速开始</span>
-          </div>
-          <div class="steps">
-            <div v-for="s in steps" :key="s.num" class="step">
-              <div class="step-num">第{{ ['一','二','三','四','五'][s.num - 1] }}步</div>
-              <div class="step-body">
-                <div class="step-title">{{ s.title }}</div>
-                <div class="step-desc">{{ s.desc }}</div>
+    <div class="insight-grid">
+      <cds-card class="panel-card distribution-card">
+        <div class="panel-content">
+          <h2 class="panel-title">{{ locale.t('dashboard.distribution.title') }}</h2>
+          <div class="distribution-layout">
+            <div class="donut-stage" aria-label="实例状态分布：运行中 3，已停止 5，异常 2">
+              <div class="donut-chart" aria-hidden="true">
+                <div class="donut-hole"></div>
+              </div>
+              <div class="chart-callout exception">
+                <span>{{ locale.t('dashboard.status.exception') }}</span>
+                <strong>2 (20%)</strong>
+              </div>
+              <div class="chart-callout running">
+                <span>{{ locale.t('dashboard.status.running') }}</span>
+                <strong>3 (30%)</strong>
+              </div>
+              <div class="chart-callout stopped">
+                <span>{{ locale.t('dashboard.status.stopped') }}</span>
+                <strong>5 (50%)</strong>
               </div>
             </div>
+
+            <ul class="distribution-legend" aria-label="实例状态图例">
+              <li>
+                <span class="legend-dot running"></span>
+                <span>{{ locale.t('dashboard.status.running') }} 3 (30%)</span>
+              </li>
+              <li>
+                <span class="legend-dot stopped"></span>
+                <span>{{ locale.t('dashboard.status.stopped') }} 5 (50%)</span>
+              </li>
+              <li>
+                <span class="legend-dot exception"></span>
+                <span>{{ locale.t('dashboard.status.exception') }} 2 (20%)</span>
+              </li>
+            </ul>
           </div>
         </div>
       </cds-card>
-      
+
+      <cds-card class="panel-card recent-card">
+        <div class="panel-content">
+          <h2 class="panel-title">{{ locale.t('dashboard.recent.title') }}</h2>
+          <div class="recent-table-wrap">
+            <table class="recent-table">
+              <thead>
+                <tr>
+                  <th scope="col">
+                    {{ locale.t('dashboard.recent.name') }}
+                    <cds-icon shape="info-circle" size="sm" aria-hidden="true"></cds-icon>
+                  </th>
+                  <th scope="col">{{ locale.t('dashboard.recent.agentName') }}</th>
+                  <th scope="col">{{ locale.t('dashboard.recent.createdAt') }}</th>
+                  <th scope="col">{{ locale.t('dashboard.recent.status') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="agent in recentAgents" :key="agent.id">
+                  <td class="instance-name" :title="agent.name">{{ agent.name }}</td>
+                  <td>{{ agent.agentName }}</td>
+                  <td class="date-cell">{{ agent.createdAt }}</td>
+                  <td>
+                    <span class="status-label" :class="agent.status">
+                      <span class="status-dot"></span>
+                      {{ statusLabel(agent.status) }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </cds-card>
     </div>
+
+    <cds-card class="panel-card notice-card">
+      <div class="panel-content">
+        <h2 class="panel-title notice-title">{{ locale.t('dashboard.notices.title') }}</h2>
+        <ul class="notice-list">
+          <li v-for="notice in notices" :key="notice.id">
+            <span class="notice-dot" :class="notice.status" aria-hidden="true"></span>
+            <span class="notice-text">{{ notice.text }}</span>
+            <time :datetime="notice.occurredAt.replace(' ', 'T')">{{ notice.occurredAt }}</time>
+          </li>
+        </ul>
+      </div>
+    </cds-card>
   </section>
 </template>
 
-
-
-
 <style scoped>
 .dashboard {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  height: 100%;
-  min-height: 100%;
+  overflow: auto;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
-
-.dash-header {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 20px;
+.dashboard-header {
+  flex: 0 0 auto;
 }
 .heading {
   margin: 0;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 28px;
+  font-size: 24px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
-.muted {
-  color: var(--cds-alias-typography-color-300, #565656);
-  margin: 0;
-  line-height: 1.4;
-}
-.right { margin-left: auto; }
-
-.stats {
+.metric-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
 }
-.stats :deep(cds-card) {
+.dashboard :deep(cds-card) {
   display: block;
   min-width: 0;
-  width: 100%;
+  background: var(--cds-alias-object-container-background, #fff);
+  border: 1px solid var(--cds-alias-object-border-color, #b3b3b3);
+  border-radius: 6px;
+  box-shadow: none;
 }
-@media (max-width: 1100px) {
-  .stats { grid-template-columns: repeat(2, 1fr); }
+.metric-card {
+  min-height: 112px;
 }
-@media (max-width: 560px) {
-  .stats { grid-template-columns: 1fr; }
+.metric-content {
+  height: 100%;
+  padding: 13px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
-
-.metric-head {
+.metric-title,
+.panel-title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+.metric-main-line {
+  min-height: 32px;
   display: flex;
   align-items: center;
+  gap: 5px;
+}
+.metric-main-line.compact {
   gap: 8px;
 }
-.metric-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  flex-shrink: 0;
+.health-dot,
+.status-dot,
+.notice-dot,
+.legend-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  border-radius: 50%;
 }
-.metric-label {
-  font-size: 13px;
+.health-dot {
+  width: 11px;
+  height: 11px;
+}
+.health-dot.success {
+  background: var(--cds-alias-status-success, #1b8a4b);
+}
+.metric-number {
+  font-size: 27px;
+  line-height: 1;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.metric-denominator {
+  font-size: 21px;
+  font-weight: 500;
+}
+.metric-hint {
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 12px;
+}
+.metric-caption {
+  margin: 1px 0 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.metric-caption span {
   color: var(--cds-alias-typography-color-300, #565656);
 }
-.metric-value {
-  font-size: 24px;
+.metric-caption.emphasized {
+  margin-top: 2px;
+}
+.trend-up {
+  color: var(--cds-alias-status-success, #14834a);
   font-weight: 600;
-  line-height: 1.1;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
-.suffix {
-  font-size: 16px;
-  font-weight: 400;
-  color: var(--cds-alias-typography-color-300, #565656);
-  margin-left: 4px;
-}
-.metric-foot {
+.metric-token-line {
+  min-height: 28px;
   display: flex;
   align-items: center;
-  font-size: 12px;
-  margin-top: auto;
+  gap: 6px;
+  font-size: 13px;
 }
-
-.bottom {
-  display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(420px, 1.6fr);
-  gap: 12px;
-  flex: 1;
-  min-height: 0;
-}
-@media (max-width: 900px) {
-  .bottom { grid-template-columns: 1fr; }
-}
-
-.status-col {
-  display: grid;
-  grid-template-rows: 1fr 1fr;
-  gap: 12px;
-  min-height: 0;
-}
-.status-col :deep(cds-card) {
-  display: block;
-  min-width: 0;
-  width: 100%;
-}
-
-.panel { height: 100%; }
-.panel-head {
+.metric-cost-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  margin-top: 1px;
+  font-size: 12px;
 }
-.panel-title {
-  font-weight: 600;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+.usage-progress {
+  height: 6px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--cds-alias-object-border-color, #d7d7d7);
 }
-.empty {
-  flex: 1;
-  justify-content: center;
-  gap: 6px;
-  color: var(--cds-alias-typography-color-300, #565656);
-}
-.empty-icon {
-  color: #b3b3b3;
-}
-.link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  text-decoration: none;
-  font-size: 13px;
-}
-.link:hover { text-decoration: underline; }
-
-.quickstart-card :deep(cds-card),
-.quickstart-card {
+.usage-progress > span {
   display: block;
-  min-width: 0;
-  width: 100%;
+  width: 20%;
   height: 100%;
+  border-radius: inherit;
+  background: var(--cds-alias-status-success, #1b8a4b);
 }
-.qs-panel { height: 100%; }
-.qs-title {
-  display: inline-flex;
+.overview-number {
+  min-height: 26px;
+}
+.insight-grid {
+  min-height: 200px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  flex: 1 1 auto;
+}
+.panel-card {
+  min-height: 0;
+}
+.panel-content {
+  height: 100%;
+  min-height: 0;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+}
+.distribution-layout {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(230px, 1.3fr) minmax(145px, 0.8fr);
   align-items: center;
   gap: 8px;
-  font-weight: 600;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
-.qs-icon { color: var(--cds-alias-object-app-foreground, #1b1b1b); }
-
-.steps {
+.donut-stage {
+  position: relative;
+  min-height: 160px;
+}
+.donut-chart {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 118px;
+  height: 118px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--cds-alias-status-success, #1b8a4b) 0 30%,
+    #e6a700 30% 80%,
+    var(--cds-alias-status-danger, #c92100) 80% 100%
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 12%, transparent);
+}
+.donut-hole {
+  position: absolute;
+  inset: 28px;
+  border-radius: 50%;
+  background: var(--cds-alias-object-container-background, #fff);
+  box-shadow: 0 0 0 1px color-mix(in srgb, #000 5%, transparent);
+}
+.chart-callout {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.chart-callout strong {
+  font-weight: 500;
+}
+.chart-callout.exception {
+  left: 5%;
+  top: 15%;
+}
+.chart-callout.running {
+  right: 1%;
+  top: 20%;
+}
+.chart-callout.stopped {
+  left: 8%;
+  bottom: 8%;
+}
+.chart-callout::after {
+  content: '';
+  position: absolute;
+  top: 11px;
+  width: 34px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.5;
+}
+.chart-callout.exception::after,
+.chart-callout.stopped::after {
+  left: calc(100% + 5px);
+  transform: rotate(12deg);
+  transform-origin: left;
+}
+.chart-callout.running::after {
+  right: calc(100% + 5px);
+  transform: rotate(-12deg);
+  transform-origin: right;
+}
+.distribution-legend {
+  margin: 0;
+  padding: 0;
+  list-style: none;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 10px;
-  flex: 1;
-  min-height: 0;
-}
-@media (max-width: 1200px) { .steps { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 720px)  { .steps { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 420px)  { .steps { grid-template-columns: 1fr; } }
-
-.step {
-  background: #1a3a5c;
-  color: #e8edf2;
-  border-radius: 6px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-.step-num {
-  background: #1a3a5c;
-  color: #c8d2dc;
-  font-size: 11px;
-  padding: 4px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  flex-shrink: 0;
-}
-.step-body {
-  background: #fafafa;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  padding: 8px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-.step-title {
+  gap: 8px;
   font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 3px;
-  line-height: 1.35;
 }
-.step-desc {
+.distribution-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-dot {
+  width: 11px;
+  height: 11px;
+}
+.legend-dot.running,
+.status-label.running .status-dot {
+  background: var(--cds-alias-status-success, #1b8a4b);
+}
+.legend-dot.stopped,
+.status-label.stopped .status-dot {
+  background: #e6a700;
+}
+.legend-dot.exception,
+.status-label.exception .status-dot {
+  background: var(--cds-alias-status-danger, #c92100);
+}
+.recent-table-wrap {
+  min-height: 0;
+  margin-top: 10px;
+  overflow: auto;
+}
+.recent-table {
+  width: 100%;
+  min-width: 470px;
+  border-collapse: collapse;
+  table-layout: fixed;
   font-size: 11px;
-  color: var(--cds-alias-typography-color-300, #565656);
-  line-height: 1.45;
+}
+.recent-table th,
+.recent-table td {
+  padding: 8px 7px;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+}
+.recent-table th {
+  background: var(--cds-alias-object-app-background, #e9eaee);
+  font-weight: 600;
+}
+.recent-table th:nth-child(1) { width: 24%; }
+.recent-table th:nth-child(2) { width: 24%; }
+.recent-table th:nth-child(3) { width: 28%; }
+.recent-table th:nth-child(4) { width: 24%; }
+.recent-table th cds-icon {
+  vertical-align: -2px;
+}
+.instance-name {
+  font-weight: 600;
+}
+.date-cell {
+  font-variant-numeric: tabular-nums;
+}
+.status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.status-dot {
+  width: 9px;
+  height: 9px;
+}
+.notice-card {
+  min-height: 126px;
+  flex: 0 0 auto;
+}
+.notice-title {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+}
+.notice-list {
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 7px;
+}
+.notice-list li {
+  display: grid;
+  grid-template-columns: 11px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+.notice-dot {
+  width: 10px;
+  height: 10px;
+}
+.notice-dot.success { background: var(--cds-alias-status-success, #1b8a4b); }
+.notice-dot.warning { background: #e6a700; }
+.notice-dot.danger { background: var(--cds-alias-status-danger, #c92100); }
+.notice-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notice-list time {
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 1120px) {
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .insight-grid {
+    grid-template-columns: 1fr;
+  }
+  .distribution-card,
+  .recent-card {
+    min-height: 220px;
+  }
+}
+@media (max-width: 660px) {
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+  .distribution-layout {
+    grid-template-columns: 1fr;
+  }
+  .distribution-legend {
+    grid-template-columns: repeat(3, auto);
+    justify-content: center;
+  }
+  .notice-list li {
+    grid-template-columns: 11px minmax(0, 1fr);
+  }
+  .notice-list time {
+    grid-column: 2;
+    color: var(--cds-alias-typography-color-300, #565656);
+  }
 }
 </style>

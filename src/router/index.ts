@@ -18,15 +18,15 @@ const router = createRouter({
         // 智能体中心
         { path: 'agents/list',        name: 'agents.list',        component: () => import('@/views/AgentListView.vue') },
         { path: 'agents/config',      name: 'agents.config',      component: ComingSoon, props: { title: '智能体配置' } },
-        { path: 'agents/marketplace', name: 'agents.marketplace', component: ComingSoon, props: { title: '智能体市场' } },
+        { path: 'agents/marketplace', name: 'agents.marketplace', component: () => import('@/views/AgentMarketplaceView.vue') },
 
         // 模型网关配置
         { path: 'model-gateway/route', name: 'mg.route', component: () => import('@/views/ModelRouteView.vue') },
         { path: 'model-gateway/key',   name: 'mg.key',   component: () => import('@/views/VirtualKeyView.vue') },
-        { path: 'model-gateway/limit', name: 'mg.limit', component: () => import('@/views/RateLimitPolicyView.vue') },
+        { path: 'model-gateway/policy', name: 'mg.policy', component: () => import('@/views/RateLimitPolicyView.vue') },
 
         // 可观测性
-        { path: 'observability/metering', name: 'obs.metering',  component: ComingSoon, props: { title: '计量中心' } },
+        { path: 'observability/metering', name: 'obs.metering', component: () => import('@/views/MeteringCenterView.vue') },
         { path: 'observability/monitor',  name: 'obs.monitor',   component: ComingSoon, props: { title: '实时监控' } },
         { path: 'observability/requests', name: 'obs.requests',  component: ComingSoon, props: { title: '请求日志' } },
         { path: 'observability/audit',    name: 'obs.audit',     component: ComingSoon, props: { title: '审计日志' } },
