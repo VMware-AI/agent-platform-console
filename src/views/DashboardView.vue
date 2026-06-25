@@ -1,73 +1,121 @@
 <script setup lang="ts">
+import { computed, watch } from 'vue'
+import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
+import { useToast } from '@/composables/useToast'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
+import {
+  DASHBOARD_OVERVIEW_QUERY,
+  type DashboardAgentStatus,
+  type DashboardNotice,
+  type DashboardOverviewResult,
+  type DashboardOverviewVars,
+  type DashboardRecentAgent,
+  type DashboardStats,
+} from '@/api/graphql/queries/dashboard'
 import '@/components/icons'
 
-type AgentStatus = 'running' | 'stopped' | 'exception'
-type NoticeStatus = 'success' | 'warning' | 'danger'
-
-interface RecentAgent {
-  id: string
-  name: string
-  agentName: string
-  createdAt: string
-  status: AgentStatus
-}
-
-interface SystemNotice {
-  id: string
-  text: string
-  occurredAt: string
-  status: NoticeStatus
-}
-
 const locale = useLocaleStore()
+const toast = useToast()
 
-const recentAgents: RecentAgent[] = [
-  {
-    id: 'recent-1',
-    name: '[OpenClaw-Robot]',
-    agentName: 'claw-agent-v1',
-    createdAt: '2026-06-18 22:30',
-    status: 'running',
-  },
-  {
-    id: 'recent-2',
-    name: '[Hermes-Assistant]',
-    agentName: 'hermes-pro',
-    createdAt: '2026-06-18 19:15',
-    status: 'stopped',
-  },
-  {
-    id: 'recent-3',
-    name: '[OpenCode-Review]',
-    agentName: 'code-v3-base',
-    createdAt: '2026-06-18 15:45',
-    status: 'exception',
-  },
-]
+const RECENT_LIMIT = 5
+const NOTICE_LIMIT = 5
 
-const notices: SystemNotice[] = [
-  {
-    id: 'notice-1',
-    text: '资源池 vCenter_DC1 连接成功',
-    occurredAt: '2026-06-18 23:30',
-    status: 'success',
-  },
-  {
-    id: 'notice-2',
-    text: '新的模型路由策略已启用',
-    occurredAt: '2026-06-18 22:15',
-    status: 'warning',
-  },
-  {
-    id: 'notice-3',
-    text: '节点-1 CPU 利用率过高',
-    occurredAt: '2026-06-18 21:00',
-    status: 'danger',
-  },
-]
+// Read-only overview page: a single query feeds every stat card, the status
+// donut, the recent-agents table, and the notices list. No mock data.
+const { result, error } = useQuery<DashboardOverviewResult, DashboardOverviewVars>(
+  DASHBOARD_OVERVIEW_QUERY,
+  { recentLimit: RECENT_LIMIT, noticeLimit: NOTICE_LIMIT },
+)
 
-function statusLabel(status: AgentStatus): string {
+watch(error, (err) => {
+  if (err) toast.error(graphqlErrorMessage(err, locale.t('agents.error')))
+})
+
+const stats = computed<DashboardStats | null>(
+  () => result.value?.dashboardOverview.stats ?? null,
+)
+const recentAgents = computed<DashboardRecentAgent[]>(
+  () => result.value?.dashboardOverview.recentAgents ?? [],
+)
+const notices = computed<DashboardNotice[]>(
+  () => result.value?.dashboardOverview.notices ?? [],
+)
+
+// --- Derived display values --------------------------------------------------
+
+// Compact integer formatting (e.g. 52143 → "52k"), matching the original mock
+// look of the metric numbers. Locale-aware so it follows the active language.
+function formatCompact(value: number): string {
+  return new Intl.NumberFormat(locale.locale, {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value)
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat(locale.locale).format(value)
+}
+
+function formatCost(value: number): string {
+  return new Intl.NumberFormat(locale.locale, {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
+function percentOf(part: number, total: number): number {
+  if (total <= 0) return 0
+  return Math.round((part / total) * 100)
+}
+
+// Backend timestamps are ISO strings; render them as a compact local date-time.
+// Falls back to the raw value if it is not a parseable date.
+function formatDateTime(value: string): string {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return new Intl.DateTimeFormat(locale.locale, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(parsed)
+}
+
+const runningAgents = computed(() => stats.value?.runningAgents ?? 0)
+const stoppedAgents = computed(() => stats.value?.stoppedAgents ?? 0)
+const exceptionAgents = computed(() => stats.value?.exceptionAgents ?? 0)
+const totalAgents = computed(() => stats.value?.totalAgents ?? 0)
+
+const runningPercent = computed(() => percentOf(runningAgents.value, totalAgents.value))
+const stoppedPercent = computed(() => percentOf(stoppedAgents.value, totalAgents.value))
+const exceptionPercent = computed(() => percentOf(exceptionAgents.value, totalAgents.value))
+
+// conic-gradient stops for the donut: running → stopped → exception.
+const donutGradient = computed(() => {
+  const running = runningPercent.value
+  const stopped = running + stoppedPercent.value
+  return (
+    `var(--cds-alias-status-success, #1b8a4b) 0 ${running}%,` +
+    `#e6a700 ${running}% ${stopped}%,` +
+    `var(--cds-alias-status-danger, #c92100) ${stopped}% 100%`
+  )
+})
+
+const monthlyCalls = computed(() => stats.value?.monthlyCalls ?? 0)
+const monthlyTokens = computed(() => stats.value?.monthlyTokens ?? 0)
+const monthlyCost = computed(() => stats.value?.monthlyCost ?? 0)
+
+const monthlyCallsCompact = computed(() => formatCompact(monthlyCalls.value))
+const monthlyCallsExact = computed(() => formatNumber(monthlyCalls.value))
+const monthlyTokensCompact = computed(() => formatCompact(monthlyTokens.value))
+const monthlyCostText = computed(() => formatCost(monthlyCost.value))
+
+function statusLabel(status: DashboardAgentStatus): string {
   return locale.t(`dashboard.status.${status}`)
 }
 </script>
@@ -84,8 +132,8 @@ function statusLabel(status: AgentStatus): string {
           <h2 class="metric-title">{{ locale.t('dashboard.metric.activeAgents') }}</h2>
           <div class="metric-main-line">
             <span class="health-dot success" aria-hidden="true"></span>
-            <strong class="metric-number">3</strong>
-            <span class="metric-denominator">/ 8</span>
+            <strong class="metric-number">{{ runningAgents }}</strong>
+            <span class="metric-denominator">/ {{ totalAgents }}</span>
           </div>
           <p class="metric-caption">{{ locale.t('dashboard.metric.activeAgentsCaption') }}</p>
           <p class="metric-caption">{{ locale.t('dashboard.metric.activeAgentsFoot') }}</p>
@@ -96,17 +144,12 @@ function statusLabel(status: AgentStatus): string {
         <div class="metric-content">
           <h2 class="metric-title">{{ locale.t('dashboard.metric.totalCalls') }}</h2>
           <div class="metric-main-line compact">
-            <strong class="metric-number">52k</strong>
+            <strong class="metric-number">{{ monthlyCallsCompact }}</strong>
             <span class="metric-hint">{{ locale.t('dashboard.metric.deduplicated') }}</span>
           </div>
           <p class="metric-caption">
-            {{ locale.t('dashboard.metric.today') }}: <strong>52,143</strong>
+            {{ locale.t('dashboard.metric.thisMonth') }}: <strong>{{ monthlyCallsExact }}</strong>
             <span>{{ locale.t('dashboard.metric.detailedCount') }}</span>
-          </p>
-          <p class="metric-caption">
-            {{ locale.t('dashboard.metric.trend') }}:
-            <strong class="trend-up">↑15%</strong>
-            <span>{{ locale.t('dashboard.metric.vsYesterday') }}</span>
           </p>
         </div>
       </cds-card>
@@ -116,21 +159,12 @@ function statusLabel(status: AgentStatus): string {
           <h2 class="metric-title">{{ locale.t('dashboard.metric.monthlyToken') }}</h2>
           <div class="metric-token-line">
             <span class="health-dot success" aria-hidden="true"></span>
-            <strong>{{ locale.t('dashboard.metric.thisMonth') }}: 200k Token ($24.00)</strong>
+            <strong>
+              {{ locale.t('dashboard.metric.thisMonth') }}: {{ monthlyTokensCompact }} Token ({{ monthlyCostText }})
+            </strong>
           </div>
           <div class="metric-cost-row">
-            <span>{{ locale.t('dashboard.metric.estimatedCost') }}: $120.00</span>
-            <strong>20%</strong>
-          </div>
-          <div
-            class="usage-progress"
-            role="progressbar"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            aria-valuenow="20"
-            :aria-label="locale.t('dashboard.metric.monthlyToken')"
-          >
-            <span></span>
+            <span>{{ locale.t('dashboard.metric.estimatedCost') }}: {{ monthlyCostText }}</span>
           </div>
         </div>
       </cds-card>
@@ -140,16 +174,11 @@ function statusLabel(status: AgentStatus): string {
           <h2 class="metric-title">{{ locale.t('dashboard.metric.platformOverview') }}</h2>
           <p class="metric-caption emphasized">{{ locale.t('dashboard.metric.totalCalls') }}</p>
           <div class="metric-main-line compact overview-number">
-            <strong class="metric-number">52k</strong>
+            <strong class="metric-number">{{ monthlyCallsCompact }}</strong>
           </div>
           <p class="metric-caption">
-            {{ locale.t('dashboard.metric.today') }}: <strong>52,143</strong>
+            {{ locale.t('dashboard.metric.thisMonth') }}: <strong>{{ monthlyCallsExact }}</strong>
             <span>{{ locale.t('dashboard.metric.detailedCount') }}</span>
-          </p>
-          <p class="metric-caption">
-            {{ locale.t('dashboard.metric.trend') }}:
-            <strong class="trend-up">↑15%</strong>
-            <span>{{ locale.t('dashboard.metric.vsYesterday') }}</span>
           </p>
         </div>
       </cds-card>
@@ -160,36 +189,39 @@ function statusLabel(status: AgentStatus): string {
         <div class="panel-content">
           <h2 class="panel-title">{{ locale.t('dashboard.distribution.title') }}</h2>
           <div class="distribution-layout">
-            <div class="donut-stage" aria-label="实例状态分布：运行中 3，已停止 5，异常 2">
-              <div class="donut-chart" aria-hidden="true">
+            <div
+              class="donut-stage"
+              :aria-label="`${locale.t('dashboard.status.running')} ${runningAgents}, ${locale.t('dashboard.status.stopped')} ${stoppedAgents}, ${locale.t('dashboard.status.exception')} ${exceptionAgents}`"
+            >
+              <div class="donut-chart" :style="{ background: `conic-gradient(${donutGradient})` }" aria-hidden="true">
                 <div class="donut-hole"></div>
               </div>
               <div class="chart-callout exception">
                 <span>{{ locale.t('dashboard.status.exception') }}</span>
-                <strong>2 (20%)</strong>
+                <strong>{{ exceptionAgents }} ({{ exceptionPercent }}%)</strong>
               </div>
               <div class="chart-callout running">
                 <span>{{ locale.t('dashboard.status.running') }}</span>
-                <strong>3 (30%)</strong>
+                <strong>{{ runningAgents }} ({{ runningPercent }}%)</strong>
               </div>
               <div class="chart-callout stopped">
                 <span>{{ locale.t('dashboard.status.stopped') }}</span>
-                <strong>5 (50%)</strong>
+                <strong>{{ stoppedAgents }} ({{ stoppedPercent }}%)</strong>
               </div>
             </div>
 
-            <ul class="distribution-legend" aria-label="实例状态图例">
+            <ul class="distribution-legend" :aria-label="locale.t('dashboard.distribution.title')">
               <li>
                 <span class="legend-dot running"></span>
-                <span>{{ locale.t('dashboard.status.running') }} 3 (30%)</span>
+                <span>{{ locale.t('dashboard.status.running') }} {{ runningAgents }} ({{ runningPercent }}%)</span>
               </li>
               <li>
                 <span class="legend-dot stopped"></span>
-                <span>{{ locale.t('dashboard.status.stopped') }} 5 (50%)</span>
+                <span>{{ locale.t('dashboard.status.stopped') }} {{ stoppedAgents }} ({{ stoppedPercent }}%)</span>
               </li>
               <li>
                 <span class="legend-dot exception"></span>
-                <span>{{ locale.t('dashboard.status.exception') }} 2 (20%)</span>
+                <span>{{ locale.t('dashboard.status.exception') }} {{ exceptionAgents }} ({{ exceptionPercent }}%)</span>
               </li>
             </ul>
           </div>
@@ -216,7 +248,7 @@ function statusLabel(status: AgentStatus): string {
                 <tr v-for="agent in recentAgents" :key="agent.id">
                   <td class="instance-name" :title="agent.name">{{ agent.name }}</td>
                   <td>{{ agent.agentName }}</td>
-                  <td class="date-cell">{{ agent.createdAt }}</td>
+                  <td class="date-cell">{{ formatDateTime(agent.createdAt) }}</td>
                   <td>
                     <span class="status-label" :class="agent.status">
                       <span class="status-dot"></span>
@@ -238,7 +270,7 @@ function statusLabel(status: AgentStatus): string {
           <li v-for="notice in notices" :key="notice.id">
             <span class="notice-dot" :class="notice.status" aria-hidden="true"></span>
             <span class="notice-text">{{ notice.text }}</span>
-            <time :datetime="notice.occurredAt.replace(' ', 'T')">{{ notice.occurredAt }}</time>
+            <time :datetime="notice.occurredAt">{{ formatDateTime(notice.occurredAt) }}</time>
           </li>
         </ul>
       </div>

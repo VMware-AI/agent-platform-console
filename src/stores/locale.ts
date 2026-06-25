@@ -581,6 +581,7 @@ const STRINGS: Dict = {
 
   // Model routing
   'modelRoute.title': { zh: '模型路由配置', en: 'Model Route Configuration' },
+  'modelRoute.toast.actionFailed': { zh: '操作失败', en: 'Action failed' },
   'modelRoute.description': { zh: '配置模型路由规则，将请求按策略分派到不同后端模型。', en: '' },
   'modelRoute.table.label': { zh: '模型路由列表', en: 'Model routes' },
   'modelRoute.sort': { zh: '排序：{column}', en: 'Sort {column}' },

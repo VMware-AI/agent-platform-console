@@ -1,8 +1,24 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
+import { useToast } from '@/composables/useToast'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
+import {
+  METERING_OVERVIEW_QUERY,
+  type AgentUsageRow,
+  type DailyUsageRow,
+  type MeteringOverview,
+  type MeteringOverviewResult,
+  type MeteringOverviewVars,
+  type MeteringTimeRange,
+  type ModelUsageRow,
+} from '@/api/graphql/queries/metering'
 import '@/components/icons'
 
+// UI time-range keys vs. backend MeteringTimeRange. The backend supports three
+// ranges; the page's "custom" tab has no server equivalent, so it falls back to
+// the 7-day window (custom date pickers are not yet wired to the backend).
 type TimeRange = '7d' | '30d' | 'month' | 'custom'
 type UsageStatus = 'normal' | 'warning'
 
@@ -34,6 +50,8 @@ interface DailyUsage {
 }
 
 const locale = useLocaleStore()
+const toast = useToast()
+
 const selectedRange = ref<TimeRange>('7d')
 const selectedAgent = ref('ALL')
 const selectedModel = ref('ALL')
@@ -45,87 +63,111 @@ const timeRanges: Array<{ key: TimeRange; label: string }> = [
   { key: 'custom', label: 'metering.range.custom' },
 ]
 
-const agents: AgentUsage[] = [
-  {
-    id: 'Agent_10000001',
-    name: 'gpt-4o',
-    template: 'OVA 模板',
-    totalTokens: 22_000,
-    inputTokens: 468,
-    outputTokens: 3_500,
-    requests: 37,
-    status: 'warning',
-  },
-  {
-    id: 'Agent_10000002',
-    name: 'AgentCole_son',
-    template: 'OVA Suling',
-    totalTokens: 13_000,
-    inputTokens: 300,
-    outputTokens: 2_000,
-    requests: 34,
-    status: 'warning',
-  },
-  {
-    id: 'Agent_30000003',
-    name: 'Hermes',
-    template: 'OVA Suling',
-    totalTokens: 10_000,
-    inputTokens: 300,
-    outputTokens: 1_000,
-    requests: 6,
-    status: 'warning',
-  },
-  {
-    id: 'Agent_30000004',
-    name: 'Opendode',
-    template: 'OVA Suling',
-    totalTokens: 4_000,
-    inputTokens: 120,
-    outputTokens: 800,
-    requests: 0,
-    status: 'warning',
-  },
-  {
-    id: 'Agent_30000005',
-    name: 'OpenCode_synt',
-    template: 'OVA 模板',
-    totalTokens: 1_500,
-    inputTokens: 130,
-    outputTokens: 500,
-    requests: 0,
-    status: 'warning',
-  },
-]
+const RANGE_TO_BACKEND: Record<TimeRange, MeteringTimeRange> = {
+  '7d': 'LAST_7_DAYS',
+  '30d': 'LAST_30_DAYS',
+  month: 'THIS_MONTH',
+  custom: 'LAST_7_DAYS',
+}
 
-const models: ModelUsage[] = [
-  { name: 'gpt-4o', totalTokens: 22_000, inputTokens: 460, outputTokens: 3_500, status: 'normal' },
-  { name: 'gpt-go', totalTokens: 12_000, inputTokens: 300, outputTokens: 2_000, status: 'normal' },
-  { name: 'gptl-fo', totalTokens: 10_000, inputTokens: 300, outputTokens: 1_000, status: 'normal' },
-  { name: 'listLLL-R', totalTokens: 7_500, inputTokens: 120, outputTokens: 800, status: 'normal' },
-]
+// Reactive GraphQL variables — useQuery re-fetches whenever the selected range
+// changes. `userId` is left null to aggregate across the whole org.
+const variables = computed<MeteringOverviewVars>(() => ({
+  range: RANGE_TO_BACKEND[selectedRange.value],
+  userId: null,
+}))
 
-const dailyUsage: DailyUsage[] = [
-  { date: '2026-06-18', totalTokens: 12_000, inputTokens: 468, outputTokens: 3_500, status: 'normal' },
-  { date: '2026-06-19', totalTokens: 12_000, inputTokens: 300, outputTokens: 2_000, status: 'normal' },
-  { date: '2026-06-20', totalTokens: 4_200, inputTokens: 300, outputTokens: 1_000, status: 'normal' },
-  { date: '2026-06-21', totalTokens: 1_000, inputTokens: 120, outputTokens: 800, status: 'normal' },
-  { date: '2026-06-22', totalTokens: 500, inputTokens: 100, outputTokens: 300, status: 'normal' },
-]
+const { result, onError } = useQuery<MeteringOverviewResult, MeteringOverviewVars>(
+  METERING_OVERVIEW_QUERY,
+  variables,
+)
+
+onError((error) => {
+  toast.error(graphqlErrorMessage(error, locale.t('metering.title')))
+})
+
+const overview = computed<MeteringOverview | null>(() => result.value?.meteringOverview ?? null)
+
+// The backend rows carry no status flag; derive a data-driven one so the
+// existing status column keeps rendering — a row with zero requests is flagged
+// as a warning (idle / no traffic), otherwise it is normal.
+function statusFromRequests(requests: number): UsageStatus {
+  return requests > 0 ? 'normal' : 'warning'
+}
+
+const agents = computed<AgentUsage[]>(() =>
+  (overview.value?.byAgent ?? []).map((row: AgentUsageRow) => ({
+    id: row.agentId,
+    name: row.agentName,
+    // Backend metering rows do not expose the agent's OVA template; show a dash.
+    template: '—',
+    totalTokens: row.totalTokens,
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    requests: row.requests,
+    status: statusFromRequests(row.requests),
+  })),
+)
+
+const models = computed<ModelUsage[]>(() =>
+  (overview.value?.byModel ?? []).map((row: ModelUsageRow) => ({
+    name: row.model,
+    totalTokens: row.totalTokens,
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    status: statusFromRequests(row.requests),
+  })),
+)
+
+const dailyUsage = computed<DailyUsage[]>(() =>
+  (overview.value?.byDay ?? []).map((row: DailyUsageRow) => ({
+    date: row.date,
+    totalTokens: row.totalTokens,
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    status: statusFromRequests(row.requests),
+  })),
+)
+
+// Client-side filters over the fetched rows (the backend query has no per-agent
+// / per-model filter variable). Options are derived from the real result.
+const filteredAgents = computed<AgentUsage[]>(() =>
+  selectedAgent.value === 'ALL'
+    ? agents.value
+    : agents.value.filter((agent) => agent.id === selectedAgent.value),
+)
+
+const filteredModels = computed<ModelUsage[]>(() =>
+  selectedModel.value === 'ALL'
+    ? models.value
+    : models.value.filter((model) => model.name === selectedModel.value),
+)
 
 const agentOptions = computed(() => [
   { value: 'ALL', label: locale.t('metering.filter.allAgents') },
-  ...agents.map((agent) => ({ value: agent.id, label: `${agent.id} · ${agent.name}` })),
+  ...agents.value.map((agent) => ({ value: agent.id, label: `${agent.id} · ${agent.name}` })),
 ])
 
 const modelOptions = computed(() => [
   { value: 'ALL', label: locale.t('metering.filter.allModels') },
-  ...models.map((model) => ({ value: model.name, label: model.name })),
+  ...models.value.map((model) => ({ value: model.name, label: model.name })),
 ])
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat(locale.locale === 'zh' ? 'zh-CN' : 'en-US').format(value)
 }
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat(locale.locale === 'zh' ? 'zh-CN' : 'en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(value)
+}
+
+const totalCost = computed(() => formatCurrency(overview.value?.cost.totalCost ?? 0))
+const monthlyCost = computed(
+  () => `${formatCurrency(overview.value?.cost.monthlyCost ?? 0)}/${locale.t('metering.cost.month')}`,
+)
 
 function statusText(status: UsageStatus): string {
   return locale.t(`metering.status.${status}`)
@@ -300,7 +342,7 @@ function statusText(status: UsageStatus): string {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="agent in agents" :key="agent.id">
+                <tr v-for="agent in filteredAgents" :key="agent.id">
                   <td :title="agent.id">{{ agent.id }}</td>
                   <td :title="agent.name">{{ agent.name }}</td>
                   <td>{{ agent.template }}</td>
@@ -338,7 +380,7 @@ function statusText(status: UsageStatus): string {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="model in models" :key="model.name">
+                <tr v-for="model in filteredModels" :key="model.name">
                   <td>{{ model.name }}</td>
                   <td>{{ formatNumber(model.totalTokens) }}</td>
                   <td>{{ formatNumber(model.inputTokens) }}</td>
@@ -400,11 +442,11 @@ function statusText(status: UsageStatus): string {
         <div class="cost-grid">
           <div class="cost-summary">
             <span>{{ locale.t('metering.cost.total') }}</span>
-            <strong>$5,000.00</strong>
+            <strong>{{ totalCost }}</strong>
           </div>
           <div class="cost-summary">
             <span>{{ locale.t('metering.cost.monthly') }}</span>
-            <strong>$1,204.00/{{ locale.t('metering.cost.month') }}</strong>
+            <strong>{{ monthlyCost }}</strong>
           </div>
         </div>
       </div>

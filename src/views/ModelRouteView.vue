@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useQuery } from '@vue/apollo-composable'
+import { apolloClient } from '@/api/graphql/client'
 import AppDropdown from '@/components/AppDropdown.vue'
 import ModelRouteFormModal from '@/components/ModelRouteFormModal.vue'
 import ConfirmDialog from '@/views/user-role/ConfirmDialog.vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
 import type {
   ModelRoute,
   ModelRouteDraft,
@@ -12,152 +15,57 @@ import type {
   ModelRouteStrategy,
 } from '@/types/model-route'
 import { MODEL_ROUTE_STRATEGIES } from '@/types/model-route'
+import {
+  MODEL_ROUTES_QUERY,
+  CREATE_MODEL_ROUTE,
+  UPDATE_MODEL_ROUTE,
+  SET_MODEL_ROUTE_ENABLED,
+  DELETE_MODEL_ROUTE,
+  type ModelRoutesResult,
+  type ModelRouteNode,
+  type CreateModelRouteResult,
+  type CreateModelRouteVars,
+  type UpdateModelRouteResult,
+  type UpdateModelRouteVars,
+  type SetModelRouteEnabledResult,
+  type SetModelRouteEnabledVars,
+  type DeleteModelRouteResult,
+  type DeleteModelRouteVars,
+} from '@/api/graphql/queries/model-routes'
+import { MODEL_GATEWAYS_QUERY } from '@/api/graphql/queries/model-gateways'
 import '@/components/icons'
 
 const locale = useLocaleStore()
 const toast = useToast()
 
-const GATEWAYS: ModelRouteGatewayOption[] = [
-  { id: 'gateway-1', name: 'LiteLLM_Router_1' },
-  { id: 'gateway-2', name: 'LiteLLM_Router_2' },
-  { id: 'gateway-3', name: 'LiteLLM_Router_3' },
-  { id: 'gateway-4', name: 'LiteLLM_Router_4' },
-]
+// The backend denormalizes the gateway onto each route as `backendGatewayId` +
+// `gatewayName`; the UI models them as `gatewayId` + `gatewayName`, and treats
+// `uiStrategy` as the row's `strategy`.
+function toUiRoute(node: ModelRouteNode): ModelRoute {
+  return {
+    id: node.id,
+    name: node.name,
+    gatewayId: node.backendGatewayId ?? '',
+    gatewayName: node.gatewayName,
+    strategy: node.uiStrategy,
+    supportedModels: node.supportedModels,
+    enabled: node.enabled,
+    createdAt: node.createdAt,
+    updatedAt: node.updatedAt,
+  }
+}
 
-const INITIAL_ROUTES: ModelRoute[] = [
-  {
-    id: 'route-1',
-    name: 'global_litellm_router',
-    gatewayId: 'gateway-1',
-    gatewayName: 'LiteLLM_Router_1',
-    strategy: 'ROUND_ROBIN',
-    supportedModels: ['gpt-4o', 'llama-3-70b', 'mixtral-8x7b', 'claude-3-sonnet'],
-    enabled: true,
-    createdAt: '2026-06-11T08:00:00Z',
-    updatedAt: '2026-06-24T05:20:00Z',
-  },
-  {
-    id: 'route-2',
-    name: 'global_reasoning_router',
-    gatewayId: 'gateway-1',
-    gatewayName: 'LiteLLM_Router_1',
-    strategy: 'WEIGHTED_ROUND_ROBIN',
-    supportedModels: ['deepseek-r1', 'mixtral-8x7b', 'claude-3-opus'],
-    enabled: true,
-    createdAt: '2026-06-12T08:00:00Z',
-    updatedAt: '2026-06-24T04:30:00Z',
-  },
-  {
-    id: 'route-3',
-    name: 'global_code_router',
-    gatewayId: 'gateway-2',
-    gatewayName: 'LiteLLM_Router_2',
-    strategy: 'ROUND_ROBIN',
-    supportedModels: ['gpt-4.1', 'claude-3.7-sonnet', 'qwen2.5-coder'],
-    enabled: false,
-    createdAt: '2026-06-13T08:00:00Z',
-    updatedAt: '2026-06-23T11:10:00Z',
-  },
-  {
-    id: 'route-4',
-    name: 'global_chat_router',
-    gatewayId: 'gateway-3',
-    gatewayName: 'LiteLLM_Router_3',
-    strategy: 'RANDOM',
-    supportedModels: ['claude-3.5-sonnet', 'gemini-2.5-pro', 'gpt-4o-mini'],
-    enabled: false,
-    createdAt: '2026-06-14T08:00:00Z',
-    updatedAt: '2026-06-22T09:40:00Z',
-  },
-  {
-    id: 'route-5',
-    name: 'image_generation_router',
-    gatewayId: 'gateway-2',
-    gatewayName: 'LiteLLM_Router_2',
-    strategy: 'WEIGHTED_ROUND_ROBIN',
-    supportedModels: ['gpt-image-1', 'flux-1.1-pro', 'imagen-3'],
-    enabled: true,
-    createdAt: '2026-06-15T08:00:00Z',
-    updatedAt: '2026-06-24T03:15:00Z',
-  },
-  {
-    id: 'route-6',
-    name: 'embedding_router',
-    gatewayId: 'gateway-4',
-    gatewayName: 'LiteLLM_Router_4',
-    strategy: 'ROUND_ROBIN',
-    supportedModels: ['text-embedding-3-large', 'bge-m3'],
-    enabled: true,
-    createdAt: '2026-06-16T08:00:00Z',
-    updatedAt: '2026-06-24T02:45:00Z',
-  },
-  {
-    id: 'route-7',
-    name: 'china_region_router',
-    gatewayId: 'gateway-4',
-    gatewayName: 'LiteLLM_Router_4',
-    strategy: 'RANDOM',
-    supportedModels: ['qwen-max', 'deepseek-v3', 'glm-4-plus'],
-    enabled: true,
-    createdAt: '2026-06-17T08:00:00Z',
-    updatedAt: '2026-06-23T16:20:00Z',
-  },
-  {
-    id: 'route-8',
-    name: 'fallback_router',
-    gatewayId: 'gateway-3',
-    gatewayName: 'LiteLLM_Router_3',
-    strategy: 'ROUND_ROBIN',
-    supportedModels: ['gpt-4o-mini', 'claude-3-haiku', 'llama-3.1-8b'],
-    enabled: false,
-    createdAt: '2026-06-18T08:00:00Z',
-    updatedAt: '2026-06-21T07:00:00Z',
-  },
-  {
-    id: 'route-9',
-    name: 'document_analysis_router',
-    gatewayId: 'gateway-2',
-    gatewayName: 'LiteLLM_Router_2',
-    strategy: 'WEIGHTED_ROUND_ROBIN',
-    supportedModels: ['gemini-2.5-pro', 'claude-3.7-sonnet'],
-    enabled: true,
-    createdAt: '2026-06-19T08:00:00Z',
-    updatedAt: '2026-06-23T03:30:00Z',
-  },
-  {
-    id: 'route-10',
-    name: 'fast_response_router',
-    gatewayId: 'gateway-1',
-    gatewayName: 'LiteLLM_Router_1',
-    strategy: 'RANDOM',
-    supportedModels: ['gpt-4o-mini', 'gemini-2.0-flash'],
-    enabled: true,
-    createdAt: '2026-06-20T08:00:00Z',
-    updatedAt: '2026-06-24T01:00:00Z',
-  },
-  {
-    id: 'route-11',
-    name: 'batch_processing_router',
-    gatewayId: 'gateway-3',
-    gatewayName: 'LiteLLM_Router_3',
-    strategy: 'ROUND_ROBIN',
-    supportedModels: ['llama-3.1-70b', 'mixtral-8x7b'],
-    enabled: true,
-    createdAt: '2026-06-21T08:00:00Z',
-    updatedAt: '2026-06-23T05:40:00Z',
-  },
-  {
-    id: 'route-12',
-    name: 'sandbox_router',
-    gatewayId: 'gateway-4',
-    gatewayName: 'LiteLLM_Router_4',
-    strategy: 'RANDOM',
-    supportedModels: ['llama-3.1-8b', 'qwen2.5-7b'],
-    enabled: false,
-    createdAt: '2026-06-22T08:00:00Z',
-    updatedAt: '2026-06-22T08:00:00Z',
-  },
-]
+// The form draft maps back to the backend's create/update input shape.
+function toRouteInput(draft: ModelRouteDraft) {
+  return {
+    name: draft.name,
+    backendGatewayId: draft.gatewayId,
+    gatewayName: draft.gatewayName,
+    supportedModels: draft.supportedModels,
+    uiStrategy: draft.strategy,
+    enabled: draft.enabled,
+  }
+}
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const
 const STATUS_FILTER_OPTIONS = ['ALL', 'ENABLED', 'DISABLED'] as const
@@ -167,11 +75,25 @@ type RouteSortField = 'NAME' | 'GATEWAY' | 'STRATEGY' | 'MODELS' | 'STATUS'
 type SortDirection = 'ASC' | 'DESC'
 type RouteFilterKey = RouteSortField
 
-const routes = ref<ModelRoute[]>(INITIAL_ROUTES.map((route) => ({ ...route })))
+const { result, loading, refetch } = useQuery<ModelRoutesResult>(MODEL_ROUTES_QUERY)
+const routes = computed<ModelRoute[]>(() => (result.value?.modelRoutes ?? []).map(toUiRoute))
+
+// Gateway picker options come from the real model-gateway list (so a route can be
+// created even before any route references a gateway).
+const gatewaysResult = useQuery<{ modelGateways: { nodes: Array<{ id: string; name: string }> } }>(
+  MODEL_GATEWAYS_QUERY,
+  { page: { limit: 1000, offset: 0 } },
+)
+const GATEWAYS = computed<ModelRouteGatewayOption[]>(() =>
+  (gatewaysResult.result.value?.modelGateways?.nodes ?? []).map((gateway) => ({
+    id: gateway.id,
+    name: gateway.name,
+  })),
+)
+
 const selectedIds = ref<Set<string>>(new Set())
 const pageSize = ref<PageSize>(10)
 const currentPage = ref(1)
-const loading = ref(false)
 const formOpen = ref(false)
 const editingRoute = ref<ModelRoute | null>(null)
 const saving = ref(false)
@@ -187,8 +109,6 @@ const modelsFilter = ref('')
 const statusFilter = ref<'ALL' | 'ENABLED' | 'DISABLED'>('ALL')
 const filterMenuAnchor = ref<HTMLElement | null>(null)
 const filterMenuKey = ref<RouteFilterKey | null>(null)
-let nextRouteId = 13
-let refreshTimer: ReturnType<typeof setTimeout> | null = null
 
 const filteredRoutes = computed(() => {
   const nameKeyword = nameFilter.value.trim().toLocaleLowerCase()
@@ -263,10 +183,6 @@ const deleteDialogBody = computed(() => {
   return locale.t('modelRoute.confirm.deleteBody').replace('{name}', target?.name ?? '')
 })
 
-onBeforeUnmount(() => {
-  if (refreshTimer) clearTimeout(refreshTimer)
-})
-
 function toggleSelect(id: string, checked: boolean) {
   const next = new Set(selectedIds.value)
   if (checked) next.add(id)
@@ -299,41 +215,49 @@ function closeForm() {
   editingRoute.value = null
 }
 
-function submitRoute(draft: ModelRouteDraft) {
+async function submitRoute(draft: ModelRouteDraft) {
   if (saving.value) return
+  const editing = editingRoute.value
   saving.value = true
-  const now = new Date().toISOString()
-  if (editingRoute.value) {
-    const id = editingRoute.value.id
-    routes.value = routes.value.map((route) =>
-      route.id === id ? { ...route, ...draft, updatedAt: now } : route,
-    )
-    toast.success(locale.t('modelRoute.toast.updated'))
-  } else {
-    routes.value = [
-      {
-        id: `route-${nextRouteId++}`,
-        ...draft,
-        createdAt: now,
-        updatedAt: now,
-      },
-      ...routes.value,
-    ]
-    currentPage.value = 1
-    toast.success(locale.t('modelRoute.toast.created'))
+  try {
+    if (editing) {
+      await apolloClient.mutate<UpdateModelRouteResult, UpdateModelRouteVars>({
+        mutation: UPDATE_MODEL_ROUTE,
+        variables: { id: editing.id, input: toRouteInput(draft) },
+      })
+      toast.success(locale.t('modelRoute.toast.updated'))
+    } else {
+      await apolloClient.mutate<CreateModelRouteResult, CreateModelRouteVars>({
+        mutation: CREATE_MODEL_ROUTE,
+        variables: { input: toRouteInput(draft) },
+      })
+      currentPage.value = 1
+      toast.success(locale.t('modelRoute.toast.created'))
+    }
+    formOpen.value = false
+    editingRoute.value = null
+    await refetch()
+  } catch (error) {
+    toast.error(graphqlErrorMessage(error, locale.t('modelRoute.toast.actionFailed')))
+  } finally {
+    saving.value = false
   }
-  saving.value = false
-  formOpen.value = false
-  editingRoute.value = null
 }
 
-function changeStrategy(route: ModelRoute, value: string) {
+async function changeStrategy(route: ModelRoute, value: string) {
   const strategy = value as ModelRouteStrategy
   if (!MODEL_ROUTE_STRATEGIES.includes(strategy)) return
-  routes.value = routes.value.map((item) =>
-    item.id === route.id ? { ...item, strategy, updatedAt: new Date().toISOString() } : item,
-  )
-  toast.success(locale.t('modelRoute.toast.strategyUpdated').replace('{name}', route.name))
+  if (strategy === route.strategy) return
+  try {
+    await apolloClient.mutate<UpdateModelRouteResult, UpdateModelRouteVars>({
+      mutation: UPDATE_MODEL_ROUTE,
+      variables: { id: route.id, input: { uiStrategy: strategy } },
+    })
+    toast.success(locale.t('modelRoute.toast.strategyUpdated').replace('{name}', route.name))
+    await refetch()
+  } catch (error) {
+    toast.error(graphqlErrorMessage(error, locale.t('modelRoute.toast.actionFailed')))
+  }
 }
 
 function openStrategyMenu(route: ModelRoute, event: MouseEvent) {
@@ -348,9 +272,10 @@ function closeStrategyMenu() {
 }
 
 function chooseStrategy(strategy: ModelRouteStrategy) {
-  if (!strategyMenuTarget.value) return
-  changeStrategy(strategyMenuTarget.value, strategy)
+  const target = strategyMenuTarget.value
+  if (!target) return
   closeStrategyMenu()
+  void changeStrategy(target, strategy)
 }
 
 function sortStateFor(field: RouteSortField): 'none' | 'ascending' | 'descending' {
@@ -425,20 +350,35 @@ function clearActiveFilter() {
   closeFilterMenu()
 }
 
-function setEnabled(ids: string[], enabled: boolean) {
-  const idSet = new Set(ids)
-  routes.value = routes.value.map((route) =>
-    idSet.has(route.id) ? { ...route, enabled, updatedAt: new Date().toISOString() } : route,
+async function setEnabled(ids: string[], enabled: boolean) {
+  if (ids.length === 0) return
+  const outcomes = await Promise.allSettled(
+    ids.map((id) =>
+      apolloClient.mutate<SetModelRouteEnabledResult, SetModelRouteEnabledVars>({
+        mutation: SET_MODEL_ROUTE_ENABLED,
+        variables: { id, enabled },
+      }),
+    ),
   )
-  toast.success(
-    locale
-      .t(enabled ? 'modelRoute.toast.enabled' : 'modelRoute.toast.disabled')
-      .replace('{count}', String(ids.length)),
+  const ok = outcomes.filter((outcome) => outcome.status === 'fulfilled').length
+  const failure = outcomes.find(
+    (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected',
   )
+  if (ok > 0) {
+    toast.success(
+      locale
+        .t(enabled ? 'modelRoute.toast.enabled' : 'modelRoute.toast.disabled')
+        .replace('{count}', String(ok)),
+    )
+  }
+  if (failure) {
+    toast.error(graphqlErrorMessage(failure.reason, locale.t('modelRoute.toast.actionFailed')))
+  }
+  await refetch()
 }
 
 function toggleEnabled(route: ModelRoute) {
-  setEnabled([route.id], !route.enabled)
+  void setEnabled([route.id], !route.enabled)
 }
 
 function performBatch(action: BatchAction, close: () => void) {
@@ -449,8 +389,9 @@ function performBatch(action: BatchAction, close: () => void) {
     pendingDeleteIds.value = ids
     return
   }
-  setEnabled(ids, action === 'enable')
-  selectedIds.value = new Set()
+  void setEnabled(ids, action === 'enable').then(() => {
+    selectedIds.value = new Set()
+  })
 }
 
 function requestDelete(route: ModelRoute) {
@@ -461,28 +402,45 @@ function closeDelete() {
   pendingDeleteIds.value = []
 }
 
-function confirmDelete() {
-  const ids = new Set(pendingDeleteIds.value)
-  const count = ids.size
-  routes.value = routes.value.filter((route) => !ids.has(route.id))
-  selectedIds.value = new Set([...selectedIds.value].filter((id) => !ids.has(id)))
+async function confirmDelete() {
+  const ids = [...pendingDeleteIds.value]
   pendingDeleteIds.value = []
+  if (ids.length === 0) return
+  const outcomes = await Promise.allSettled(
+    ids.map((id) =>
+      apolloClient.mutate<DeleteModelRouteResult, DeleteModelRouteVars>({
+        mutation: DELETE_MODEL_ROUTE,
+        variables: { id },
+      }),
+    ),
+  )
+  const deletedIds = ids.filter((_, index) => outcomes[index].status === 'fulfilled')
+  const failures = outcomes.filter(
+    (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected',
+  )
+  if (deletedIds.length > 0) {
+    toast.success(locale.t('modelRoute.toast.deleted').replace('{count}', String(deletedIds.length)))
+  }
+  if (failures.length > 0) {
+    toast.error(graphqlErrorMessage(failures[0].reason, locale.t('modelRoute.toast.actionFailed')))
+  }
+  selectedIds.value = new Set([...selectedIds.value].filter((id) => !deletedIds.includes(id)))
+  await refetch()
   if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
-  toast.success(locale.t('modelRoute.toast.deleted').replace('{count}', String(count)))
 }
 
 function manageGateway(route: ModelRoute) {
   toast.info(locale.t('modelRoute.toast.manageGateway').replace('{name}', route.gatewayName))
 }
 
-function refreshRoutes() {
+async function refreshRoutes() {
   if (loading.value) return
-  loading.value = true
-  if (refreshTimer) clearTimeout(refreshTimer)
-  refreshTimer = setTimeout(() => {
-    loading.value = false
+  try {
+    await refetch()
     toast.success(locale.t('modelRoute.toast.refreshed'))
-  }, 500)
+  } catch (error) {
+    toast.error(graphqlErrorMessage(error, locale.t('modelRoute.toast.actionFailed')))
+  }
 }
 
 function onPageSizeChange(event: Event) {
