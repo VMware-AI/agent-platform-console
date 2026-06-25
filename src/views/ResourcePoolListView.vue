@@ -2,10 +2,11 @@
 /**
  * Resource Pool Access view (`/platform/resources`).
  *
- * Mirrors AgentListView's grid + pager architecture. Row actions + toolbar
- * "接入资源池" button all hit real GraphQL mutations — the schema is
- * served by `SchemaLink` from in-memory fixtures, so the mutations
- * mutate the module-level store and the next query reflects the change.
+ * Mirrors AgentListView's grid + pager architecture. The list loads via
+ * `useQuery(RESOURCE_POOLS_QUERY)` and row actions + the toolbar "接入资源池"
+ * button run real `useMutation`s against the backend GraphQL endpoint (`/query`,
+ * via Apollo `apolloClient`); after each mutation `refetch()` re-pulls the list
+ * so the grid stays fresh.
  *
  * Per spec:
  *  - 6 visible columns (no esxi / vm counts)

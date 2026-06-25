@@ -4,9 +4,9 @@
  *
  * Renders the global OvaTemplateFamily directory as a card grid. Each
  * family has multiple versions; selecting "创建智能体" opens a deploy
- * dialog where the user picks a specific version, a target resource
- * pool, a model gateway, an existing or new virtual key, and the
- * run-as username/password.
+ * dialog where the user picks a specific version, a target resource pool,
+ * and a vSphere placement pool. The backend creates + provisions the agent
+ * and issues its gateway key, whose secret is shown once after deploy.
  */
 import { computed, ref } from 'vue'
 import { useMutation, useQuery } from '@vue/apollo-composable'
@@ -19,6 +19,7 @@ import {
   DEPLOY_AGENT_MUTATION,
 } from '@/api/graphql/queries/ovaTemplates'
 import { RESOURCE_POOLS_QUERY } from '@/api/graphql/queries/resourcePools'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
 import type {
   AgentType,
   OvaTemplateFamily,
@@ -146,7 +147,7 @@ const summaryText = computed(() => {
 })
 
 /* ---- Create template ---- */
-const { mutate: createMutate, loading: creating } = useMutation<CreateOvaTemplateFamilyPayload, CreateOvaTemplateFamilyVars>(
+const { mutate: createMutate, loading: creating } = useMutation<{ createOvaTemplateFamily: CreateOvaTemplateFamilyPayload }, CreateOvaTemplateFamilyVars>(
   CREATE_OVA_TEMPLATE_FAMILY_MUTATION,
 )
 const createDialogOpen = ref(false)
@@ -159,7 +160,7 @@ function closeCreateDialog() {
 async function onSubmitCreate(payload: CreateOvaTemplateFamilyInput) {
   try {
     const r = await createMutate({ input: payload })
-    const fam = r?.data?.family
+    const fam = r?.data?.createOvaTemplateFamily?.family
     if (fam) {
       toast.success(
         locale.t('marketplace.toast.createFamilyOk').replace('{name}', fam.name),
@@ -171,19 +172,12 @@ async function onSubmitCreate(payload: CreateOvaTemplateFamilyInput) {
   } catch (err) {
      
     console.error('[marketplace] create failed', err)
-    const code = (err as { graphQLErrors?: Array<{ extensions?: { code?: string } }> })?.graphQLErrors?.[0]?.extensions?.code
-    if (code === 'OVA_NAME_TAKEN') {
-      toast.error(locale.t('marketplace.form.error.nameTaken'))
-    } else if (code === 'OVA_IDENTIFIER_FORMAT') {
-      toast.error(locale.t('marketplace.form.error.ovaIdentifierFormat'))
-    } else {
-      toast.error(locale.t('marketplace.toast.createFamilyFail'))
-    }
+    toast.error(graphqlErrorMessage(err, locale.t('marketplace.toast.createFamilyFail')))
   }
 }
 
 /* ---- Deploy agent ---- */
-const { mutate: deployMutate, loading: deploying } = useMutation<DeployAgentPayload, DeployAgentVars>(
+const { mutate: deployMutate, loading: deploying } = useMutation<{ deployAgent: DeployAgentPayload }, DeployAgentVars>(
   DEPLOY_AGENT_MUTATION,
 )
 const deployDialogOpen = ref(false)
@@ -211,7 +205,7 @@ function closeDeployDialog() {
 async function onSubmitDeploy(payload: DeployAgentInput) {
   try {
     const r = await deployMutate({ input: payload })
-    const result = r?.data
+    const result = r?.data?.deployAgent
     if (result?.agent) {
       const { agent, virtualKeySecret } = result
       toast.success(
@@ -228,17 +222,7 @@ async function onSubmitDeploy(payload: DeployAgentInput) {
   } catch (err) {
 
     console.error('[marketplace] deploy failed', err)
-    const code = (err as { graphQLErrors?: Array<{ extensions?: { code?: string } }> })?.graphQLErrors?.[0]?.extensions?.code
-    if (code === 'DEPLOY_FAILED') {
-      const msg = (err as { graphQLErrors?: Array<{ message?: string }> })?.graphQLErrors?.[0]?.message ?? ''
-      if (msg.includes('用户名已被占用')) {
-        toast.error(locale.t('marketplace.deploy.error.usernameTaken'))
-      } else {
-        toast.error(msg || locale.t('marketplace.toast.deployFail'))
-      }
-    } else {
-      toast.error(locale.t('marketplace.toast.deployFail'))
-    }
+    toast.error(graphqlErrorMessage(err, locale.t('marketplace.toast.deployFail')))
   }
 }
 

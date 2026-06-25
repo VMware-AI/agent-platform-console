@@ -24,7 +24,9 @@ const router = createRouter({
         { path: 'agents/marketplace', name: 'agents.marketplace', component: () => import('@/views/AgentMarketplaceView.vue'), meta: { admin: true } },
 
         // 模型网关配置
-        { path: 'model-gateway/route', name: 'mg.route', component: () => import('@/views/ModelRouteView.vue') },
+        // 模型路由 is admin-only: modelRoutes CRUD is @hasRole(any: [admin]),
+        // so guard the route like the marketplace (else a non-admin hits a dead page).
+        { path: 'model-gateway/route', name: 'mg.route', component: () => import('@/views/ModelRouteView.vue'), meta: { admin: true } },
         { path: 'model-gateway/key',   name: 'mg.key',   component: () => import('@/views/VirtualKeyView.vue') },
         { path: 'model-gateway/policy', name: 'mg.policy', component: () => import('@/views/RateLimitPolicyView.vue') },
 

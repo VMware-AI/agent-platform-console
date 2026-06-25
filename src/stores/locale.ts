@@ -538,7 +538,6 @@ const STRINGS: Dict = {
   'marketplace.form.submit':        { zh: '提交',             en: 'Submit' },
   'marketplace.form.cancel':        { zh: '取消',             en: 'Cancel' },
   'marketplace.form.error.name':     { zh: '名称不能为空', en: 'Name is required' },
-  'marketplace.form.error.nameTaken':{ zh: '名称已存在',  en: 'Name already exists' },
   'marketplace.form.error.version':     { zh: '版本号不能为空', en: 'Version is required' },
   'marketplace.form.error.ovaIdentifier':{ zh: 'OVA 标识符不能为空', en: 'OVA identifier is required' },
   'marketplace.form.error.ovaIdentifierFormat':{ zh: '标识符只能包含字母、数字、连字符、下划线和点', en: 'Identifier may only contain letters, digits, hyphens, underscores and dots' },
@@ -565,7 +564,6 @@ const STRINGS: Dict = {
   'marketplace.deploy.error.pool':{ zh: '请选择目标资源池', en: 'Please select a resource pool' },
   'marketplace.deploy.error.name':{ zh: '请输入智能体名称', en: 'Agent name is required' },
   'marketplace.deploy.error.maxBudget':{ zh: '预算上限须为非负数字', en: 'Budget cap must be a non-negative number' },
-  'marketplace.deploy.error.usernameTaken':{ zh: '运行账户用户名已被占用', en: 'Username is taken' },
 
   // Model routing
   'modelRoute.title': { zh: '模型路由配置', en: 'Model Route Configuration' },
