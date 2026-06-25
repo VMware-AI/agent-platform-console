@@ -9,7 +9,7 @@ import type { AccountUser, Role } from '@/api/graphql/types'
 import { CONNECTION_FROM_GQL } from '@/api/graphql/types'
 import '@/components/icons'
 
-const props = defineProps<{
+defineProps<{
   open: boolean
   role: Role | null
   users: AccountUser[]

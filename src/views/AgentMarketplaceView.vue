@@ -51,8 +51,7 @@ const nameKeyword = ref('')
 const typeFilter = ref<AgentType | 'all'>('all')
 const typeFilterAnchor = ref<HTMLElement | null>(null)
 const currentPage = ref(1)
-const PAGE_SIZE_OPTIONS = [6, 12, 18, 24] as const
-type PageSize = (typeof PAGE_SIZE_OPTIONS)[number]
+type PageSize = 6 | 12 | 18 | 24
 const pageSize = ref<PageSize>(6)
 
 const filter = computed<OvaTemplateFamilyFilter | null>(() => {
@@ -194,7 +193,7 @@ const deployingTemplate = ref<OvaTemplateFamily | null>(null)
 const secretDialogOpen = ref(false)
 const issuedSecret = ref('')
 
-function onViewDetails(_t: OvaTemplateFamily) {
+function onViewDetails() {
   toast.info(locale.t('marketplace.toast.viewPlaceholder'))
 }
 function onCreateAgent(t: OvaTemplateFamily) {
@@ -465,7 +464,7 @@ const typeFilterLabel = computed(() => {
               </select>
             </cds-select>
             <div class="tpl-actions-buttons">
-              <cds-button action="outline" @click="onViewDetails(tpl)">
+              <cds-button action="outline" @click="onViewDetails()">
                 {{ locale.t('marketplace.card.action.view') }}
               </cds-button>
               <cds-button action="outline" status="primary" @click="onCreateAgent(tpl)">

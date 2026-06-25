@@ -27,7 +27,6 @@ import type {
   Role,
   RolesQueryResult,
   ToggleUserEnabledPayload,
-  UserConnection,
   UserFilter,
   UsersQueryResult,
   UserSort,

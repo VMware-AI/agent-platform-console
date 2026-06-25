@@ -214,7 +214,7 @@ function syncBadgeText(p: ResourcePool): string {
 const { mutate: createPoolMutate, loading: creating } = useMutation<{
   createResourcePool: CreateResourcePoolPayload
 }, CreateResourcePoolVars>(CREATE_RESOURCE_POOL_MUTATION)
-const { mutate: updatePoolMutate, loading: updating } = useMutation<{
+const { mutate: updatePoolMutate } = useMutation<{
   updateResourcePool: UpdateResourcePoolPayload
 }, UpdateResourcePoolVars>(UPDATE_RESOURCE_POOL_MUTATION)
 const { mutate: deletePoolMutate, loading: deleting } = useMutation<{
@@ -242,16 +242,22 @@ function closeCreateDialog() {
   editingPool.value = null
 }
 
-async function onSubmit(payload: { mode: 'create' | 'update'; input: any }) {
+async function onSubmit(payload: {
+  mode: 'create' | 'update'
+  input: CreateResourcePoolVars['input'] | UpdateResourcePoolVars['input']
+}) {
   try {
     if (payload.mode === 'create') {
-      const r = await createPoolMutate({ input: payload.input })
+      const r = await createPoolMutate({ input: payload.input as CreateResourcePoolVars['input'] })
       const pool = r?.data?.createResourcePool.pool
       if (pool) {
         toast.success(locale.t('resources.toast.createOk').replace('{name}', pool.name))
       }
     } else if (editingPool.value) {
-      const r = await updatePoolMutate({ id: editingPool.value.id, input: payload.input })
+      const r = await updatePoolMutate({
+        id: editingPool.value.id,
+        input: payload.input as UpdateResourcePoolVars['input'],
+      })
       const pool = r?.data?.updateResourcePool.pool
       if (pool) {
         toast.success(locale.t('resources.toast.updateOk').replace('{name}', pool.name))
