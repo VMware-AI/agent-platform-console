@@ -37,54 +37,6 @@ import '@/components/icons'
 const locale = useLocaleStore()
 const toast = useToast()
 
-// Local fallback dictionary for the agentConfig.* keys. The shared locale store
-// (src/stores/locale.ts) does not yet carry these keys and is off-limits for
-// this change; `locale.t` returns the raw key when an entry is missing, so this
-// view resolves agentConfig.* itself and falls back to the store for shared
-// keys. See the report for the canonical zh/en list to add to the store later.
-const FALLBACK: Record<string, { zh: string; en: string }> = {
-  'agentConfig.title': { zh: '智能体配置', en: 'Agent Config' },
-  'agentConfig.description': {
-    zh: '管理智能体配置及其挂载的 OKF 知识包，知识包将在部署时注入智能体所在的虚拟机。',
-    en: 'Manage agent configs and the OKF knowledge packs they mount; packs are injected into the agent VM at deploy.',
-  },
-  'agentConfig.action.refresh': { zh: '刷新', en: 'Refresh' },
-  'agentConfig.filter.agentType': { zh: '智能体类型', en: 'Agent Type' },
-  'agentConfig.filter.allTypes': { zh: '全部类型', en: 'All types' },
-  'agentConfig.list.title': { zh: '配置列表', en: 'Configs' },
-  'agentConfig.list.loading': { zh: '加载中…', en: 'Loading…' },
-  'agentConfig.list.empty': { zh: '暂无智能体配置', en: 'No agent configs' },
-  'agentConfig.list.error': { zh: '配置加载失败', en: 'Failed to load configs' },
-  'agentConfig.badge.default': { zh: '默认', en: 'Default' },
-  'agentConfig.detail.empty': { zh: '请选择左侧的一个配置以查看详情', en: 'Select a config to view details' },
-  'agentConfig.detail.agentType': { zh: '智能体类型', en: 'Agent Type' },
-  'agentConfig.detail.isDefault': { zh: '是否默认', en: 'Default' },
-  'agentConfig.detail.createdAt': { zh: '创建时间', en: 'Created At' },
-  'agentConfig.detail.yes': { zh: '是', en: 'Yes' },
-  'agentConfig.detail.no': { zh: '否', en: 'No' },
-  'agentConfig.knowledge.sectionTitle': { zh: '已挂载知识包', en: 'Mounted Knowledge Packs' },
-  'agentConfig.knowledge.edit': { zh: '编辑知识包', en: 'Edit Packs' },
-  'agentConfig.knowledge.empty': { zh: '尚未挂载任何知识包', en: 'No knowledge packs mounted' },
-  'agentConfig.knowledge.dialogTitle': { zh: '编辑挂载的知识包', en: 'Edit Mounted Knowledge Packs' },
-  'agentConfig.knowledge.searchPlaceholder': { zh: '搜索知识包名称', en: 'Search knowledge packs' },
-  'agentConfig.knowledge.loading': { zh: '正在加载知识包…', en: 'Loading knowledge packs…' },
-  'agentConfig.knowledge.emptyArtifacts': { zh: '暂无可用知识包', en: 'No knowledge packs available' },
-  'agentConfig.knowledge.selectedCount': { zh: '已选 {count} 个知识包', en: '{count} pack(s) selected' },
-  'agentConfig.knowledge.cancel': { zh: '取消', en: 'Cancel' },
-  'agentConfig.knowledge.save': { zh: '保存', en: 'Save' },
-  'agentConfig.toast.saved': { zh: '已更新挂载的知识包', en: 'Mounted knowledge packs updated' },
-  'agentConfig.toast.saveFailed': { zh: '保存知识包失败', en: 'Failed to update knowledge packs' },
-  'agentConfig.toast.refreshed': { zh: '配置列表已刷新', en: 'Configs refreshed' },
-  'agentConfig.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
-}
-
-// Resolve agentConfig.* from the local fallback, otherwise defer to the store.
-function tt(key: string): string {
-  const entry = FALLBACK[key]
-  if (entry) return entry[locale.locale]
-  return locale.t(key)
-}
-
 const ALL_TYPES = '__ALL__'
 const agentTypeFilter = ref<string>(ALL_TYPES)
 const selectedConfigId = ref<string | null>(null)
@@ -166,11 +118,11 @@ async function submitKnowledge(ids: string[]) {
       mutation: SET_AGENT_CONFIG_KNOWLEDGE,
       variables: { configId: config.id, knowledgeArtifactIds: ids },
     })
-    toast.success(tt('agentConfig.toast.saved'))
+    toast.success(locale.t('agentConfig.toast.saved'))
     dialogOpen.value = false
     await refetchConfigs()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('agentConfig.toast.saveFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('agentConfig.toast.saveFailed')))
   } finally {
     saving.value = false
   }
@@ -180,9 +132,9 @@ async function refresh() {
   if (configsLoading.value) return
   try {
     await refetchConfigs()
-    toast.success(tt('agentConfig.toast.refreshed'))
+    toast.success(locale.t('agentConfig.toast.refreshed'))
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('agentConfig.toast.refreshFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('agentConfig.toast.refreshFailed')))
   }
 }
 </script>
@@ -190,20 +142,20 @@ async function refresh() {
 <template>
   <section class="agent-config-page">
     <header class="page-head">
-      <h1 cds-text="title" class="heading">{{ tt('agentConfig.title') }}</h1>
-      <p cds-text="body" class="desc muted">{{ tt('agentConfig.description') }}</p>
+      <h1 cds-text="title" class="heading">{{ locale.t('agentConfig.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('agentConfig.description') }}</p>
     </header>
 
     <div class="content-card">
       <div class="toolbar">
         <cds-select control-width="shrink">
-          <label>{{ tt('agentConfig.filter.agentType') }}</label>
+          <label>{{ locale.t('agentConfig.filter.agentType') }}</label>
           <select
             :value="agentTypeFilter"
-            :aria-label="tt('agentConfig.filter.agentType')"
+            :aria-label="locale.t('agentConfig.filter.agentType')"
             @change="onAgentTypeChange"
           >
-            <option :value="ALL_TYPES">{{ tt('agentConfig.filter.allTypes') }}</option>
+            <option :value="ALL_TYPES">{{ locale.t('agentConfig.filter.allTypes') }}</option>
             <option v-for="type in agentTypes" :key="type" :value="type">{{ type }}</option>
           </select>
         </cds-select>
@@ -212,28 +164,28 @@ async function refresh() {
           action="ghost"
           class="refresh-button"
           :disabled="configsLoading"
-          :aria-label="tt('agentConfig.action.refresh')"
-          :title="tt('agentConfig.action.refresh')"
+          :aria-label="locale.t('agentConfig.action.refresh')"
+          :title="locale.t('agentConfig.action.refresh')"
           @click="refresh"
         >
           <cds-icon shape="refresh" size="md" :class="{ spinning: configsLoading }"></cds-icon>
-          <span>{{ tt('agentConfig.action.refresh') }}</span>
+          <span>{{ locale.t('agentConfig.action.refresh') }}</span>
         </cds-button>
       </div>
 
       <div class="master-detail">
         <!-- Master: config list -->
-        <aside class="list-panel" :aria-label="tt('agentConfig.list.title')">
-          <h2 cds-text="subsection" class="panel-title">{{ tt('agentConfig.list.title') }}</h2>
+        <aside class="list-panel" :aria-label="locale.t('agentConfig.list.title')">
+          <h2 cds-text="subsection" class="panel-title">{{ locale.t('agentConfig.list.title') }}</h2>
 
           <p v-if="configsLoading && configs.length === 0" class="panel-state muted">
-            {{ tt('agentConfig.list.loading') }}
+            {{ locale.t('agentConfig.list.loading') }}
           </p>
           <p v-else-if="configsError" class="panel-state error">
-            {{ tt('agentConfig.list.error') }}
+            {{ locale.t('agentConfig.list.error') }}
           </p>
           <p v-else-if="configs.length === 0" class="panel-state muted">
-            {{ tt('agentConfig.list.empty') }}
+            {{ locale.t('agentConfig.list.empty') }}
           </p>
 
           <ul v-else class="config-list">
@@ -249,7 +201,7 @@ async function refresh() {
                 <span class="config-meta">
                   <span class="config-type">{{ config.agentType }}</span>
                   <cds-badge v-if="config.isDefault" status="info" class="default-badge">
-                    {{ tt('agentConfig.badge.default') }}
+                    {{ locale.t('agentConfig.badge.default') }}
                   </cds-badge>
                 </span>
               </button>
@@ -261,30 +213,30 @@ async function refresh() {
         <div class="detail-panel">
           <div v-if="!selectedConfig" class="detail-empty">
             <cds-icon shape="cog" size="xl"></cds-icon>
-            <p cds-text="subsection">{{ tt('agentConfig.detail.empty') }}</p>
+            <p cds-text="subsection">{{ locale.t('agentConfig.detail.empty') }}</p>
           </div>
 
           <template v-else>
             <header class="detail-head">
               <h2 cds-text="section" class="detail-title">{{ selectedConfig.name }}</h2>
               <cds-badge v-if="selectedConfig.isDefault" status="info">
-                {{ tt('agentConfig.badge.default') }}
+                {{ locale.t('agentConfig.badge.default') }}
               </cds-badge>
             </header>
 
             <dl class="detail-grid">
               <div class="detail-row">
-                <dt>{{ tt('agentConfig.detail.agentType') }}</dt>
+                <dt>{{ locale.t('agentConfig.detail.agentType') }}</dt>
                 <dd>{{ selectedConfig.agentType }}</dd>
               </div>
               <div class="detail-row">
-                <dt>{{ tt('agentConfig.detail.isDefault') }}</dt>
+                <dt>{{ locale.t('agentConfig.detail.isDefault') }}</dt>
                 <dd>
-                  {{ selectedConfig.isDefault ? tt('agentConfig.detail.yes') : tt('agentConfig.detail.no') }}
+                  {{ selectedConfig.isDefault ? locale.t('agentConfig.detail.yes') : locale.t('agentConfig.detail.no') }}
                 </dd>
               </div>
               <div class="detail-row">
-                <dt>{{ tt('agentConfig.detail.createdAt') }}</dt>
+                <dt>{{ locale.t('agentConfig.detail.createdAt') }}</dt>
                 <dd>{{ selectedConfig.createdAt }}</dd>
               </div>
             </dl>
@@ -292,17 +244,17 @@ async function refresh() {
             <section class="knowledge-section">
               <div class="knowledge-head">
                 <h3 cds-text="subsection" class="knowledge-title">
-                  {{ tt('agentConfig.knowledge.sectionTitle') }}
+                  {{ locale.t('agentConfig.knowledge.sectionTitle') }}
                   <span class="knowledge-count muted">({{ selectedConfig.knowledge.length }})</span>
                 </h3>
                 <cds-button action="outline" size="sm" @click="openEditor">
                   <cds-icon shape="pencil" size="sm" aria-hidden="true"></cds-icon>
-                  {{ tt('agentConfig.knowledge.edit') }}
+                  {{ locale.t('agentConfig.knowledge.edit') }}
                 </cds-button>
               </div>
 
               <p v-if="selectedConfig.knowledge.length === 0" class="panel-state muted">
-                {{ tt('agentConfig.knowledge.empty') }}
+                {{ locale.t('agentConfig.knowledge.empty') }}
               </p>
               <ul v-else class="pack-list">
                 <li v-for="pack in selectedConfig.knowledge" :key="pack.id" class="pack-item">
@@ -323,7 +275,6 @@ async function refresh() {
       :artifacts="knowledgeArtifacts"
       :saving="saving"
       :artifacts-loading="artifactsLoading"
-      :tt="tt"
       @close="closeEditor"
       @submit="submitKnowledge"
     />

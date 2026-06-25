@@ -8,6 +8,7 @@
  * operator picks an as-yet-unmapped tier. Mirrors the UpstreamFormDialog card.
  */
 import { computed, reactive, watch } from 'vue'
+import { useLocaleStore } from '@/stores/locale'
 import {
   ROUTER_TIER_LEVELS,
   type RouterTierLevel,
@@ -23,9 +24,9 @@ const props = defineProps<{
   usedTiers: RouterTierLevel[]
   /** True while the parent's setRouterTier mutation is in flight. */
   saving?: boolean
-  /** Local fallback translator (upstreamRouter.* keys not in the locale store). */
-  tt: (key: string) => string
 }>()
+
+const locale = useLocaleStore()
 
 const emit = defineEmits<{
   (event: 'close'): void
@@ -85,47 +86,47 @@ function submit() {
         class="rt-backdrop"
         role="dialog"
         aria-modal="true"
-        :aria-label="tt(isEditing ? 'upstreamRouter.tier.dialog.editTitle' : 'upstreamRouter.tier.dialog.createTitle')"
+        :aria-label="locale.t(isEditing ? 'upstreamRouter.tier.dialog.editTitle' : 'upstreamRouter.tier.dialog.createTitle')"
         @click="onBackdropClick"
       >
         <div class="rt-card" @click.stop>
           <h2 cds-text="section" class="rt-title">
-            {{ tt(isEditing ? 'upstreamRouter.tier.dialog.editTitle' : 'upstreamRouter.tier.dialog.createTitle') }}
+            {{ locale.t(isEditing ? 'upstreamRouter.tier.dialog.editTitle' : 'upstreamRouter.tier.dialog.createTitle') }}
           </h2>
 
           <form class="rt-form" @submit.prevent="submit">
             <label class="rt-field">
-              <span class="rt-label">{{ tt('upstreamRouter.tier.field.tier') }}</span>
+              <span class="rt-label">{{ locale.t('upstreamRouter.tier.field.tier') }}</span>
               <cds-select v-if="!isEditing">
-                <select v-model="form.tier" :aria-label="tt('upstreamRouter.tier.field.tier')">
+                <select v-model="form.tier" :aria-label="locale.t('upstreamRouter.tier.field.tier')">
                   <option v-for="level in availableTiers" :key="level" :value="level">
-                    {{ tt(`upstreamRouter.tierLevel.${level}`) }}
+                    {{ locale.t(`upstreamRouter.tierLevel.${level}`) }}
                   </option>
                 </select>
               </cds-select>
               <strong v-else class="rt-tier-locked">
-                {{ tt(`upstreamRouter.tierLevel.${form.tier}`) }}
+                {{ locale.t(`upstreamRouter.tierLevel.${form.tier}`) }}
               </strong>
             </label>
 
             <label class="rt-field">
-              <span class="rt-label">{{ tt('upstreamRouter.tier.field.modelAlias') }}</span>
+              <span class="rt-label">{{ locale.t('upstreamRouter.tier.field.modelAlias') }}</span>
               <cds-input>
                 <input
                   v-model="form.modelAlias"
                   type="text"
                   autocomplete="off"
-                  :placeholder="tt('upstreamRouter.tier.field.modelAliasPlaceholder')"
-                  :aria-label="tt('upstreamRouter.tier.field.modelAlias')"
+                  :placeholder="locale.t('upstreamRouter.tier.field.modelAliasPlaceholder')"
+                  :aria-label="locale.t('upstreamRouter.tier.field.modelAlias')"
                 />
               </cds-input>
-              <small class="rt-hint muted">{{ tt('upstreamRouter.tier.field.modelAliasHint') }}</small>
+              <small class="rt-hint muted">{{ locale.t('upstreamRouter.tier.field.modelAliasHint') }}</small>
             </label>
           </form>
 
           <div class="rt-actions">
             <cds-button type="button" action="outline" :disabled="saving" @click="close">
-              {{ tt('upstreamRouter.action.cancel') }}
+              {{ locale.t('upstreamRouter.action.cancel') }}
             </cds-button>
             <cds-button
               type="button"
@@ -135,7 +136,7 @@ function submit() {
               :disabled="!canSubmit"
               @click="submit"
             >
-              {{ tt('upstreamRouter.action.save') }}
+              {{ locale.t('upstreamRouter.action.save') }}
             </cds-button>
           </div>
         </div>

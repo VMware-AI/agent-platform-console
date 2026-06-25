@@ -54,72 +54,10 @@ import '@/components/icons'
 const locale = useLocaleStore()
 const toast = useToast()
 
-// Self-contained i18n. The shared locale store does not carry customRole.* and
-// is off-limits for this change; `locale.t` echoes the raw key when missing, so
-// this view resolves customRole.* itself and defers to the store for the rest.
-// See the report for the canonical zh/en list to fold into the store later.
-const FALLBACK: Record<string, { zh: string; en: string }> = {
-  'customRole.title': { zh: '自定义角色与权限', en: 'Custom Roles & Permissions' },
-  'customRole.description': {
-    zh: '管理细粒度的自定义角色及其权限矩阵。系统内置角色只读；自定义角色可创建、删除并按权限键勾选授权。',
-    en: 'Manage fine-grained custom roles and their permission matrix. Built-in system roles are read-only; custom roles can be created, deleted, and granted permissions by key.',
-  },
-  'customRole.action.refresh': { zh: '刷新', en: 'Refresh' },
-  'customRole.action.create': { zh: '创建角色', en: 'Create Role' },
-  'customRole.action.cancel': { zh: '取消', en: 'Cancel' },
-  'customRole.action.delete': { zh: '删除', en: 'Delete' },
-  'customRole.action.save': { zh: '保存', en: 'Save' },
-  'customRole.list.title': { zh: '角色列表', en: 'Roles' },
-  'customRole.list.loading': { zh: '加载中…', en: 'Loading…' },
-  'customRole.list.empty': { zh: '暂无自定义角色', en: 'No custom roles' },
-  'customRole.list.error': { zh: '角色加载失败', en: 'Failed to load roles' },
-  'customRole.badge.system': { zh: '系统', en: 'System' },
-  'customRole.detail.empty': { zh: '请选择左侧的一个角色以编辑权限', en: 'Select a role to edit its permissions' },
-  'customRole.detail.createdAt': { zh: '创建时间', en: 'Created At' },
-  'customRole.detail.permissionCount': { zh: '已授权 {count} 项权限', en: '{count} permission(s) granted' },
-  'customRole.matrix.title': { zh: '权限矩阵', en: 'Permission Matrix' },
-  'customRole.matrix.loading': { zh: '正在加载权限…', en: 'Loading permissions…' },
-  'customRole.matrix.empty': { zh: '暂无可分配的权限', en: 'No permissions available' },
-  'customRole.matrix.searchPlaceholder': { zh: '搜索权限键', en: 'Search permission keys' },
-  'customRole.matrix.systemReadonly': { zh: '系统内置角色为只读，无法修改其权限。', en: 'Built-in system roles are read-only; their permissions cannot be changed.' },
-  'customRole.matrix.catalogUnavailable': {
-    zh: '无法读取完整权限目录（需管理员权限），仅显示各角色已使用的权限键。',
-    en: 'Full permission catalog unavailable (admin only); showing only keys already used by roles.',
-  },
-  'customRole.permission.add': { zh: '新增权限', en: 'Add Permission' },
-  'customRole.permission.addTitle': { zh: '定义权限', en: 'Define Permission' },
-  'customRole.permission.keyLabel': { zh: '权限键', en: 'Permission Key' },
-  'customRole.permission.keyPlaceholder': { zh: '例如 agent:deploy', en: 'e.g. agent:deploy' },
-  'customRole.permission.descLabel': { zh: '描述（可选）', en: 'Description (optional)' },
-  'customRole.permission.descPlaceholder': { zh: '简要说明该权限的用途', en: 'Briefly describe what it grants' },
-  'customRole.create.title': { zh: '创建自定义角色', en: 'Create Custom Role' },
-  'customRole.create.nameLabel': { zh: '角色名称', en: 'Role Name' },
-  'customRole.create.namePlaceholder': { zh: '输入角色名称', en: 'Enter a role name' },
-  'customRole.delete.title': { zh: '删除角色', en: 'Delete Role' },
-  'customRole.delete.message': { zh: '确定要删除角色「{name}」吗？此操作不可撤销。', en: 'Delete the role “{name}”? This cannot be undone.' },
-  'customRole.toast.created': { zh: '已创建角色', en: 'Role created' },
-  'customRole.toast.createFailed': { zh: '创建角色失败', en: 'Failed to create role' },
-  'customRole.toast.deleted': { zh: '已删除角色', en: 'Role deleted' },
-  'customRole.toast.deleteFailed': { zh: '删除角色失败', en: 'Failed to delete role' },
-  'customRole.toast.saved': { zh: '权限已保存', en: 'Permissions saved' },
-  'customRole.toast.saveFailed': { zh: '保存权限失败', en: 'Failed to save permissions' },
-  'customRole.toast.permissionAdded': { zh: '已定义权限', en: 'Permission defined' },
-  'customRole.toast.permissionFailed': { zh: '定义权限失败', en: 'Failed to define permission' },
-  'customRole.toast.refreshed': { zh: '已刷新', en: 'Refreshed' },
-  'customRole.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
-}
-
-// Resolve customRole.* from the local fallback, else defer to the store.
-function tt(key: string): string {
-  const entry = FALLBACK[key]
-  if (entry) return entry[locale.locale]
-  return locale.t(key)
-}
-
 function format(key: string, vars: Record<string, string>): string {
   return Object.entries(vars).reduce(
     (text, [name, value]) => text.replace(`{${name}}`, value),
-    tt(key),
+    locale.t(key),
   )
 }
 
@@ -275,11 +213,11 @@ async function createRole(name: string) {
       mutation: CREATE_CUSTOM_ROLE,
       variables: { input: { name } },
     })
-    toast.success(tt('customRole.toast.created'))
+    toast.success(locale.t('customRole.toast.created'))
     dialogMode.value = null
     await refetchRoles()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('customRole.toast.createFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('customRole.toast.createFailed')))
   } finally {
     dialogBusy.value = false
   }
@@ -294,10 +232,10 @@ async function addPermission(payload: { key: string; description: string }) {
       variables: { key: payload.key, description: payload.description || null },
       refetchQueries: [{ query: PERMISSIONS_QUERY }],
     })
-    toast.success(tt('customRole.toast.permissionAdded'))
+    toast.success(locale.t('customRole.toast.permissionAdded'))
     dialogMode.value = null
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('customRole.toast.permissionFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('customRole.toast.permissionFailed')))
   } finally {
     dialogBusy.value = false
   }
@@ -312,12 +250,12 @@ async function confirmDelete() {
       mutation: DELETE_CUSTOM_ROLE,
       variables: { id: role.id },
     })
-    toast.success(tt('customRole.toast.deleted'))
+    toast.success(locale.t('customRole.toast.deleted'))
     pendingDeleteId.value = null
     if (selectedRoleId.value === role.id) selectedRoleId.value = null
     await refetchRoles()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('customRole.toast.deleteFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('customRole.toast.deleteFailed')))
   } finally {
     deleting.value = false
   }
@@ -332,11 +270,11 @@ async function savePermissions() {
       mutation: SET_ROLE_PERMISSIONS,
       variables: { roleId: role.id, permissionKeys: [...pendingKeys.value] },
     })
-    toast.success(tt('customRole.toast.saved'))
+    toast.success(locale.t('customRole.toast.saved'))
     pendingKeys.value = null
     await refetchRoles()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('customRole.toast.saveFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('customRole.toast.saveFailed')))
   } finally {
     saving.value = false
   }
@@ -346,9 +284,9 @@ async function refresh() {
   if (rolesLoading.value) return
   try {
     await refetchRoles()
-    toast.success(tt('customRole.toast.refreshed'))
+    toast.success(locale.t('customRole.toast.refreshed'))
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('customRole.toast.refreshFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('customRole.toast.refreshFailed')))
   }
 }
 </script>
@@ -356,43 +294,43 @@ async function refresh() {
 <template>
   <section class="custom-role-page">
     <header class="page-head">
-      <h1 cds-text="title" class="heading">{{ tt('customRole.title') }}</h1>
-      <p cds-text="body" class="desc muted">{{ tt('customRole.description') }}</p>
+      <h1 cds-text="title" class="heading">{{ locale.t('customRole.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('customRole.description') }}</p>
     </header>
 
     <div class="content-card">
       <div class="toolbar">
         <cds-button action="outline" status="primary" @click="openCreate">
           <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
-          {{ tt('customRole.action.create') }}
+          {{ locale.t('customRole.action.create') }}
         </cds-button>
 
         <cds-button
           action="ghost"
           class="refresh-button"
           :disabled="rolesLoading"
-          :aria-label="tt('customRole.action.refresh')"
-          :title="tt('customRole.action.refresh')"
+          :aria-label="locale.t('customRole.action.refresh')"
+          :title="locale.t('customRole.action.refresh')"
           @click="refresh"
         >
           <cds-icon shape="refresh" size="md" :class="{ spinning: rolesLoading }"></cds-icon>
-          <span>{{ tt('customRole.action.refresh') }}</span>
+          <span>{{ locale.t('customRole.action.refresh') }}</span>
         </cds-button>
       </div>
 
       <div class="master-detail">
         <!-- Master: roles list -->
-        <aside class="list-panel" :aria-label="tt('customRole.list.title')">
-          <h2 cds-text="subsection" class="panel-title">{{ tt('customRole.list.title') }}</h2>
+        <aside class="list-panel" :aria-label="locale.t('customRole.list.title')">
+          <h2 cds-text="subsection" class="panel-title">{{ locale.t('customRole.list.title') }}</h2>
 
           <p v-if="rolesLoading && roles.length === 0" class="panel-state muted">
-            {{ tt('customRole.list.loading') }}
+            {{ locale.t('customRole.list.loading') }}
           </p>
           <p v-else-if="rolesError" class="panel-state error">
-            {{ tt('customRole.list.error') }}
+            {{ locale.t('customRole.list.error') }}
           </p>
           <p v-else-if="roles.length === 0" class="panel-state muted">
-            {{ tt('customRole.list.empty') }}
+            {{ locale.t('customRole.list.empty') }}
           </p>
 
           <ul v-else class="role-list">
@@ -407,7 +345,7 @@ async function refresh() {
                 <span class="role-name" :title="role.name">{{ role.name }}</span>
                 <span class="role-meta">
                   <cds-badge v-if="role.isSystem" status="info" class="system-badge">
-                    {{ tt('customRole.badge.system') }}
+                    {{ locale.t('customRole.badge.system') }}
                   </cds-badge>
                   <span class="role-count muted">{{ role.permissions.length }}</span>
                 </span>
@@ -417,8 +355,8 @@ async function refresh() {
                 action="ghost"
                 size="sm"
                 class="role-delete"
-                :aria-label="tt('customRole.action.delete')"
-                :title="tt('customRole.action.delete')"
+                :aria-label="locale.t('customRole.action.delete')"
+                :title="locale.t('customRole.action.delete')"
                 @click="requestDelete(role.id)"
               >
                 <cds-icon shape="trash" size="sm" aria-hidden="true"></cds-icon>
@@ -431,32 +369,32 @@ async function refresh() {
         <div class="detail-panel">
           <div v-if="!selectedRole" class="detail-empty">
             <cds-icon shape="shield-check" size="xl"></cds-icon>
-            <p cds-text="subsection">{{ tt('customRole.detail.empty') }}</p>
+            <p cds-text="subsection">{{ locale.t('customRole.detail.empty') }}</p>
           </div>
 
           <template v-else>
             <header class="detail-head">
               <h2 cds-text="section" class="detail-title">{{ selectedRole.name }}</h2>
               <cds-badge v-if="selectedRole.isSystem" status="info">
-                {{ tt('customRole.badge.system') }}
+                {{ locale.t('customRole.badge.system') }}
               </cds-badge>
             </header>
 
             <p class="detail-sub muted">
               {{ format('customRole.detail.permissionCount', { count: String(grantedCount) }) }}
-              · {{ tt('customRole.detail.createdAt') }}: {{ selectedRole.createdAt }}
+              · {{ locale.t('customRole.detail.createdAt') }}: {{ selectedRole.createdAt }}
             </p>
 
             <cds-alert v-if="isSystemRole" status="info" class="matrix-alert">
-              {{ tt('customRole.matrix.systemReadonly') }}
+              {{ locale.t('customRole.matrix.systemReadonly') }}
             </cds-alert>
             <cds-alert v-else-if="permsError" status="warning" class="matrix-alert">
-              {{ tt('customRole.matrix.catalogUnavailable') }}
+              {{ locale.t('customRole.matrix.catalogUnavailable') }}
             </cds-alert>
 
             <section class="matrix-section">
               <div class="matrix-head">
-                <h3 cds-text="subsection" class="matrix-title">{{ tt('customRole.matrix.title') }}</h3>
+                <h3 cds-text="subsection" class="matrix-title">{{ locale.t('customRole.matrix.title') }}</h3>
                 <div class="matrix-actions">
                   <cds-button
                     v-if="canDefinePermission"
@@ -465,7 +403,7 @@ async function refresh() {
                     @click="openAddPermission"
                   >
                     <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
-                    {{ tt('customRole.permission.add') }}
+                    {{ locale.t('customRole.permission.add') }}
                   </cds-button>
                 </div>
               </div>
@@ -475,16 +413,16 @@ async function refresh() {
                   v-model="matrixSearch"
                   type="search"
                   autocomplete="off"
-                  :placeholder="tt('customRole.matrix.searchPlaceholder')"
-                  :aria-label="tt('customRole.matrix.searchPlaceholder')"
+                  :placeholder="locale.t('customRole.matrix.searchPlaceholder')"
+                  :aria-label="locale.t('customRole.matrix.searchPlaceholder')"
                 />
               </cds-input>
 
               <p v-if="permsLoading && matrixKeys.length === 0" class="panel-state muted">
-                {{ tt('customRole.matrix.loading') }}
+                {{ locale.t('customRole.matrix.loading') }}
               </p>
               <p v-else-if="filteredMatrixKeys.length === 0" class="panel-state muted">
-                {{ tt('customRole.matrix.empty') }}
+                {{ locale.t('customRole.matrix.empty') }}
               </p>
 
               <ul v-else class="matrix-list">
@@ -508,7 +446,7 @@ async function refresh() {
 
               <div v-if="matrixEditable" class="matrix-footer">
                 <cds-button action="outline" :disabled="!isDirty || saving" @click="resetEdits">
-                  {{ tt('customRole.action.cancel') }}
+                  {{ locale.t('customRole.action.cancel') }}
                 </cds-button>
                 <cds-button
                   status="primary"
@@ -516,7 +454,7 @@ async function refresh() {
                   :disabled="!isDirty || saving"
                   @click="savePermissions"
                 >
-                  {{ tt('customRole.action.save') }}
+                  {{ locale.t('customRole.action.save') }}
                 </cds-button>
               </div>
             </section>
@@ -530,7 +468,6 @@ async function refresh() {
       :mode="dialogMode"
       :busy="dialogBusy"
       :can-define-permission="canDefinePermission"
-      :tt="tt"
       @close="closeDialog"
       @create-role="createRole"
       @add-permission="addPermission"
@@ -544,7 +481,7 @@ async function refresh() {
       @closeChange="cancelDelete"
     >
       <cds-modal-header>
-        <h2 cds-text="title" class="modal-title">{{ tt('customRole.delete.title') }}</h2>
+        <h2 cds-text="title" class="modal-title">{{ locale.t('customRole.delete.title') }}</h2>
       </cds-modal-header>
       <cds-modal-content>
         <cds-alert status="danger">
@@ -553,7 +490,7 @@ async function refresh() {
       </cds-modal-content>
       <cds-modal-actions>
         <cds-button action="outline" :disabled="deleting" @click="cancelDelete">
-          {{ tt('customRole.action.cancel') }}
+          {{ locale.t('customRole.action.cancel') }}
         </cds-button>
         <cds-button
           status="danger"
@@ -561,7 +498,7 @@ async function refresh() {
           :disabled="deleting"
           @click="confirmDelete"
         >
-          {{ tt('customRole.action.delete') }}
+          {{ locale.t('customRole.action.delete') }}
         </cds-button>
       </cds-modal-actions>
     </cds-modal>

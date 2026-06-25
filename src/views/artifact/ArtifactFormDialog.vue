@@ -13,6 +13,7 @@
  * kind=package. Mirrors the AgentConfigKnowledgeDialog backdrop/card pattern.
  */
 import { computed, reactive, ref, watch } from 'vue'
+import { useLocaleStore } from '@/stores/locale'
 import {
   ARTIFACT_KINDS,
   type ArtifactKind,
@@ -31,9 +32,9 @@ const props = defineProps<{
   saving?: boolean
   /** Dialog heading. */
   title: string
-  /** Local fallback translator. */
-  tt: (key: string) => string
 }>()
+
+const locale = useLocaleStore()
 
 const emit = defineEmits<{
   (event: 'close'): void
@@ -122,107 +123,107 @@ function submit() {
 
           <form class="af-form" @submit.prevent="submit">
             <label class="af-field">
-              <span class="af-label">{{ tt('artifacts.form.name') }} *</span>
+              <span class="af-label">{{ locale.t('artifacts.form.name') }} *</span>
               <cds-input>
                 <input
                   v-model="form.name"
                   type="text"
                   autocomplete="off"
                   :disabled="lockIdentity || saving"
-                  :aria-label="tt('artifacts.form.name')"
-                  :placeholder="tt('artifacts.form.namePlaceholder')"
+                  :aria-label="locale.t('artifacts.form.name')"
+                  :placeholder="locale.t('artifacts.form.namePlaceholder')"
                 />
               </cds-input>
               <small v-if="submitted && !nameValid" class="af-error">
-                {{ tt('artifacts.form.required') }}
+                {{ locale.t('artifacts.form.required') }}
               </small>
             </label>
 
             <div class="af-row">
               <label class="af-field">
-                <span class="af-label">{{ tt('artifacts.form.kind') }} *</span>
+                <span class="af-label">{{ locale.t('artifacts.form.kind') }} *</span>
                 <cds-select>
                   <select
                     v-model="form.kind"
                     :disabled="lockIdentity || saving"
-                    :aria-label="tt('artifacts.form.kind')"
+                    :aria-label="locale.t('artifacts.form.kind')"
                   >
                     <option v-for="k in ARTIFACT_KINDS" :key="k" :value="k">
-                      {{ tt('artifacts.kind.' + k) }}
+                      {{ locale.t('artifacts.kind.' + k) }}
                     </option>
                   </select>
                 </cds-select>
               </label>
 
               <label class="af-field">
-                <span class="af-label">{{ tt('artifacts.form.version') }} *</span>
+                <span class="af-label">{{ locale.t('artifacts.form.version') }} *</span>
                 <cds-input>
                   <input
                     v-model="form.version"
                     type="text"
                     autocomplete="off"
                     :disabled="saving"
-                    :aria-label="tt('artifacts.form.version')"
-                    :placeholder="tt('artifacts.form.versionPlaceholder')"
+                    :aria-label="locale.t('artifacts.form.version')"
+                    :placeholder="locale.t('artifacts.form.versionPlaceholder')"
                   />
                 </cds-input>
                 <small v-if="submitted && !versionValid" class="af-error">
-                  {{ tt('artifacts.form.required') }}
+                  {{ locale.t('artifacts.form.required') }}
                 </small>
               </label>
             </div>
 
             <label class="af-field">
-              <span class="af-label">{{ tt('artifacts.form.uri') }} *</span>
+              <span class="af-label">{{ locale.t('artifacts.form.uri') }} *</span>
               <cds-input>
                 <input
                   v-model="form.uri"
                   type="text"
                   autocomplete="off"
                   :disabled="saving"
-                  :aria-label="tt('artifacts.form.uri')"
-                  :placeholder="tt('artifacts.form.uriPlaceholder')"
+                  :aria-label="locale.t('artifacts.form.uri')"
+                  :placeholder="locale.t('artifacts.form.uriPlaceholder')"
                 />
               </cds-input>
               <small v-if="submitted && !uriValid" class="af-error">
-                {{ tt('artifacts.form.required') }}
+                {{ locale.t('artifacts.form.required') }}
               </small>
             </label>
 
             <label class="af-field">
-              <span class="af-label">{{ tt('artifacts.form.sha256') }}</span>
+              <span class="af-label">{{ locale.t('artifacts.form.sha256') }}</span>
               <cds-input>
                 <input
                   v-model="form.sha256"
                   type="text"
                   autocomplete="off"
                   :disabled="saving"
-                  :aria-label="tt('artifacts.form.sha256')"
-                  :placeholder="tt('artifacts.form.sha256Placeholder')"
+                  :aria-label="locale.t('artifacts.form.sha256')"
+                  :placeholder="locale.t('artifacts.form.sha256Placeholder')"
                 />
               </cds-input>
             </label>
 
             <label class="af-field">
-              <span class="af-label">{{ tt('artifacts.form.content') }}</span>
+              <span class="af-label">{{ locale.t('artifacts.form.content') }}</span>
               <textarea
                 v-model="form.content"
                 class="af-textarea"
                 rows="5"
                 :disabled="isPackage || saving"
-                :aria-label="tt('artifacts.form.content')"
+                :aria-label="locale.t('artifacts.form.content')"
                 :placeholder="
-                  isPackage ? tt('artifacts.form.contentPackageHint') : tt('artifacts.form.contentPlaceholder')
+                  isPackage ? locale.t('artifacts.form.contentPackageHint') : locale.t('artifacts.form.contentPlaceholder')
                 "
               ></textarea>
               <small class="af-hint muted">
-                {{ isPackage ? tt('artifacts.form.contentPackageHint') : tt('artifacts.form.contentHint') }}
+                {{ isPackage ? locale.t('artifacts.form.contentPackageHint') : locale.t('artifacts.form.contentHint') }}
               </small>
             </label>
 
             <div class="af-actions">
               <cds-button type="button" action="outline" :disabled="saving" @click="close">
-                {{ tt('artifacts.form.cancel') }}
+                {{ locale.t('artifacts.form.cancel') }}
               </cds-button>
               <cds-button
                 type="submit"
@@ -231,7 +232,7 @@ function submit() {
                 :loading-state="saving ? 'loading' : 'default'"
                 :disabled="saving"
               >
-                {{ tt('artifacts.form.save') }}
+                {{ locale.t('artifacts.form.save') }}
               </cds-button>
             </div>
           </form>

@@ -9,9 +9,6 @@
  *
  * Both mutations are gated @hasRole(any: [admin]); a non-admin caller gets the
  * backend error surfaced via toast. The recommended route guard is meta.admin.
- *
- * i18n is self-contained (FALLBACK + tt) so this view never edits the shared
- * locale store. See the report for the canonical zh/en list to add later.
  */
 import { computed, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
@@ -36,72 +33,10 @@ import {
 } from '@/api/graphql/queries/skills'
 import '@/components/icons'
 
-const FALLBACK: Record<string, { zh: string; en: string }> = {
-  'skill.title': { zh: '技能管理', en: 'Skills' },
-  'skill.description': {
-    zh: '管理技能库中的技能制品，供智能体在部署时挂载与调用。',
-    en: 'Manage skill artifacts in the skill hub for agents to mount and invoke at deploy time.',
-  },
-  'skill.action.create': { zh: '新建技能', en: 'New Skill' },
-  'skill.action.refresh': { zh: '刷新', en: 'Refresh' },
-  'skill.action.batch': { zh: '批量操作', en: 'Batch' },
-  'skill.action.edit': { zh: '编辑', en: 'Edit' },
-  'skill.action.delete': { zh: '删除', en: 'Delete' },
-  'skill.batch.disabled': { zh: '请先选择技能', en: 'Select skills first' },
-  'skill.batch.delete': { zh: '删除所选', en: 'Delete selected' },
-  'skill.col.selectAll': { zh: '全选', en: 'Select all' },
-  'skill.col.selectSkill': { zh: '选择技能 {name}', en: 'Select skill {name}' },
-  'skill.col.name': { zh: '名称', en: 'Name' },
-  'skill.col.version': { zh: '版本', en: 'Version' },
-  'skill.col.description': { zh: '描述', en: 'Description' },
-  'skill.col.uri': { zh: '资源地址', en: 'URI' },
-  'skill.col.createdAt': { zh: '创建时间', en: 'Created At' },
-  'skill.col.actions': { zh: '操作', en: 'Actions' },
-  'skill.sort': { zh: '按 {column} 排序', en: 'Sort by {column}' },
-  'skill.filter': { zh: '按 {column} 筛选', en: 'Filter by {column}' },
-  'skill.filter.namePlaceholder': { zh: '搜索技能名称', en: 'Search skill name' },
-  'skill.filter.clear': { zh: '清除筛选', en: 'Clear filter' },
-  'skill.table.label': { zh: '技能列表', en: 'Skills table' },
-  'skill.empty': { zh: '暂无技能', en: 'No skills yet' },
-  'skill.emptyDescription': { zh: '—', en: '—' },
-  'skill.selected': { zh: '已选 {count} 项', en: '{count} selected' },
-  'skill.pagination.pageSize': { zh: '每页', en: 'Page size' },
-  'skill.pagination.summary': { zh: '第 {start}–{end} 条，共 {total} 条', en: '{start}–{end} of {total}' },
-  'skill.pagination.label': { zh: '分页', en: 'Pagination' },
-  'skill.pager.first': { zh: '首页', en: 'First page' },
-  'skill.pager.prev': { zh: '上一页', en: 'Previous page' },
-  'skill.pager.page': { zh: '页码', en: 'Page' },
-  'skill.pager.next': { zh: '下一页', en: 'Next page' },
-  'skill.pager.last': { zh: '末页', en: 'Last page' },
-  'skill.toast.created': { zh: '技能已创建', en: 'Skill created' },
-  'skill.toast.updated': { zh: '技能已更新', en: 'Skill updated' },
-  'skill.toast.saveFailed': { zh: '保存技能失败', en: 'Failed to save skill' },
-  'skill.toast.deleted': { zh: '已删除 {count} 个技能', en: 'Deleted {count} skill(s)' },
-  'skill.toast.deleteFailed': { zh: '删除技能失败', en: 'Failed to delete skill' },
-  'skill.toast.refreshed': { zh: '技能列表已刷新', en: 'Skills refreshed' },
-  'skill.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
-  'skill.confirm.deleteTitle': { zh: '删除技能', en: 'Delete skill' },
-  'skill.confirm.batchDeleteTitle': { zh: '批量删除技能', en: 'Delete skills' },
-  'skill.confirm.deleteBody': {
-    zh: '确定要删除技能「{name}」吗？此操作不可撤销。',
-    en: 'Delete the skill "{name}"? This cannot be undone.',
-  },
-  'skill.confirm.batchDeleteBody': {
-    zh: '确定要删除所选的 {count} 个技能吗？此操作不可撤销。',
-    en: 'Delete the {count} selected skill(s)? This cannot be undone.',
-  },
-}
-
-function tt(key: string): string {
-  const entry = FALLBACK[key]
-  if (entry) return entry[locale.locale]
-  return locale.t(key)
-}
-
 function format(key: string, replacements: Record<string, string>): string {
   return Object.entries(replacements).reduce(
     (text, [token, value]) => text.replace(`{${token}}`, value),
-    tt(key),
+    locale.t(key),
   )
 }
 
@@ -176,8 +111,8 @@ const summaryText = computed(() => {
 })
 const deleteDialogTitle = computed(() =>
   pendingDeleteIds.value.length > 1
-    ? tt('skill.confirm.batchDeleteTitle')
-    : tt('skill.confirm.deleteTitle'),
+    ? locale.t('skill.confirm.batchDeleteTitle')
+    : locale.t('skill.confirm.deleteTitle'),
 )
 const deleteDialogBody = computed(() => {
   if (pendingDeleteIds.value.length > 1) {
@@ -278,13 +213,13 @@ async function submitSkill(draft: UpsertSkillInput) {
       mutation: UPSERT_SKILL,
       variables: { input: draft },
     })
-    toast.success(tt(isEditing ? 'skill.toast.updated' : 'skill.toast.created'))
+    toast.success(locale.t(isEditing ? 'skill.toast.updated' : 'skill.toast.created'))
     if (!isEditing) currentPage.value = 1
     formOpen.value = false
     editingSkill.value = null
     await refetch()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('skill.toast.saveFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('skill.toast.saveFailed')))
   } finally {
     saving.value = false
   }
@@ -325,7 +260,7 @@ async function confirmDelete() {
     toast.success(format('skill.toast.deleted', { count: String(deletedIds.length) }))
   }
   if (failures.length > 0) {
-    toast.error(graphqlErrorMessage(failures[0].reason, tt('skill.toast.deleteFailed')))
+    toast.error(graphqlErrorMessage(failures[0].reason, locale.t('skill.toast.deleteFailed')))
   }
   selectedIds.value = new Set([...selectedIds.value].filter((id) => !deletedIds.includes(id)))
   await refetch()
@@ -335,9 +270,9 @@ async function refreshSkills() {
   if (loading.value) return
   try {
     await refetch()
-    toast.success(tt('skill.toast.refreshed'))
+    toast.success(locale.t('skill.toast.refreshed'))
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('skill.toast.refreshFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('skill.toast.refreshFailed')))
   }
 }
 
@@ -357,15 +292,15 @@ function goToPage(page: number) {
 <template>
   <section class="skill-page">
     <header class="page-head">
-      <h1 cds-text="title" class="heading">{{ tt('skill.title') }}</h1>
-      <p cds-text="body" class="desc muted">{{ tt('skill.description') }}</p>
+      <h1 cds-text="title" class="heading">{{ locale.t('skill.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('skill.description') }}</p>
     </header>
 
     <div class="content-card">
       <div class="toolbar">
         <cds-button action="outline" status="primary" @click="openCreate">
           <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
-          {{ tt('skill.action.create') }}
+          {{ locale.t('skill.action.create') }}
         </cds-button>
 
         <AppDropdown align="start" :disabled="selectedCount === 0">
@@ -373,17 +308,17 @@ function goToPage(page: number) {
             <cds-button
               action="outline"
               :disabled="selectedCount === 0"
-              :title="selectedCount === 0 ? tt('skill.batch.disabled') : undefined"
+              :title="selectedCount === 0 ? locale.t('skill.batch.disabled') : undefined"
             >
               <cds-icon shape="cog" size="sm" aria-hidden="true"></cds-icon>
-              {{ tt('skill.action.batch') }}
+              {{ locale.t('skill.action.batch') }}
               <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
             </cds-button>
           </template>
           <template #default="{ close }">
             <button class="menu-option danger" type="button" @click="requestBatchDelete(close)">
               <cds-icon shape="trash" size="sm"></cds-icon>
-              {{ tt('skill.batch.delete') }}
+              {{ locale.t('skill.batch.delete') }}
             </button>
           </template>
         </AppDropdown>
@@ -392,33 +327,33 @@ function goToPage(page: number) {
           action="ghost"
           class="refresh-button"
           :disabled="loading"
-          :aria-label="tt('skill.action.refresh')"
-          :title="tt('skill.action.refresh')"
+          :aria-label="locale.t('skill.action.refresh')"
+          :title="locale.t('skill.action.refresh')"
           @click="refreshSkills"
         >
           <cds-icon shape="refresh" size="md" :class="{ spinning: loading }"></cds-icon>
-          <span>{{ tt('skill.action.refresh') }}</span>
+          <span>{{ locale.t('skill.action.refresh') }}</span>
         </cds-button>
       </div>
 
       <div class="grid-card">
-        <cds-grid border="row" column-layout="flex" role="grid" :aria-label="tt('skill.table.label')">
+        <cds-grid border="row" column-layout="flex" role="grid" :aria-label="locale.t('skill.table.label')">
           <cds-grid-column type="action" :resizable="false">
             <input
               type="checkbox"
               class="app-checkbox"
               :checked="allVisibleSelected"
-              :aria-label="tt('skill.col.selectAll')"
+              :aria-label="locale.t('skill.col.selectAll')"
               @change="toggleSelectAll(($event.target as HTMLInputElement).checked)"
             />
           </cds-grid-column>
 
           <cds-grid-column width="24%">
             <div class="column-head">
-              <span>{{ tt('skill.col.name') }}</span>
+              <span>{{ locale.t('skill.col.name') }}</span>
               <span class="column-head-actions">
                 <cds-button-action
-                  :aria-label="format('skill.sort', { column: tt('skill.col.name') })"
+                  :aria-label="format('skill.sort', { column: locale.t('skill.col.name') })"
                   @click="toggleSort('NAME')"
                 >
                   <cds-icon
@@ -438,7 +373,7 @@ function goToPage(page: number) {
                 <cds-button-action
                   shape="filter"
                   :expanded="hasNameFilter()"
-                  :aria-label="format('skill.filter', { column: tt('skill.col.name') })"
+                  :aria-label="format('skill.filter', { column: locale.t('skill.col.name') })"
                   @click="(event: MouseEvent) => openFilterMenu(event)"
                 ></cds-button-action>
               </span>
@@ -447,10 +382,10 @@ function goToPage(page: number) {
 
           <cds-grid-column width="12%">
             <div class="column-head">
-              <span>{{ tt('skill.col.version') }}</span>
+              <span>{{ locale.t('skill.col.version') }}</span>
               <span class="column-head-actions">
                 <cds-button-action
-                  :aria-label="format('skill.sort', { column: tt('skill.col.version') })"
+                  :aria-label="format('skill.sort', { column: locale.t('skill.col.version') })"
                   @click="toggleSort('VERSION')"
                 >
                   <cds-icon
@@ -471,15 +406,15 @@ function goToPage(page: number) {
             </div>
           </cds-grid-column>
 
-          <cds-grid-column width="22%">{{ tt('skill.col.description') }}</cds-grid-column>
-          <cds-grid-column width="18%">{{ tt('skill.col.uri') }}</cds-grid-column>
+          <cds-grid-column width="22%">{{ locale.t('skill.col.description') }}</cds-grid-column>
+          <cds-grid-column width="18%">{{ locale.t('skill.col.uri') }}</cds-grid-column>
 
           <cds-grid-column width="12%">
             <div class="column-head">
-              <span>{{ tt('skill.col.createdAt') }}</span>
+              <span>{{ locale.t('skill.col.createdAt') }}</span>
               <span class="column-head-actions">
                 <cds-button-action
-                  :aria-label="format('skill.sort', { column: tt('skill.col.createdAt') })"
+                  :aria-label="format('skill.sort', { column: locale.t('skill.col.createdAt') })"
                   @click="toggleSort('CREATED_AT')"
                 >
                   <cds-icon
@@ -500,7 +435,7 @@ function goToPage(page: number) {
             </div>
           </cds-grid-column>
 
-          <cds-grid-column width="12%">{{ tt('skill.col.actions') }}</cds-grid-column>
+          <cds-grid-column width="12%">{{ locale.t('skill.col.actions') }}</cds-grid-column>
 
           <cds-grid-row v-for="skill in visibleSkills" :key="skill.id">
             <cds-grid-cell>
@@ -531,11 +466,11 @@ function goToPage(page: number) {
               <div class="row-actions">
                 <button type="button" class="row-action" @click="openEdit(skill)">
                   <cds-icon shape="pencil" size="sm"></cds-icon>
-                  <span>{{ tt('skill.action.edit') }}</span>
+                  <span>{{ locale.t('skill.action.edit') }}</span>
                 </button>
                 <button type="button" class="row-action danger" @click="requestDelete(skill)">
                   <cds-icon shape="trash" size="sm"></cds-icon>
-                  <span>{{ tt('skill.action.delete') }}</span>
+                  <span>{{ locale.t('skill.action.delete') }}</span>
                 </button>
               </div>
             </cds-grid-cell>
@@ -543,9 +478,9 @@ function goToPage(page: number) {
 
           <cds-grid-placeholder v-if="visibleSkills.length === 0">
             <cds-icon shape="book" size="xl"></cds-icon>
-            <p cds-text="subsection">{{ tt('skill.empty') }}</p>
+            <p cds-text="subsection">{{ locale.t('skill.empty') }}</p>
             <cds-button action="outline" size="sm" @click="openCreate">
-              {{ tt('skill.action.create') }}
+              {{ locale.t('skill.action.create') }}
             </cds-button>
           </cds-grid-placeholder>
 
@@ -554,12 +489,12 @@ function goToPage(page: number) {
               {{ format('skill.selected', { count: String(selectedCount) }) }}
             </span>
             <div class="pager">
-              <label for="skill-page-size">{{ tt('skill.pagination.pageSize') }}</label>
+              <label for="skill-page-size">{{ locale.t('skill.pagination.pageSize') }}</label>
               <cds-select control-width="shrink">
                 <select
                   id="skill-page-size"
                   :value="pageSize"
-                  :aria-label="tt('skill.pagination.pageSize')"
+                  :aria-label="locale.t('skill.pagination.pageSize')"
                   @change="onPageSizeChange"
                 >
                   <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
@@ -568,17 +503,17 @@ function goToPage(page: number) {
                 </select>
               </cds-select>
               <span class="pager-summary">{{ summaryText }}</span>
-              <cds-pagination :aria-label="tt('skill.pagination.label')">
+              <cds-pagination :aria-label="locale.t('skill.pagination.label')">
                 <cds-pagination-button
                   action="first"
                   :disabled="currentPage <= 1"
-                  :aria-label="tt('skill.pager.first')"
+                  :aria-label="locale.t('skill.pager.first')"
                   @click="goToPage(1)"
                 ></cds-pagination-button>
                 <cds-pagination-button
                   action="prev"
                   :disabled="currentPage <= 1"
-                  :aria-label="tt('skill.pager.prev')"
+                  :aria-label="locale.t('skill.pager.prev')"
                   @click="goToPage(currentPage - 1)"
                 ></cds-pagination-button>
                 <cds-input cds-pagination-number>
@@ -587,20 +522,20 @@ function goToPage(page: number) {
                     :value="currentPage"
                     :min="1"
                     :max="totalPages"
-                    :aria-label="tt('skill.pager.page')"
+                    :aria-label="locale.t('skill.pager.page')"
                     @change="goToPage(Number(($event.target as HTMLInputElement).value))"
                   />
                 </cds-input>
                 <cds-pagination-button
                   action="next"
                   :disabled="currentPage >= totalPages"
-                  :aria-label="tt('skill.pager.next')"
+                  :aria-label="locale.t('skill.pager.next')"
                   @click="goToPage(currentPage + 1)"
                 ></cds-pagination-button>
                 <cds-pagination-button
                   action="last"
                   :disabled="currentPage >= totalPages"
-                  :aria-label="tt('skill.pager.last')"
+                  :aria-label="locale.t('skill.pager.last')"
                   @click="goToPage(totalPages)"
                 ></cds-pagination-button>
               </cds-pagination>
@@ -622,13 +557,13 @@ function goToPage(page: number) {
           class="filter-input"
           type="text"
           :value="nameFilter"
-          :placeholder="tt('skill.filter.namePlaceholder')"
-          :aria-label="tt('skill.filter.namePlaceholder')"
+          :placeholder="locale.t('skill.filter.namePlaceholder')"
+          :aria-label="locale.t('skill.filter.namePlaceholder')"
           @input="setNameFilter(($event.target as HTMLInputElement).value)"
         />
         <div v-if="hasNameFilter()" class="filter-footer">
           <cds-button action="outline" size="sm" @click="clearNameFilter">
-            {{ tt('skill.filter.clear') }}
+            {{ locale.t('skill.filter.clear') }}
           </cds-button>
         </div>
       </div>

@@ -4,14 +4,15 @@
  *
  * Mirrors RateLimitPolicyFormModal's cds-modal layout. Register-only — there is
  * no updateGatewayConnection op, so this form always creates. The parent owns
- * i18n (passes a `tt` translator) and the `saving` flag; this component emits a
- * validated RegisterGatewayConnectionInput and stays presentational.
+ * the `saving` flag; this component emits a validated
+ * RegisterGatewayConnectionInput and stays presentational.
  *
  * `masterKey` is the litellm master key: write-only (backend stores a secret
  * reference, never reads it back), so it is an optional field and never
  * pre-filled.
  */
 import { computed, ref, watch } from 'vue'
+import { useLocaleStore } from '@/stores/locale'
 import {
   LOAD_BALANCE_STRATEGIES,
   type LoadBalanceStrategy,
@@ -21,9 +22,9 @@ import {
 const props = defineProps<{
   open: boolean
   saving?: boolean
-  /** Translator owned by the parent view (self-contained FALLBACK + tt). */
-  tt: (key: string) => string
 }>()
+
+const locale = useLocaleStore()
 
 const emit = defineEmits<{
   (event: 'close'): void
@@ -81,27 +82,27 @@ function submit() {
 <template>
   <cds-modal :hidden="!open" :closable="!saving" size="md" @closeChange="close">
     <cds-modal-header>
-      <h2 cds-text="title" class="modal-title">{{ tt('gatewayConn.form.createTitle') }}</h2>
+      <h2 cds-text="title" class="modal-title">{{ locale.t('gatewayConn.form.createTitle') }}</h2>
     </cds-modal-header>
 
     <cds-modal-content>
       <form class="gateway-form" @submit.prevent="submit">
         <cds-input :status="attempted && !nameValid ? 'error' : 'neutral'">
-          <label>{{ tt('gatewayConn.form.name') }}</label>
+          <label>{{ locale.t('gatewayConn.form.name') }}</label>
           <input
             :value="name"
             maxlength="64"
             autocomplete="off"
-            :placeholder="tt('gatewayConn.form.namePlaceholder')"
+            :placeholder="locale.t('gatewayConn.form.namePlaceholder')"
             @input="name = ($event.target as HTMLInputElement).value"
           />
           <cds-control-message v-if="attempted && !nameValid" status="error">
-            {{ tt('gatewayConn.form.nameError') }}
+            {{ locale.t('gatewayConn.form.nameError') }}
           </cds-control-message>
         </cds-input>
 
         <cds-input :status="attempted && !endpointValid ? 'error' : 'neutral'">
-          <label>{{ tt('gatewayConn.form.endpoint') }}</label>
+          <label>{{ locale.t('gatewayConn.form.endpoint') }}</label>
           <input
             :value="endpoint"
             autocomplete="off"
@@ -109,33 +110,33 @@ function submit() {
             @input="endpoint = ($event.target as HTMLInputElement).value"
           />
           <cds-control-message v-if="attempted && !endpointValid" status="error">
-            {{ tt('gatewayConn.form.endpointError') }}
+            {{ locale.t('gatewayConn.form.endpointError') }}
           </cds-control-message>
         </cds-input>
 
         <cds-input>
-          <label>{{ tt('gatewayConn.form.masterKey') }}</label>
+          <label>{{ locale.t('gatewayConn.form.masterKey') }}</label>
           <input
             type="password"
             :value="masterKey"
             autocomplete="new-password"
-            :placeholder="tt('gatewayConn.form.masterKeyPlaceholder')"
+            :placeholder="locale.t('gatewayConn.form.masterKeyPlaceholder')"
             @input="masterKey = ($event.target as HTMLInputElement).value"
           />
           <cds-control-message status="neutral">
-            {{ tt('gatewayConn.form.masterKeyHint') }}
+            {{ locale.t('gatewayConn.form.masterKeyHint') }}
           </cds-control-message>
         </cds-input>
 
         <cds-select>
-          <label>{{ tt('gatewayConn.form.strategy') }}</label>
+          <label>{{ locale.t('gatewayConn.form.strategy') }}</label>
           <select
             :value="loadBalanceStrategy"
-            :aria-label="tt('gatewayConn.form.strategy')"
+            :aria-label="locale.t('gatewayConn.form.strategy')"
             @change="loadBalanceStrategy = ($event.target as HTMLSelectElement).value as LoadBalanceStrategy"
           >
             <option v-for="item in LOAD_BALANCE_STRATEGIES" :key="item" :value="item">
-              {{ tt(`gatewayConn.strategy.${item}`) }}
+              {{ locale.t(`gatewayConn.strategy.${item}`) }}
             </option>
           </select>
         </cds-select>
@@ -144,14 +145,14 @@ function submit() {
 
     <cds-modal-actions>
       <cds-button action="outline" :disabled="saving" @click="close">
-        {{ tt('gatewayConn.form.cancel') }}
+        {{ locale.t('gatewayConn.form.cancel') }}
       </cds-button>
       <cds-button
         :loading-state="saving ? 'loading' : 'default'"
         :disabled="saving"
         @click="submit"
       >
-        {{ tt('gatewayConn.form.submit') }}
+        {{ locale.t('gatewayConn.form.submit') }}
       </cds-button>
     </cds-modal-actions>
   </cds-modal>

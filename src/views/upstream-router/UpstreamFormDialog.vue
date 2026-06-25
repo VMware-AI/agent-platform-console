@@ -9,6 +9,7 @@
  * operator types a value. Mirrors AgentConfigKnowledgeDialog's backdrop/card.
  */
 import { computed, reactive, watch } from 'vue'
+import { useLocaleStore } from '@/stores/locale'
 import {
   UPSTREAM_PROVIDERS,
   type UpstreamNode,
@@ -23,9 +24,9 @@ const props = defineProps<{
   upstream: UpstreamNode | null
   /** True while the parent's upsertUpstream mutation is in flight. */
   saving?: boolean
-  /** Local fallback translator (upstreamRouter.* keys not in the locale store). */
-  tt: (key: string) => string
 }>()
+
+const locale = useLocaleStore()
 
 const emit = defineEmits<{
   (event: 'close'): void
@@ -109,84 +110,84 @@ function submit() {
         class="uf-backdrop"
         role="dialog"
         aria-modal="true"
-        :aria-label="tt(isEditing ? 'upstreamRouter.upstream.dialog.editTitle' : 'upstreamRouter.upstream.dialog.createTitle')"
+        :aria-label="locale.t(isEditing ? 'upstreamRouter.upstream.dialog.editTitle' : 'upstreamRouter.upstream.dialog.createTitle')"
         @click="onBackdropClick"
       >
         <div class="uf-card" @click.stop>
           <h2 cds-text="section" class="uf-title">
-            {{ tt(isEditing ? 'upstreamRouter.upstream.dialog.editTitle' : 'upstreamRouter.upstream.dialog.createTitle') }}
+            {{ locale.t(isEditing ? 'upstreamRouter.upstream.dialog.editTitle' : 'upstreamRouter.upstream.dialog.createTitle') }}
           </h2>
 
           <form class="uf-form" @submit.prevent="submit">
             <label class="uf-field">
-              <span class="uf-label">{{ tt('upstreamRouter.upstream.field.name') }}</span>
+              <span class="uf-label">{{ locale.t('upstreamRouter.upstream.field.name') }}</span>
               <cds-input>
                 <input
                   v-model="form.name"
                   type="text"
                   autocomplete="off"
                   :readonly="isEditing"
-                  :placeholder="tt('upstreamRouter.upstream.field.namePlaceholder')"
-                  :aria-label="tt('upstreamRouter.upstream.field.name')"
+                  :placeholder="locale.t('upstreamRouter.upstream.field.namePlaceholder')"
+                  :aria-label="locale.t('upstreamRouter.upstream.field.name')"
                 />
               </cds-input>
               <small v-if="isEditing" class="uf-hint muted">
-                {{ tt('upstreamRouter.upstream.field.nameLocked') }}
+                {{ locale.t('upstreamRouter.upstream.field.nameLocked') }}
               </small>
             </label>
 
             <label class="uf-field">
-              <span class="uf-label">{{ tt('upstreamRouter.upstream.field.provider') }}</span>
+              <span class="uf-label">{{ locale.t('upstreamRouter.upstream.field.provider') }}</span>
               <cds-select>
                 <select
                   v-model="form.provider"
-                  :aria-label="tt('upstreamRouter.upstream.field.provider')"
+                  :aria-label="locale.t('upstreamRouter.upstream.field.provider')"
                 >
                   <option v-for="option in UPSTREAM_PROVIDERS" :key="option" :value="option">
-                    {{ tt(`upstreamRouter.provider.${option}`) }}
+                    {{ locale.t(`upstreamRouter.provider.${option}`) }}
                   </option>
                 </select>
               </cds-select>
             </label>
 
             <label class="uf-field">
-              <span class="uf-label">{{ tt('upstreamRouter.upstream.field.model') }}</span>
+              <span class="uf-label">{{ locale.t('upstreamRouter.upstream.field.model') }}</span>
               <cds-input>
                 <input
                   v-model="form.model"
                   type="text"
                   autocomplete="off"
-                  :placeholder="tt('upstreamRouter.upstream.field.modelPlaceholder')"
-                  :aria-label="tt('upstreamRouter.upstream.field.model')"
+                  :placeholder="locale.t('upstreamRouter.upstream.field.modelPlaceholder')"
+                  :aria-label="locale.t('upstreamRouter.upstream.field.model')"
                 />
               </cds-input>
             </label>
 
             <label class="uf-field">
-              <span class="uf-label">{{ tt('upstreamRouter.upstream.field.apiBase') }}</span>
+              <span class="uf-label">{{ locale.t('upstreamRouter.upstream.field.apiBase') }}</span>
               <cds-input>
                 <input
                   v-model="form.apiBase"
                   type="url"
                   autocomplete="off"
-                  :placeholder="tt('upstreamRouter.upstream.field.apiBasePlaceholder')"
-                  :aria-label="tt('upstreamRouter.upstream.field.apiBase')"
+                  :placeholder="locale.t('upstreamRouter.upstream.field.apiBasePlaceholder')"
+                  :aria-label="locale.t('upstreamRouter.upstream.field.apiBase')"
                 />
               </cds-input>
             </label>
 
             <label class="uf-field">
-              <span class="uf-label">{{ tt('upstreamRouter.upstream.field.apiKey') }}</span>
+              <span class="uf-label">{{ locale.t('upstreamRouter.upstream.field.apiKey') }}</span>
               <cds-input>
                 <input
                   v-model="form.apiKey"
                   type="password"
                   autocomplete="new-password"
-                  :placeholder="tt(isEditing ? 'upstreamRouter.upstream.field.apiKeyEditPlaceholder' : 'upstreamRouter.upstream.field.apiKeyPlaceholder')"
-                  :aria-label="tt('upstreamRouter.upstream.field.apiKey')"
+                  :placeholder="locale.t(isEditing ? 'upstreamRouter.upstream.field.apiKeyEditPlaceholder' : 'upstreamRouter.upstream.field.apiKeyPlaceholder')"
+                  :aria-label="locale.t('upstreamRouter.upstream.field.apiKey')"
                 />
               </cds-input>
-              <small class="uf-hint muted">{{ tt('upstreamRouter.upstream.field.apiKeyHint') }}</small>
+              <small class="uf-hint muted">{{ locale.t('upstreamRouter.upstream.field.apiKeyHint') }}</small>
             </label>
 
             <label class="uf-checkbox-field">
@@ -194,15 +195,15 @@ function submit() {
                 v-model="form.enabled"
                 type="checkbox"
                 class="app-checkbox"
-                :aria-label="tt('upstreamRouter.upstream.field.enabled')"
+                :aria-label="locale.t('upstreamRouter.upstream.field.enabled')"
               />
-              <span>{{ tt('upstreamRouter.upstream.field.enabled') }}</span>
+              <span>{{ locale.t('upstreamRouter.upstream.field.enabled') }}</span>
             </label>
           </form>
 
           <div class="uf-actions">
             <cds-button type="button" action="outline" :disabled="saving" @click="close">
-              {{ tt('upstreamRouter.action.cancel') }}
+              {{ locale.t('upstreamRouter.action.cancel') }}
             </cds-button>
             <cds-button
               type="button"
@@ -212,7 +213,7 @@ function submit() {
               :disabled="!canSubmit"
               @click="submit"
             >
-              {{ tt('upstreamRouter.action.save') }}
+              {{ locale.t('upstreamRouter.action.save') }}
             </cds-button>
           </div>
         </div>
