@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { User } from '@/types/auth'
-import { apolloClient, TOKEN_STORAGE_KEY } from '@/api/graphql/client'
+import { apolloClient } from '@/api/graphql/client'
 import {
   LOGIN_MUTATION,
   LOGOUT_MUTATION,
@@ -12,22 +12,16 @@ import {
   type MeQueryResult,
 } from '@/api/graphql/queries/auth'
 
-// Persisted display copy of the user, so a remembered session can paint the
-// shell on reload before `me` round-trips. The token is the source of truth for
-// *being* authenticated; this copy is only for first paint and is always
-// re-validated against `me`.
+// Non-sensitive display copy of the user, so a remembered session can paint the
+// shell on reload before `me` round-trips. Auth itself rides on the httpOnly
+// `ap_session` cookie (unreadable from JS, LLD-12); this copy is ONLY for first
+// paint and is always re-validated against `me`. Stored in localStorage when
+// "remember" is on (survives browser close, matching the persistent cookie),
+// else sessionStorage (matching the session cookie).
 const USER_STORAGE_KEY = 'clarity-auth-user'
 
 function toUser(u: AuthUser): User {
   return { email: u.email, displayName: u.displayName || u.username }
-}
-
-function readStoredToken(): string | null {
-  try {
-    return localStorage.getItem(TOKEN_STORAGE_KEY) ?? sessionStorage.getItem(TOKEN_STORAGE_KEY)
-  } catch {
-    return null
-  }
 }
 
 function readStoredUser(): User | null {
@@ -41,23 +35,19 @@ function readStoredUser(): User | null {
   }
 }
 
-function persistSession(token: string, user: User, remember: boolean): void {
+function persistUser(user: User, remember: boolean): void {
   try {
     const primary = remember ? localStorage : sessionStorage
     const secondary = remember ? sessionStorage : localStorage
-    secondary.removeItem(TOKEN_STORAGE_KEY)
     secondary.removeItem(USER_STORAGE_KEY)
-    primary.setItem(TOKEN_STORAGE_KEY, token)
     primary.setItem(USER_STORAGE_KEY, JSON.stringify(user))
   } catch {
     // Storage unavailable — the session lives in memory for this tab only.
   }
 }
 
-function clearStoredSession(): void {
+function clearStoredUser(): void {
   try {
-    localStorage.removeItem(TOKEN_STORAGE_KEY)
-    sessionStorage.removeItem(TOKEN_STORAGE_KEY)
     localStorage.removeItem(USER_STORAGE_KEY)
     sessionStorage.removeItem(USER_STORAGE_KEY)
   } catch {
@@ -81,10 +71,12 @@ export const useAuthStore = defineStore('auth', () => {
       const { data } = await apolloClient.mutate<LoginMutationResult, LoginMutationVars>({
         mutation: LOGIN_MUTATION,
         // Do NOT lowercase — the identifier may be a case-sensitive username.
-        variables: { input: { email: email.trim(), password } },
+        // The backend sets the httpOnly ap_session cookie on this response;
+        // `remember` controls its lifetime. We never read AuthPayload.token.
+        variables: { input: { email: email.trim(), password, remember } },
       })
       const payload = data?.login
-      if (!payload?.token || !payload.user) {
+      if (!payload?.user) {
         error.value = 'Invalid email or password.'
         return false
       }
@@ -92,7 +84,7 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = nextUser
       role.value = payload.user.role
       mustChangePassword.value = Boolean(payload.mustChangePassword)
-      persistSession(payload.token, nextUser, remember)
+      persistUser(nextUser, remember)
       return true
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Login failed.'
@@ -112,7 +104,7 @@ export const useAuthStore = defineStore('auth', () => {
     role.value = null
     mustChangePassword.value = false
     error.value = null
-    clearStoredSession()
+    clearStoredUser()
     await apolloClient.clearStore()
   }
 
@@ -121,13 +113,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // Rehydrate the session on boot (called once from main.ts before mount). Paints
-  // from the persisted copy first, then validates the token via `me`; a missing
-  // or rejected token drops cleanly to logged-out.
+  // from the non-sensitive stored copy first for speed, then confirms via `me`
+  // (the httpOnly cookie is sent automatically). No valid cookie ⇒ `me` returns
+  // null ⇒ logged-out. We always call `me` — the cookie, not any local flag, is
+  // the source of truth.
   async function restore(): Promise<void> {
-    if (!readStoredToken()) {
-      clearStoredSession()
-      return
-    }
     user.value = readStoredUser()
     try {
       const { data } = await apolloClient.query<MeQueryResult>({
@@ -142,13 +132,13 @@ export const useAuthStore = defineStore('auth', () => {
         user.value = null
         role.value = null
         mustChangePassword.value = false
-        clearStoredSession()
+        clearStoredUser()
       }
     } catch {
-      // Token rejected / network down — trust nothing stale.
+      // No/expired cookie or network down — trust nothing stale.
       user.value = null
       role.value = null
-      clearStoredSession()
+      clearStoredUser()
     }
   }
 

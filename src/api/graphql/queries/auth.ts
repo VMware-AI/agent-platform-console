@@ -1,10 +1,13 @@
 import { gql } from '@apollo/client/core'
 
-// Auth is Bearer-token based: `login` returns `AuthPayload.token` (= session id),
-// which the auth store persists and the transport sends as `Authorization:
-// Bearer <token>`. `me` rehydrates the session on reload; `logout` invalidates
-// it server-side. The login form collects an identifier the backend accepts as
-// either a username OR an email (carried in `LoginInput.email`).
+// Auth is cookie-based: `login` makes the backend set an httpOnly `ap_session`
+// cookie (LLD-12); the browser replays it automatically (apolloClient uses
+// `credentials: 'include'`). `me` rehydrates the session on reload; `logout`
+// clears the cookie server-side. The login form collects an identifier the
+// backend accepts as either a username OR an email (carried in
+// `LoginInput.email`). `LoginInput.remember` maps to the cookie lifetime
+// (persistent vs session cookie). `AuthPayload.token` is still returned for
+// non-browser (Bearer) clients but the console no longer reads it.
 
 export const LOGIN_MUTATION = gql`
   mutation Login($input: LoginInput!) {
@@ -51,7 +54,8 @@ export interface AuthUser {
 
 export interface LoginMutationVars {
   // `email` carries the login identifier — username or email (backend resolves both).
-  input: { email: string; password: string }
+  // `remember` maps to the session-cookie lifetime (persistent vs cleared on close).
+  input: { email: string; password: string; remember?: boolean }
 }
 
 export interface LoginMutationResult {

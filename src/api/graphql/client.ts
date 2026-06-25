@@ -1,45 +1,29 @@
-import { ApolloClient, ApolloLink, HttpLink, InMemoryCache } from '@apollo/client/core'
-import { setContext } from '@apollo/client/link/context'
+import { ApolloClient, HttpLink, InMemoryCache } from '@apollo/client/core'
 
 /**
  * Single Apollo Client for the app, wired to the real agent-platform-backend.
  *
  * Transport: HTTP POST to `VITE_GRAPHQL_ENDPOINT` (default same-origin `/query`).
- * Auth: Bearer token. `login` returns `AuthPayload.token` (= the session id);
- * the auth store persists it (see `stores/auth.ts`) and `authLink` attaches it
- * as `Authorization: Bearer <token>` on every request. `me` rehydrates the
- * session on reload; `logout` invalidates it server-side.
+ * Auth: httpOnly session cookie (LLD-12). `login` makes the backend set the
+ * `ap_session` cookie; `credentials: 'include'` replays it on every request, so
+ * the session id is never exposed to JS (no localStorage token to exfiltrate via
+ * XSS). `me` rehydrates on reload; `logout` clears the cookie server-side.
+ *
+ * CSRF is enforced backend-side via an Origin/Referer allowlist (the browser
+ * always sends Origin on the POST), so the console origin must be in the
+ * backend's ALLOWED_ORIGINS. The SameSite=Lax cookie is only sent when `/query`
+ * is SAME-ORIGIN as the app — in dev that means going through the Vite proxy
+ * (see vite.config.ts), not an absolute cross-origin URL.
  */
-
-// Storage key for the session token. The auth store is the only writer; the
-// transport (`authLink` below) is the only reader.
-export const TOKEN_STORAGE_KEY = 'clarity-auth-token'
-
-function readToken(): string | null {
-  try {
-    return localStorage.getItem(TOKEN_STORAGE_KEY) ?? sessionStorage.getItem(TOKEN_STORAGE_KEY)
-  } catch {
-    // SSR / locked or unavailable storage — proceed unauthenticated.
-    return null
-  }
-}
 
 const httpLink = new HttpLink({
   uri: (import.meta.env.VITE_GRAPHQL_ENDPOINT as string | undefined) ?? '/query',
-})
-
-const authLink = setContext((_operation, { headers }) => {
-  const token = readToken()
-  return {
-    headers: {
-      ...(headers ?? {}),
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-    },
-  }
+  // Send + receive the httpOnly ap_session cookie on every request.
+  credentials: 'include',
 })
 
 export const apolloClient = new ApolloClient({
-  link: ApolloLink.from([authLink, httpLink]),
+  link: httpLink,
   cache: new InMemoryCache({
     // Normalize every entity the backend returns by `__typename` + `id` so the
     // cache can dedupe and patch mutation results in place. The default cache
