@@ -75,7 +75,7 @@ function statusLabel(status: AgentStatus): string {
 <template>
   <section class="dashboard">
     <header class="dashboard-header">
-      <h1 cds-text="title" class="heading">{{ locale.t('dashboard.overview.title') }}</h1>
+      <h1 class="heading">{{ locale.t('dashboard.overview.title') }}</h1>
     </header>
 
     <div class="metric-grid">
@@ -259,6 +259,9 @@ function statusLabel(status: AgentStatus): string {
 }
 .dashboard-header {
   flex: 0 0 auto;
+  /* 为 CJK fallback 字形(PingFang SC / 微软雅黑)预留顶部空间,
+     替代被移除的 cds-text="title" ::after 负 margin 吸收的几何。 */
+  padding-top: 2px;
 }
 .heading {
   margin: 0;
