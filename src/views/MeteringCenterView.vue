@@ -330,7 +330,9 @@ const rankingBars = computed<RankingBar[]>(() => {
 <template>
   <section class="metering-page">
     <header class="page-header">
-      <h1 cds-text="title" class="heading">{{ locale.t('metering.title') }}</h1>
+      <h1 class="heading" :title="locale.t('metering.title')">
+        {{ locale.t('metering.title') }}
+      </h1>
     </header>
 
     <div class="filter-toolbar">
@@ -612,14 +614,24 @@ const rankingBars = computed<RankingBar[]>(() => {
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
 .page-header {
+  width: 100%;
+  min-width: 0;
   flex: 0 0 auto;
+  overflow: visible;
 }
 .heading {
+  display: block;
+  width: 100%;
+  min-height: 32px;
   margin: 0;
   font-size: 24px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: keep-all;
 }
 .filter-toolbar {
   display: flex;
@@ -679,7 +691,10 @@ const rankingBars = computed<RankingBar[]>(() => {
   font-weight: 400;
 }
 .metering-page :deep(cds-card) {
+  --padding: 0;
+  --overflow: hidden;
   display: block;
+  box-sizing: border-box;
   min-width: 0;
   background: var(--cds-alias-object-container-background, #fff);
   border: 1px solid var(--cds-alias-object-border-color, #b3b3b3);
@@ -687,8 +702,8 @@ const rankingBars = computed<RankingBar[]>(() => {
   box-shadow: none;
 }
 .card-content {
+  box-sizing: border-box;
   min-width: 0;
-  height: 100%;
   padding: 10px 12px;
 }
 .card-content h2 {
@@ -704,7 +719,13 @@ const rankingBars = computed<RankingBar[]>(() => {
   gap: 12px;
   flex: 1 1 38%;
 }
+.chart-card,
+.table-card {
+  height: 100%;
+  min-height: 0;
+}
 .chart-content {
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -783,6 +804,7 @@ const rankingBars = computed<RankingBar[]>(() => {
   flex: 1 1 34%;
 }
 .table-content {
+  height: 100%;
   display: flex;
   flex-direction: column;
   padding: 8px 9px;
@@ -840,10 +862,13 @@ const rankingBars = computed<RankingBar[]>(() => {
   font-size: 8px;
 }
 .cost-card {
+  --height: auto;
+  height: auto;
   min-height: 102px;
   flex: 0 0 auto;
 }
 .cost-content {
+  min-height: 100px;
   display: flex;
   flex-direction: column;
 }

@@ -123,7 +123,9 @@ function statusLabel(status: DashboardAgentStatus): string {
 <template>
   <section class="dashboard">
     <header class="dashboard-header">
-      <h1 cds-text="title" class="heading">{{ locale.t('dashboard.overview.title') }}</h1>
+      <h1 class="heading" :title="locale.t('dashboard.overview.title')">
+        {{ locale.t('dashboard.overview.title') }}
+      </h1>
     </header>
 
     <div class="metric-grid">
@@ -290,14 +292,24 @@ function statusLabel(status: DashboardAgentStatus): string {
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
 .dashboard-header {
+  width: 100%;
+  min-width: 0;
   flex: 0 0 auto;
+  overflow: visible;
 }
 .heading {
+  display: block;
+  width: 100%;
+  min-height: 32px;
   margin: 0;
   font-size: 24px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: keep-all;
 }
 .metric-grid {
   display: grid;
