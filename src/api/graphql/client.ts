@@ -57,6 +57,10 @@ export const apolloClient = new ApolloClient({
       RateLimitPolicy: { keyFields: ['id'] },
       OvaTemplateFamily: { keyFields: ['id'] },
       OvaTemplateVersion: { keyFields: ['id'] },
+      RequestLog: { keyFields: ['id'] },
+      AuditLog: { keyFields: ['id'] },
+      AgentConfig: { keyFields: ['id'] },
+      Artifact: { keyFields: ['id'] },
     },
   }),
   defaultOptions: {
