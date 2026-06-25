@@ -33,13 +33,13 @@ watch(error, (err) => {
 })
 
 const stats = computed<DashboardStats | null>(
-  () => result.value?.dashboardOverview.stats ?? null,
+  () => result.value?.dashboardOverview?.stats ?? null,
 )
 const recentAgents = computed<DashboardRecentAgent[]>(
-  () => result.value?.dashboardOverview.recentAgents ?? [],
+  () => result.value?.dashboardOverview?.recentAgents ?? [],
 )
 const notices = computed<DashboardNotice[]>(
-  () => result.value?.dashboardOverview.notices ?? [],
+  () => result.value?.dashboardOverview?.notices ?? [],
 )
 
 // --- Derived display values --------------------------------------------------

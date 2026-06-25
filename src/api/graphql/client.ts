@@ -49,6 +49,7 @@ export const apolloClient = new ApolloClient({
       Agent: { keyFields: ['id'] },
       AgentApiKey: { keyFields: ['id'] },
       User: { keyFields: ['id'] },
+      AccountUser: { keyFields: ['id'] },
       ModelGateway: { keyFields: ['id'] },
       ResourcePool: { keyFields: ['id'] },
       Role: { keyFields: ['id'] },
