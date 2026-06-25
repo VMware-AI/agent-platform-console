@@ -43,104 +43,6 @@ import '@/components/icons'
 const locale = useLocaleStore()
 const toast = useToast()
 
-// Self-contained i18n: the shared locale store (src/stores/locale.ts) does not
-// carry upstreamRouter.* keys and is off-limits for this change. `tt` resolves
-// from this fallback dictionary, deferring to the store only for shared keys.
-// See the report for the canonical zh/en list to fold into the store later.
-const FALLBACK: Record<string, { zh: string; en: string }> = {
-  'upstreamRouter.title': { zh: '上游与路由分层', en: 'Upstreams & Router Tiers' },
-  'upstreamRouter.description': {
-    zh: '管理算力网关的上游后端,并将难度分层映射到模型别名,实时同步至 litellm 复杂度路由。',
-    en: 'Manage gateway upstream backends and map difficulty tiers to model aliases, synced live to the litellm complexity router.',
-  },
-  'upstreamRouter.tab.upstreams': { zh: '上游', en: 'Upstreams' },
-  'upstreamRouter.tab.tiers': { zh: '路由分层', en: 'Router Tiers' },
-  'upstreamRouter.action.create': { zh: '新建上游', en: 'New Upstream' },
-  'upstreamRouter.action.refresh': { zh: '刷新', en: 'Refresh' },
-  'upstreamRouter.action.edit': { zh: '编辑', en: 'Edit' },
-  'upstreamRouter.action.delete': { zh: '删除', en: 'Delete' },
-  'upstreamRouter.action.save': { zh: '保存', en: 'Save' },
-  'upstreamRouter.action.cancel': { zh: '取消', en: 'Cancel' },
-  'upstreamRouter.action.addTier': { zh: '新增分层映射', en: 'Add Tier Mapping' },
-  // Upstream table
-  'upstreamRouter.upstream.col.name': { zh: '名称', en: 'Name' },
-  'upstreamRouter.upstream.col.provider': { zh: '提供方', en: 'Provider' },
-  'upstreamRouter.upstream.col.model': { zh: '模型', en: 'Model' },
-  'upstreamRouter.upstream.col.apiBase': { zh: 'API 地址', en: 'API Base' },
-  'upstreamRouter.upstream.col.status': { zh: '状态', en: 'Status' },
-  'upstreamRouter.upstream.col.actions': { zh: '操作', en: 'Actions' },
-  'upstreamRouter.upstream.empty': { zh: '暂无上游,点击「新建上游」添加。', en: 'No upstreams yet. Click "New Upstream" to add one.' },
-  'upstreamRouter.upstream.loading': { zh: '加载中…', en: 'Loading…' },
-  'upstreamRouter.upstream.error': { zh: '上游列表加载失败', en: 'Failed to load upstreams' },
-  'upstreamRouter.upstream.apiBaseDefault': { zh: '默认', en: 'Default' },
-  // Upstream form
-  'upstreamRouter.upstream.dialog.createTitle': { zh: '新建上游', en: 'New Upstream' },
-  'upstreamRouter.upstream.dialog.editTitle': { zh: '编辑上游', en: 'Edit Upstream' },
-  'upstreamRouter.upstream.field.name': { zh: '名称', en: 'Name' },
-  'upstreamRouter.upstream.field.namePlaceholder': { zh: '上游唯一名称', en: 'Unique upstream name' },
-  'upstreamRouter.upstream.field.nameLocked': { zh: '名称为唯一标识,创建后不可修改。', en: 'Name is the identity and cannot be changed after creation.' },
-  'upstreamRouter.upstream.field.provider': { zh: '提供方', en: 'Provider' },
-  'upstreamRouter.upstream.field.model': { zh: '模型', en: 'Model' },
-  'upstreamRouter.upstream.field.modelPlaceholder': { zh: '如 gpt-4o / claude-3-5-sonnet', en: 'e.g. gpt-4o / claude-3-5-sonnet' },
-  'upstreamRouter.upstream.field.apiBase': { zh: 'API 地址(可选)', en: 'API Base (optional)' },
-  'upstreamRouter.upstream.field.apiBasePlaceholder': { zh: 'https://… 留空则用提供方默认', en: 'https://… leave blank for provider default' },
-  'upstreamRouter.upstream.field.apiKey': { zh: 'API 密钥', en: 'API Key' },
-  'upstreamRouter.upstream.field.apiKeyPlaceholder': { zh: '写入密钥库,明文不落库', en: 'Stored in secret store, never persisted in plaintext' },
-  'upstreamRouter.upstream.field.apiKeyEditPlaceholder': { zh: '留空则保留现有密钥', en: 'Leave blank to keep the existing key' },
-  'upstreamRouter.upstream.field.apiKeyHint': { zh: '密钥仅写入,不会被读取回显。', en: 'The key is write-only and is never read back.' },
-  'upstreamRouter.upstream.field.enabled': { zh: '启用', en: 'Enabled' },
-  // Tier table
-  'upstreamRouter.tier.col.tier': { zh: '难度分层', en: 'Tier' },
-  'upstreamRouter.tier.col.modelAlias': { zh: '模型别名', en: 'Model Alias' },
-  'upstreamRouter.tier.col.actions': { zh: '操作', en: 'Actions' },
-  'upstreamRouter.tier.unset': { zh: '未映射', en: 'Unmapped' },
-  'upstreamRouter.tier.empty': { zh: '暂无分层映射', en: 'No tier mappings yet' },
-  'upstreamRouter.tier.loading': { zh: '加载中…', en: 'Loading…' },
-  'upstreamRouter.tier.error': { zh: '分层映射加载失败', en: 'Failed to load tier mappings' },
-  'upstreamRouter.tier.allMapped': { zh: '全部分层均已映射', en: 'All tiers are mapped' },
-  // Tier form
-  'upstreamRouter.tier.dialog.createTitle': { zh: '新增分层映射', en: 'Add Tier Mapping' },
-  'upstreamRouter.tier.dialog.editTitle': { zh: '编辑分层映射', en: 'Edit Tier Mapping' },
-  'upstreamRouter.tier.field.tier': { zh: '难度分层', en: 'Tier' },
-  'upstreamRouter.tier.field.modelAlias': { zh: '模型别名', en: 'Model Alias' },
-  'upstreamRouter.tier.field.modelAliasPlaceholder': { zh: '该分层路由到的模型别名', en: 'Model alias this tier routes to' },
-  'upstreamRouter.tier.field.modelAliasHint': { zh: '需为已配置模型路由的别名。', en: 'Must be an alias of a configured model route.' },
-  // Provider labels
-  'upstreamRouter.provider.vllm': { zh: 'vLLM', en: 'vLLM' },
-  'upstreamRouter.provider.openai': { zh: 'OpenAI', en: 'OpenAI' },
-  'upstreamRouter.provider.anthropic': { zh: 'Anthropic', en: 'Anthropic' },
-  'upstreamRouter.provider.minimax': { zh: 'MiniMax', en: 'MiniMax' },
-  'upstreamRouter.provider.codex': { zh: 'Codex', en: 'Codex' },
-  // Tier-level labels
-  'upstreamRouter.tierLevel.SIMPLE': { zh: '简单 (SIMPLE)', en: 'Simple' },
-  'upstreamRouter.tierLevel.MEDIUM': { zh: '中等 (MEDIUM)', en: 'Medium' },
-  'upstreamRouter.tierLevel.COMPLEX': { zh: '复杂 (COMPLEX)', en: 'Complex' },
-  'upstreamRouter.tierLevel.REASONING': { zh: '推理 (REASONING)', en: 'Reasoning' },
-  // Status
-  'upstreamRouter.status.enabled': { zh: '已启用', en: 'Enabled' },
-  'upstreamRouter.status.disabled': { zh: '已停用', en: 'Disabled' },
-  // Confirm
-  'upstreamRouter.confirm.deleteTitle': { zh: '删除上游', en: 'Delete Upstream' },
-  'upstreamRouter.confirm.deleteBody': { zh: '确定要删除上游「{name}」吗?此操作不可撤销。', en: 'Delete upstream "{name}"? This cannot be undone.' },
-  // Toasts
-  'upstreamRouter.toast.created': { zh: '上游已创建', en: 'Upstream created' },
-  'upstreamRouter.toast.updated': { zh: '上游已更新', en: 'Upstream updated' },
-  'upstreamRouter.toast.saveFailed': { zh: '保存上游失败', en: 'Failed to save upstream' },
-  'upstreamRouter.toast.deleted': { zh: '上游已删除', en: 'Upstream deleted' },
-  'upstreamRouter.toast.deleteFailed': { zh: '删除上游失败', en: 'Failed to delete upstream' },
-  'upstreamRouter.toast.tierSaved': { zh: '分层映射已更新', en: 'Tier mapping updated' },
-  'upstreamRouter.toast.tierSaveFailed': { zh: '保存分层映射失败', en: 'Failed to save tier mapping' },
-  'upstreamRouter.toast.refreshed': { zh: '已刷新', en: 'Refreshed' },
-  'upstreamRouter.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
-}
-
-// Resolve upstreamRouter.* from the local fallback, otherwise defer to the store.
-function tt(key: string): string {
-  const entry = FALLBACK[key]
-  if (entry) return entry[locale.locale]
-  return locale.t(key)
-}
-
 type TabKey = 'upstreams' | 'tiers'
 const activeTab = ref<TabKey>('upstreams')
 
@@ -160,7 +62,7 @@ const savingUpstream = ref(false)
 const pendingDelete = ref<UpstreamNode | null>(null)
 
 const deleteBody = computed(() =>
-  tt('upstreamRouter.confirm.deleteBody').replace('{name}', pendingDelete.value?.name ?? ''),
+  locale.t('upstreamRouter.confirm.deleteBody').replace('{name}', pendingDelete.value?.name ?? ''),
 )
 
 function openCreateUpstream() {
@@ -188,12 +90,12 @@ async function submitUpstream(input: UpsertUpstreamRoutingVars['input']) {
       mutation: UPSERT_UPSTREAM_ROUTING,
       variables: { input },
     })
-    toast.success(tt(isEditing ? 'upstreamRouter.toast.updated' : 'upstreamRouter.toast.created'))
+    toast.success(locale.t(isEditing ? 'upstreamRouter.toast.updated' : 'upstreamRouter.toast.created'))
     upstreamDialogOpen.value = false
     editingUpstream.value = null
     await refetchUpstreams()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('upstreamRouter.toast.saveFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('upstreamRouter.toast.saveFailed')))
   } finally {
     savingUpstream.value = false
   }
@@ -216,10 +118,10 @@ async function confirmDeleteUpstream() {
       mutation: DELETE_UPSTREAM_ROUTING,
       variables: { id: target.id },
     })
-    toast.success(tt('upstreamRouter.toast.deleted'))
+    toast.success(locale.t('upstreamRouter.toast.deleted'))
     await refetchUpstreams()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('upstreamRouter.toast.deleteFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('upstreamRouter.toast.deleteFailed')))
   }
 }
 
@@ -263,12 +165,12 @@ async function submitTier(payload: { tier: RouterTierLevel; modelAlias: string }
       mutation: SET_ROUTER_TIER_ROUTING,
       variables: { tier: payload.tier, modelAlias: payload.modelAlias },
     })
-    toast.success(tt('upstreamRouter.toast.tierSaved'))
+    toast.success(locale.t('upstreamRouter.toast.tierSaved'))
     tierDialogOpen.value = false
     editingTier.value = null
     await refetchTiers()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('upstreamRouter.toast.tierSaveFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('upstreamRouter.toast.tierSaveFailed')))
   } finally {
     savingTier.value = false
   }
@@ -284,30 +186,30 @@ async function refreshActive() {
       if (tiersLoading.value) return
       await refetchTiers()
     }
-    toast.success(tt('upstreamRouter.toast.refreshed'))
+    toast.success(locale.t('upstreamRouter.toast.refreshed'))
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('upstreamRouter.toast.refreshFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('upstreamRouter.toast.refreshFailed')))
   }
 }
 
 function providerLabel(provider: string): string {
-  return tt(`upstreamRouter.provider.${provider}`)
+  return locale.t(`upstreamRouter.provider.${provider}`)
 }
 
 function tierLevelLabel(level: string): string {
-  return tt(`upstreamRouter.tierLevel.${level}`)
+  return locale.t(`upstreamRouter.tierLevel.${level}`)
 }
 </script>
 
 <template>
   <section class="ur-page">
     <header class="page-head">
-      <h1 cds-text="title" class="heading">{{ tt('upstreamRouter.title') }}</h1>
-      <p cds-text="body" class="desc muted">{{ tt('upstreamRouter.description') }}</p>
+      <h1 cds-text="title" class="heading">{{ locale.t('upstreamRouter.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('upstreamRouter.description') }}</p>
     </header>
 
     <div class="content-card">
-      <div class="tabs" role="tablist" :aria-label="tt('upstreamRouter.title')">
+      <div class="tabs" role="tablist" :aria-label="locale.t('upstreamRouter.title')">
         <button
           type="button"
           role="tab"
@@ -317,7 +219,7 @@ function tierLevelLabel(level: string): string {
           @click="activeTab = 'upstreams'"
         >
           <cds-icon shape="router" size="sm" aria-hidden="true"></cds-icon>
-          {{ tt('upstreamRouter.tab.upstreams') }}
+          {{ locale.t('upstreamRouter.tab.upstreams') }}
         </button>
         <button
           type="button"
@@ -328,14 +230,14 @@ function tierLevelLabel(level: string): string {
           @click="activeTab = 'tiers'"
         >
           <cds-icon shape="forking" size="sm" aria-hidden="true"></cds-icon>
-          {{ tt('upstreamRouter.tab.tiers') }}
+          {{ locale.t('upstreamRouter.tab.tiers') }}
         </button>
         <cds-button
           action="ghost"
           class="refresh-button"
           :disabled="activeTab === 'upstreams' ? upstreamsLoading : tiersLoading"
-          :aria-label="tt('upstreamRouter.action.refresh')"
-          :title="tt('upstreamRouter.action.refresh')"
+          :aria-label="locale.t('upstreamRouter.action.refresh')"
+          :title="locale.t('upstreamRouter.action.refresh')"
           @click="refreshActive"
         >
           <cds-icon
@@ -343,7 +245,7 @@ function tierLevelLabel(level: string): string {
             size="md"
             :class="{ spinning: activeTab === 'upstreams' ? upstreamsLoading : tiersLoading }"
           ></cds-icon>
-          <span>{{ tt('upstreamRouter.action.refresh') }}</span>
+          <span>{{ locale.t('upstreamRouter.action.refresh') }}</span>
         </cds-button>
       </div>
 
@@ -352,18 +254,18 @@ function tierLevelLabel(level: string): string {
         <div class="toolbar">
           <cds-button action="outline" status="primary" @click="openCreateUpstream">
             <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
-            {{ tt('upstreamRouter.action.create') }}
+            {{ locale.t('upstreamRouter.action.create') }}
           </cds-button>
         </div>
 
         <div class="grid-card">
-          <cds-grid border="row" column-layout="flex" role="grid" :aria-label="tt('upstreamRouter.tab.upstreams')">
-            <cds-grid-column width="22%">{{ tt('upstreamRouter.upstream.col.name') }}</cds-grid-column>
-            <cds-grid-column width="14%">{{ tt('upstreamRouter.upstream.col.provider') }}</cds-grid-column>
-            <cds-grid-column width="20%">{{ tt('upstreamRouter.upstream.col.model') }}</cds-grid-column>
-            <cds-grid-column width="20%">{{ tt('upstreamRouter.upstream.col.apiBase') }}</cds-grid-column>
-            <cds-grid-column width="12%">{{ tt('upstreamRouter.upstream.col.status') }}</cds-grid-column>
-            <cds-grid-column width="12%">{{ tt('upstreamRouter.upstream.col.actions') }}</cds-grid-column>
+          <cds-grid border="row" column-layout="flex" role="grid" :aria-label="locale.t('upstreamRouter.tab.upstreams')">
+            <cds-grid-column width="22%">{{ locale.t('upstreamRouter.upstream.col.name') }}</cds-grid-column>
+            <cds-grid-column width="14%">{{ locale.t('upstreamRouter.upstream.col.provider') }}</cds-grid-column>
+            <cds-grid-column width="20%">{{ locale.t('upstreamRouter.upstream.col.model') }}</cds-grid-column>
+            <cds-grid-column width="20%">{{ locale.t('upstreamRouter.upstream.col.apiBase') }}</cds-grid-column>
+            <cds-grid-column width="12%">{{ locale.t('upstreamRouter.upstream.col.status') }}</cds-grid-column>
+            <cds-grid-column width="12%">{{ locale.t('upstreamRouter.upstream.col.actions') }}</cds-grid-column>
 
             <cds-grid-row v-for="upstream in upstreams" :key="upstream.id">
               <cds-grid-cell>
@@ -377,40 +279,40 @@ function tierLevelLabel(level: string): string {
                 <span v-if="upstream.apiBase" class="cell-ellipsis" :title="upstream.apiBase">
                   {{ upstream.apiBase }}
                 </span>
-                <span v-else class="muted">{{ tt('upstreamRouter.upstream.apiBaseDefault') }}</span>
+                <span v-else class="muted">{{ locale.t('upstreamRouter.upstream.apiBaseDefault') }}</span>
               </cds-grid-cell>
               <cds-grid-cell>
                 <cds-badge :status="upstream.enabled ? 'success' : 'neutral'" class="status-badge">
                   <cds-icon :shape="upstream.enabled ? 'check-circle' : 'ban'" size="sm"></cds-icon>
-                  {{ tt(upstream.enabled ? 'upstreamRouter.status.enabled' : 'upstreamRouter.status.disabled') }}
+                  {{ locale.t(upstream.enabled ? 'upstreamRouter.status.enabled' : 'upstreamRouter.status.disabled') }}
                 </cds-badge>
               </cds-grid-cell>
               <cds-grid-cell>
                 <div class="row-actions">
                   <button type="button" class="row-action" @click="openEditUpstream(upstream)">
                     <cds-icon shape="pencil" size="sm"></cds-icon>
-                    <span>{{ tt('upstreamRouter.action.edit') }}</span>
+                    <span>{{ locale.t('upstreamRouter.action.edit') }}</span>
                   </button>
                   <button type="button" class="row-action danger" @click="requestDeleteUpstream(upstream)">
                     <cds-icon shape="trash" size="sm"></cds-icon>
-                    <span>{{ tt('upstreamRouter.action.delete') }}</span>
+                    <span>{{ locale.t('upstreamRouter.action.delete') }}</span>
                   </button>
                 </div>
               </cds-grid-cell>
             </cds-grid-row>
 
             <cds-grid-placeholder v-if="upstreamsLoading">
-              <p cds-text="subsection">{{ tt('upstreamRouter.upstream.loading') }}</p>
+              <p cds-text="subsection">{{ locale.t('upstreamRouter.upstream.loading') }}</p>
             </cds-grid-placeholder>
             <cds-grid-placeholder v-else-if="upstreamsError">
               <cds-icon shape="ban" size="xl"></cds-icon>
-              <p cds-text="subsection">{{ tt('upstreamRouter.upstream.error') }}</p>
+              <p cds-text="subsection">{{ locale.t('upstreamRouter.upstream.error') }}</p>
             </cds-grid-placeholder>
             <cds-grid-placeholder v-else-if="upstreams.length === 0">
               <cds-icon shape="router" size="xl"></cds-icon>
-              <p cds-text="subsection">{{ tt('upstreamRouter.upstream.empty') }}</p>
+              <p cds-text="subsection">{{ locale.t('upstreamRouter.upstream.empty') }}</p>
               <cds-button action="outline" size="sm" @click="openCreateUpstream">
-                {{ tt('upstreamRouter.action.create') }}
+                {{ locale.t('upstreamRouter.action.create') }}
               </cds-button>
             </cds-grid-placeholder>
           </cds-grid>
@@ -424,19 +326,19 @@ function tierLevelLabel(level: string): string {
             action="outline"
             status="primary"
             :disabled="allTiersMapped"
-            :title="allTiersMapped ? tt('upstreamRouter.tier.allMapped') : undefined"
+            :title="allTiersMapped ? locale.t('upstreamRouter.tier.allMapped') : undefined"
             @click="openCreateTier"
           >
             <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
-            {{ tt('upstreamRouter.action.addTier') }}
+            {{ locale.t('upstreamRouter.action.addTier') }}
           </cds-button>
         </div>
 
         <div class="grid-card">
-          <cds-grid border="row" column-layout="flex" role="grid" :aria-label="tt('upstreamRouter.tab.tiers')">
-            <cds-grid-column width="30%">{{ tt('upstreamRouter.tier.col.tier') }}</cds-grid-column>
-            <cds-grid-column width="50%">{{ tt('upstreamRouter.tier.col.modelAlias') }}</cds-grid-column>
-            <cds-grid-column width="20%">{{ tt('upstreamRouter.tier.col.actions') }}</cds-grid-column>
+          <cds-grid border="row" column-layout="flex" role="grid" :aria-label="locale.t('upstreamRouter.tab.tiers')">
+            <cds-grid-column width="30%">{{ locale.t('upstreamRouter.tier.col.tier') }}</cds-grid-column>
+            <cds-grid-column width="50%">{{ locale.t('upstreamRouter.tier.col.modelAlias') }}</cds-grid-column>
+            <cds-grid-column width="20%">{{ locale.t('upstreamRouter.tier.col.actions') }}</cds-grid-column>
 
             <cds-grid-row v-for="tier in tiers" :key="tier.id">
               <cds-grid-cell>
@@ -446,30 +348,30 @@ function tierLevelLabel(level: string): string {
                 <span v-if="tier.modelAlias" class="cell-ellipsis" :title="tier.modelAlias">
                   {{ tier.modelAlias }}
                 </span>
-                <span v-else class="muted">{{ tt('upstreamRouter.tier.unset') }}</span>
+                <span v-else class="muted">{{ locale.t('upstreamRouter.tier.unset') }}</span>
               </cds-grid-cell>
               <cds-grid-cell>
                 <div class="row-actions">
                   <button type="button" class="row-action" @click="openEditTier(tier)">
                     <cds-icon shape="pencil" size="sm"></cds-icon>
-                    <span>{{ tt('upstreamRouter.action.edit') }}</span>
+                    <span>{{ locale.t('upstreamRouter.action.edit') }}</span>
                   </button>
                 </div>
               </cds-grid-cell>
             </cds-grid-row>
 
             <cds-grid-placeholder v-if="tiersLoading">
-              <p cds-text="subsection">{{ tt('upstreamRouter.tier.loading') }}</p>
+              <p cds-text="subsection">{{ locale.t('upstreamRouter.tier.loading') }}</p>
             </cds-grid-placeholder>
             <cds-grid-placeholder v-else-if="tiersError">
               <cds-icon shape="ban" size="xl"></cds-icon>
-              <p cds-text="subsection">{{ tt('upstreamRouter.tier.error') }}</p>
+              <p cds-text="subsection">{{ locale.t('upstreamRouter.tier.error') }}</p>
             </cds-grid-placeholder>
             <cds-grid-placeholder v-else-if="tiers.length === 0">
               <cds-icon shape="forking" size="xl"></cds-icon>
-              <p cds-text="subsection">{{ tt('upstreamRouter.tier.empty') }}</p>
+              <p cds-text="subsection">{{ locale.t('upstreamRouter.tier.empty') }}</p>
               <cds-button action="outline" size="sm" @click="openCreateTier">
-                {{ tt('upstreamRouter.action.addTier') }}
+                {{ locale.t('upstreamRouter.action.addTier') }}
               </cds-button>
             </cds-grid-placeholder>
           </cds-grid>
@@ -482,7 +384,6 @@ function tierLevelLabel(level: string): string {
       :open="upstreamDialogOpen"
       :upstream="editingUpstream"
       :saving="savingUpstream"
-      :tt="tt"
       @close="closeUpstreamDialog"
       @submit="submitUpstream"
     />
@@ -493,14 +394,13 @@ function tierLevelLabel(level: string): string {
       :tier="editingTier"
       :used-tiers="usedTiers"
       :saving="savingTier"
-      :tt="tt"
       @close="closeTierDialog"
       @submit="submitTier"
     />
 
     <ConfirmDialog
       :open="pendingDelete !== null"
-      :title="tt('upstreamRouter.confirm.deleteTitle')"
+      :title="locale.t('upstreamRouter.confirm.deleteTitle')"
       :body="deleteBody"
       danger
       @close="closeDeleteUpstream"

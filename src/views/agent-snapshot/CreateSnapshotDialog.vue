@@ -4,11 +4,9 @@
  * (required) and optional `description`, then emits `submit` with the trimmed
  * values. Mirrors the ConfirmDialog backdrop + card pattern (Teleport →
  * backdrop → card) so it matches the rest of the console.
- *
- * Self-contained i18n: the parent passes its `tt` resolver in so all copy stays
- * in the view's local FALLBACK dictionary.
  */
 import { computed, ref, watch } from 'vue'
+import { useLocaleStore } from '@/stores/locale'
 import '@/components/icons'
 
 const props = defineProps<{
@@ -17,8 +15,9 @@ const props = defineProps<{
   agentName: string
   saving: boolean
   /** Translation resolver injected by the parent view. */
-  tt: (key: string) => string
 }>()
+
+const locale = useLocaleStore()
 
 const emit = defineEmits<{
   (e: 'submit', payload: { name: string; description: string | null }): void
@@ -68,45 +67,45 @@ function onBackdropClick(e: MouseEvent) {
         class="snap-backdrop"
         role="dialog"
         aria-modal="true"
-        :aria-label="tt('agentSnapshot.create.title')"
+        :aria-label="locale.t('agentSnapshot.create.title')"
         @click="onBackdropClick"
       >
         <form class="snap-card" @submit.prevent="submit">
-          <h2 cds-text="section" class="snap-title">{{ tt('agentSnapshot.create.title') }}</h2>
+          <h2 cds-text="section" class="snap-title">{{ locale.t('agentSnapshot.create.title') }}</h2>
           <p cds-text="body" class="snap-sub muted">
-            {{ tt('agentSnapshot.create.forAgent') }}
+            {{ locale.t('agentSnapshot.create.forAgent') }}
             <strong>{{ agentName }}</strong>
           </p>
 
           <cds-input class="field">
-            <label>{{ tt('agentSnapshot.create.nameLabel') }}</label>
+            <label>{{ locale.t('agentSnapshot.create.nameLabel') }}</label>
             <input
               v-model="name"
               type="text"
-              :placeholder="tt('agentSnapshot.create.namePlaceholder')"
-              :aria-label="tt('agentSnapshot.create.nameLabel')"
+              :placeholder="locale.t('agentSnapshot.create.namePlaceholder')"
+              :aria-label="locale.t('agentSnapshot.create.nameLabel')"
               maxlength="120"
               required
             />
           </cds-input>
 
           <cds-textarea class="field">
-            <label>{{ tt('agentSnapshot.create.descLabel') }}</label>
+            <label>{{ locale.t('agentSnapshot.create.descLabel') }}</label>
             <textarea
               v-model="description"
               rows="3"
-              :placeholder="tt('agentSnapshot.create.descPlaceholder')"
-              :aria-label="tt('agentSnapshot.create.descLabel')"
+              :placeholder="locale.t('agentSnapshot.create.descPlaceholder')"
+              :aria-label="locale.t('agentSnapshot.create.descLabel')"
               maxlength="500"
             ></textarea>
           </cds-textarea>
 
           <div class="snap-actions">
             <cds-button type="button" action="outline" :disabled="saving" @click="close">
-              {{ tt('agentSnapshot.action.cancel') }}
+              {{ locale.t('agentSnapshot.action.cancel') }}
             </cds-button>
             <cds-button type="submit" action="solid" status="primary" :disabled="!canSubmit">
-              {{ tt('agentSnapshot.action.create') }}
+              {{ locale.t('agentSnapshot.action.create') }}
             </cds-button>
           </div>
         </form>

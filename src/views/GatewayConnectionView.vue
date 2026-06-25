@@ -11,8 +11,7 @@
  * A header banner shows modelGatewaySyncSummary (litellm sync rollup).
  *
  * All ops are @hasRole(any: [admin]); a non-admin reaching this page sees the
- * backend authorization error surfaced via toast. i18n is self-contained
- * (FALLBACK + tt) so this view can ship without touching the shared locale store.
+ * backend authorization error surfaced via toast.
  */
 import { computed, ref } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
@@ -45,84 +44,6 @@ import '@/components/icons'
 
 const locale = useLocaleStore()
 const toast = useToast()
-
-// Self-contained i18n. The shared locale store does not carry gatewayConn.* keys
-// and is off-limits for this change; `tt` resolves them locally and otherwise
-// defers to the store. See the report for the canonical zh/en list to fold in.
-const FALLBACK: Record<string, { zh: string; en: string }> = {
-  'gatewayConn.title': { zh: '网关连接', en: 'Gateway Connections' },
-  'gatewayConn.description': {
-    zh: '管理平台接入的算力网关(litellm)连接。接入时填写的 master key 仅写入密钥库,不会回显。',
-    en: 'Manage the litellm gateway connections the platform talks to. The master key entered at register is write-only — stored in the secret store, never read back.',
-  },
-  'gatewayConn.action.register': { zh: '接入网关连接', en: 'Register Connection' },
-  'gatewayConn.action.refresh': { zh: '刷新', en: 'Refresh' },
-  'gatewayConn.action.test': { zh: '测试连接', en: 'Test' },
-  'gatewayConn.action.delete': { zh: '删除', en: 'Delete' },
-  'gatewayConn.col.name': { zh: '名称', en: 'Name' },
-  'gatewayConn.col.endpoint': { zh: '端点', en: 'Endpoint' },
-  'gatewayConn.col.status': { zh: '状态', en: 'Status' },
-  'gatewayConn.col.strategy': { zh: '负载均衡', en: 'Load Balance' },
-  'gatewayConn.col.createdAt': { zh: '创建时间', en: 'Created At' },
-  'gatewayConn.col.actions': { zh: '操作', en: 'Actions' },
-  'gatewayConn.status.connected': { zh: '已连接', en: 'Connected' },
-  'gatewayConn.status.disconnected': { zh: '未连接', en: 'Disconnected' },
-  'gatewayConn.status.error': { zh: '异常', en: 'Error' },
-  'gatewayConn.strategy.simple_shuffle': { zh: '简单随机', en: 'Simple Shuffle' },
-  'gatewayConn.strategy.latency': { zh: '延迟优先', en: 'Latency' },
-  'gatewayConn.strategy.usage_v2': { zh: '用量均衡', en: 'Usage v2' },
-  'gatewayConn.strategy.least_busy': { zh: '最少负载', en: 'Least Busy' },
-  'gatewayConn.strategy.cost': { zh: '成本优先', en: 'Cost' },
-  'gatewayConn.empty': { zh: '暂无网关连接', en: 'No gateway connections' },
-  'gatewayConn.loading': { zh: '加载中…', en: 'Loading…' },
-  'gatewayConn.error': { zh: '网关连接加载失败', en: 'Failed to load gateway connections' },
-  'gatewayConn.summary.title': { zh: '当前同步状态', en: 'Sync Status' },
-  'gatewayConn.summary.state': { zh: '状态', en: 'State' },
-  'gatewayConn.summary.lastSynced': { zh: '最近同步', en: 'Last Synced' },
-  'gatewayConn.summary.counts': { zh: '成功 {ok} / 失败 {fail}', en: '{ok} ok / {fail} failed' },
-  'gatewayConn.summary.never': { zh: '从未同步', en: 'Never synced' },
-  'gatewayConn.syncState.SYNCED': { zh: '已同步', en: 'Synced' },
-  'gatewayConn.syncState.SYNCING': { zh: '同步中', en: 'Syncing' },
-  'gatewayConn.syncState.PARTIAL': { zh: '部分同步', en: 'Partial' },
-  'gatewayConn.syncState.FAILED': { zh: '同步失败', en: 'Failed' },
-  'gatewayConn.syncState.NEVER': { zh: '从未同步', en: 'Never' },
-  'gatewayConn.form.createTitle': { zh: '接入网关连接', en: 'Register Gateway Connection' },
-  'gatewayConn.form.name': { zh: '名称', en: 'Name' },
-  'gatewayConn.form.namePlaceholder': { zh: '例如:主算力网关', en: 'e.g. Primary Gateway' },
-  'gatewayConn.form.nameError': { zh: '名称需为 2-64 个字符', en: 'Name must be 2-64 characters' },
-  'gatewayConn.form.endpoint': { zh: '端点 (Endpoint)', en: 'Endpoint' },
-  'gatewayConn.form.endpointError': { zh: '请输入合法的 http(s) 地址', en: 'Enter a valid http(s) URL' },
-  'gatewayConn.form.masterKey': { zh: 'Master Key(可选)', en: 'Master Key (optional)' },
-  'gatewayConn.form.masterKeyPlaceholder': { zh: 'litellm master key', en: 'litellm master key' },
-  'gatewayConn.form.masterKeyHint': {
-    zh: '仅写入密钥库,不会回显;留空表示沿用后端已有引用。',
-    en: 'Stored in the secret store, never read back. Leave blank to keep an existing reference.',
-  },
-  'gatewayConn.form.strategy': { zh: '负载均衡策略', en: 'Load Balance Strategy' },
-  'gatewayConn.form.cancel': { zh: '取消', en: 'Cancel' },
-  'gatewayConn.form.submit': { zh: '接入', en: 'Register' },
-  'gatewayConn.confirm.deleteTitle': { zh: '删除网关连接', en: 'Delete Gateway Connection' },
-  'gatewayConn.confirm.deleteBody': {
-    zh: '确定要删除网关连接「{name}」吗?此操作不可撤销。',
-    en: 'Delete the gateway connection "{name}"? This cannot be undone.',
-  },
-  'gatewayConn.toast.created': { zh: '网关连接已接入', en: 'Gateway connection registered' },
-  'gatewayConn.toast.createFailed': { zh: '接入网关连接失败', en: 'Failed to register gateway connection' },
-  'gatewayConn.toast.deleted': { zh: '网关连接已删除', en: 'Gateway connection deleted' },
-  'gatewayConn.toast.deleteFailed': { zh: '删除网关连接失败', en: 'Failed to delete gateway connection' },
-  'gatewayConn.toast.testConnected': { zh: '连接正常:{name}', en: 'Connected: {name}' },
-  'gatewayConn.toast.testDisconnected': { zh: '连接未建立:{name}', en: 'Disconnected: {name}' },
-  'gatewayConn.toast.testError': { zh: '连接异常:{name}', en: 'Connection error: {name}' },
-  'gatewayConn.toast.testFailed': { zh: '测试连接失败', en: 'Failed to test connection' },
-  'gatewayConn.toast.refreshed': { zh: '网关连接已刷新', en: 'Gateway connections refreshed' },
-  'gatewayConn.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
-}
-
-function tt(key: string): string {
-  const entry = FALLBACK[key]
-  if (entry) return entry[locale.locale]
-  return locale.t(key)
-}
 
 const {
   result: listResult,
@@ -172,7 +93,7 @@ function fmtDateTime(iso: string | null | undefined): string {
 const summaryCountsText = computed(() => {
   const s = syncSummary.value
   if (!s) return ''
-  return tt('gatewayConn.summary.counts')
+  return locale.t('gatewayConn.summary.counts')
     .replace('{ok}', String(s.successCount))
     .replace('{fail}', String(s.failedCount))
 })
@@ -194,11 +115,11 @@ async function submitRegister(input: RegisterGatewayConnectionInput) {
       mutation: REGISTER_GATEWAY_CONNECTION,
       variables: { input },
     })
-    toast.success(tt('gatewayConn.toast.created'))
+    toast.success(locale.t('gatewayConn.toast.created'))
     registerOpen.value = false
     await Promise.all([refetch(), refetchSummary()])
   } catch (err) {
-    toast.error(graphqlErrorMessage(err, tt('gatewayConn.toast.createFailed')))
+    toast.error(graphqlErrorMessage(err, locale.t('gatewayConn.toast.createFailed')))
   } finally {
     saving.value = false
   }
@@ -217,15 +138,15 @@ async function testConnection(connection: GatewayConnectionNode) {
     })
     const status = response.data?.testGatewayConnection
     if (status === 'connected') {
-      toast.success(tt('gatewayConn.toast.testConnected').replace('{name}', connection.name))
+      toast.success(locale.t('gatewayConn.toast.testConnected').replace('{name}', connection.name))
     } else if (status === 'error') {
-      toast.error(tt('gatewayConn.toast.testError').replace('{name}', connection.name))
+      toast.error(locale.t('gatewayConn.toast.testError').replace('{name}', connection.name))
     } else {
-      toast.warning(tt('gatewayConn.toast.testDisconnected').replace('{name}', connection.name))
+      toast.warning(locale.t('gatewayConn.toast.testDisconnected').replace('{name}', connection.name))
     }
     await Promise.all([refetch(), refetchSummary()])
   } catch (err) {
-    toast.error(graphqlErrorMessage(err, tt('gatewayConn.toast.testFailed')))
+    toast.error(graphqlErrorMessage(err, locale.t('gatewayConn.toast.testFailed')))
   } finally {
     testingId.value = null
   }
@@ -248,10 +169,10 @@ async function confirmDelete() {
       mutation: DELETE_GATEWAY_CONNECTION,
       variables: { id: connection.id },
     })
-    toast.success(tt('gatewayConn.toast.deleted'))
+    toast.success(locale.t('gatewayConn.toast.deleted'))
     await Promise.all([refetch(), refetchSummary()])
   } catch (err) {
-    toast.error(graphqlErrorMessage(err, tt('gatewayConn.toast.deleteFailed')))
+    toast.error(graphqlErrorMessage(err, locale.t('gatewayConn.toast.deleteFailed')))
   }
 }
 
@@ -259,15 +180,15 @@ async function refreshConnections() {
   if (loading.value) return
   try {
     await Promise.all([refetch(), refetchSummary()])
-    toast.success(tt('gatewayConn.toast.refreshed'))
+    toast.success(locale.t('gatewayConn.toast.refreshed'))
   } catch (err) {
-    toast.error(graphqlErrorMessage(err, tt('gatewayConn.toast.refreshFailed')))
+    toast.error(graphqlErrorMessage(err, locale.t('gatewayConn.toast.refreshFailed')))
   }
 }
 
 const deleteDialogBody = computed(() =>
   deletingConnection.value
-    ? tt('gatewayConn.confirm.deleteBody').replace('{name}', deletingConnection.value.name)
+    ? locale.t('gatewayConn.confirm.deleteBody').replace('{name}', deletingConnection.value.name)
     : '',
 )
 
@@ -279,20 +200,20 @@ function isClickableEndpoint(value: string): boolean {
 <template>
   <section class="gateway-conn-page">
     <header class="page-head">
-      <h1 cds-text="title" class="heading">{{ tt('gatewayConn.title') }}</h1>
-      <p cds-text="body" class="desc muted">{{ tt('gatewayConn.description') }}</p>
+      <h1 cds-text="title" class="heading">{{ locale.t('gatewayConn.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('gatewayConn.description') }}</p>
     </header>
 
     <cds-alert v-if="syncSummary" status="info" class="sync-summary">
       <div class="summary-row">
-        <span class="summary-label">{{ tt('gatewayConn.summary.title') }}</span>
+        <span class="summary-label">{{ locale.t('gatewayConn.summary.title') }}</span>
         <cds-badge :status="syncStateBadge(syncSummary.state)">
-          {{ tt(`gatewayConn.syncState.${syncSummary.state}`) }}
+          {{ locale.t(`gatewayConn.syncState.${syncSummary.state}`) }}
         </cds-badge>
         <span class="summary-counts">{{ summaryCountsText }}</span>
         <span class="summary-synced muted">
-          {{ tt('gatewayConn.summary.lastSynced') }}:
-          {{ syncSummary.lastSyncedAt ? fmtDateTime(syncSummary.lastSyncedAt) : tt('gatewayConn.summary.never') }}
+          {{ locale.t('gatewayConn.summary.lastSynced') }}:
+          {{ syncSummary.lastSyncedAt ? fmtDateTime(syncSummary.lastSyncedAt) : locale.t('gatewayConn.summary.never') }}
         </span>
         <span v-if="syncSummary.message" class="summary-message muted">— {{ syncSummary.message }}</span>
       </div>
@@ -301,24 +222,24 @@ function isClickableEndpoint(value: string): boolean {
     <div class="toolbar">
       <cds-button action="outline" status="primary" @click="openRegister">
         <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
-        {{ tt('gatewayConn.action.register') }}
+        {{ locale.t('gatewayConn.action.register') }}
       </cds-button>
 
       <cds-button
         action="ghost"
         class="refresh-button"
         :disabled="loading"
-        :aria-label="tt('gatewayConn.action.refresh')"
-        :title="tt('gatewayConn.action.refresh')"
+        :aria-label="locale.t('gatewayConn.action.refresh')"
+        :title="locale.t('gatewayConn.action.refresh')"
         @click="refreshConnections"
       >
         <cds-icon shape="refresh" size="md" :class="{ spinning: loading }"></cds-icon>
-        <span>{{ tt('gatewayConn.action.refresh') }}</span>
+        <span>{{ locale.t('gatewayConn.action.refresh') }}</span>
       </cds-button>
     </div>
 
     <cds-alert v-if="error" status="danger" closable>
-      {{ tt('gatewayConn.error') }}
+      {{ locale.t('gatewayConn.error') }}
     </cds-alert>
 
     <div class="grid-card">
@@ -326,14 +247,14 @@ function isClickableEndpoint(value: string): boolean {
         border="row"
         column-layout="flex"
         role="grid"
-        :aria-label="tt('gatewayConn.title')"
+        :aria-label="locale.t('gatewayConn.title')"
       >
-        <cds-grid-column width="22%">{{ tt('gatewayConn.col.name') }}</cds-grid-column>
-        <cds-grid-column width="28%">{{ tt('gatewayConn.col.endpoint') }}</cds-grid-column>
-        <cds-grid-column width="12%">{{ tt('gatewayConn.col.status') }}</cds-grid-column>
-        <cds-grid-column width="14%">{{ tt('gatewayConn.col.strategy') }}</cds-grid-column>
-        <cds-grid-column width="12%">{{ tt('gatewayConn.col.createdAt') }}</cds-grid-column>
-        <cds-grid-column width="12%">{{ tt('gatewayConn.col.actions') }}</cds-grid-column>
+        <cds-grid-column width="22%">{{ locale.t('gatewayConn.col.name') }}</cds-grid-column>
+        <cds-grid-column width="28%">{{ locale.t('gatewayConn.col.endpoint') }}</cds-grid-column>
+        <cds-grid-column width="12%">{{ locale.t('gatewayConn.col.status') }}</cds-grid-column>
+        <cds-grid-column width="14%">{{ locale.t('gatewayConn.col.strategy') }}</cds-grid-column>
+        <cds-grid-column width="12%">{{ locale.t('gatewayConn.col.createdAt') }}</cds-grid-column>
+        <cds-grid-column width="12%">{{ locale.t('gatewayConn.col.actions') }}</cds-grid-column>
 
         <cds-grid-row v-for="connection in connections" :key="connection.id">
           <cds-grid-cell>
@@ -352,11 +273,11 @@ function isClickableEndpoint(value: string): boolean {
           </cds-grid-cell>
           <cds-grid-cell>
             <cds-badge :status="statusBadge(connection.status)" class="status-badge">
-              {{ tt(`gatewayConn.status.${connection.status}`) }}
+              {{ locale.t(`gatewayConn.status.${connection.status}`) }}
             </cds-badge>
           </cds-grid-cell>
           <cds-grid-cell class="muted">
-            {{ tt(`gatewayConn.strategy.${connection.loadBalanceStrategy}`) }}
+            {{ locale.t(`gatewayConn.strategy.${connection.loadBalanceStrategy}`) }}
           </cds-grid-cell>
           <cds-grid-cell class="muted">{{ fmtDateTime(connection.createdAt) }}</cds-grid-cell>
           <cds-grid-cell>
@@ -368,11 +289,11 @@ function isClickableEndpoint(value: string): boolean {
                 @click="testConnection(connection)"
               >
                 <cds-icon shape="sync" size="sm" :class="{ spinning: testingId === connection.id }"></cds-icon>
-                <span>{{ tt('gatewayConn.action.test') }}</span>
+                <span>{{ locale.t('gatewayConn.action.test') }}</span>
               </button>
               <button type="button" class="row-action danger" @click="requestDelete(connection)">
                 <cds-icon shape="trash" size="sm"></cds-icon>
-                <span>{{ tt('gatewayConn.action.delete') }}</span>
+                <span>{{ locale.t('gatewayConn.action.delete') }}</span>
               </button>
             </div>
           </cds-grid-cell>
@@ -380,14 +301,14 @@ function isClickableEndpoint(value: string): boolean {
 
         <cds-grid-placeholder v-if="loading && connections.length === 0">
           <cds-progress-circle size="xl" status="info"></cds-progress-circle>
-          <p cds-text="subsection">{{ tt('gatewayConn.loading') }}</p>
+          <p cds-text="subsection">{{ locale.t('gatewayConn.loading') }}</p>
         </cds-grid-placeholder>
 
         <cds-grid-placeholder v-else-if="connections.length === 0">
           <cds-icon shape="internet-of-things" size="xl"></cds-icon>
-          <p cds-text="subsection">{{ tt('gatewayConn.empty') }}</p>
+          <p cds-text="subsection">{{ locale.t('gatewayConn.empty') }}</p>
           <cds-button action="outline" size="sm" @click="openRegister">
-            {{ tt('gatewayConn.action.register') }}
+            {{ locale.t('gatewayConn.action.register') }}
           </cds-button>
         </cds-grid-placeholder>
       </cds-grid>
@@ -397,14 +318,13 @@ function isClickableEndpoint(value: string): boolean {
       v-if="registerOpen"
       :open="registerOpen"
       :saving="saving"
-      :tt="tt"
       @close="closeRegister"
       @submit="submitRegister"
     />
 
     <ConfirmDialog
       :open="!!deletingConnection"
-      :title="tt('gatewayConn.confirm.deleteTitle')"
+      :title="locale.t('gatewayConn.confirm.deleteTitle')"
       :body="deleteDialogBody"
       danger
       @close="closeDelete"

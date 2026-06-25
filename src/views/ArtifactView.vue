@@ -46,88 +46,6 @@ import '@/components/icons'
 const locale = useLocaleStore()
 const toast = useToast()
 
-// Local fallback dictionary for artifacts.* keys. The shared locale store
-// (src/stores/locale.ts) does not carry these keys and is off-limits for this
-// change; locale.t returns the raw key when missing, so this view resolves
-// artifacts.* itself and defers to the store for shared keys. The report lists
-// the canonical zh/en set to fold into the store later.
-const FALLBACK: Record<string, { zh: string; en: string }> = {
-  'artifacts.title': { zh: '制品库', en: 'Artifacts' },
-  'artifacts.description': {
-    zh: '管理脚本、配置、软件包与知识包等制品及其版本；制品在部署时下发或注入智能体所在的虚拟机。',
-    en: 'Manage scripts, configs, packages and knowledge artifacts and their versions; artifacts are delivered or injected into the agent VM at deploy.',
-  },
-  'artifacts.action.refresh': { zh: '刷新', en: 'Refresh' },
-  'artifacts.action.create': { zh: '新建制品', en: 'New Artifact' },
-  'artifacts.filter.kind': { zh: '制品类型', en: 'Kind' },
-  'artifacts.filter.allKinds': { zh: '全部类型', en: 'All kinds' },
-  'artifacts.kind.script': { zh: '脚本', en: 'Script' },
-  'artifacts.kind.config': { zh: '配置', en: 'Config' },
-  'artifacts.kind.package': { zh: '软件包', en: 'Package' },
-  'artifacts.kind.knowledge': { zh: '知识包', en: 'Knowledge' },
-  'artifacts.list.title': { zh: '制品列表', en: 'Artifacts' },
-  'artifacts.list.loading': { zh: '加载中…', en: 'Loading…' },
-  'artifacts.list.empty': { zh: '暂无制品', en: 'No artifacts' },
-  'artifacts.list.error': { zh: '制品加载失败', en: 'Failed to load artifacts' },
-  'artifacts.list.latest': { zh: '最新', en: 'latest' },
-  'artifacts.row.menu': { zh: '操作', en: 'Actions' },
-  'artifacts.row.newVersion': { zh: '新增版本', en: 'New Version' },
-  'artifacts.row.edit': { zh: '编辑', en: 'Edit' },
-  'artifacts.row.delete': { zh: '删除', en: 'Delete' },
-  'artifacts.detail.empty': { zh: '请选择左侧的一个制品以查看版本', en: 'Select an artifact to view its versions' },
-  'artifacts.detail.versions': { zh: '版本列表', en: 'Versions' },
-  'artifacts.detail.versionsLoading': { zh: '正在加载版本…', en: 'Loading versions…' },
-  'artifacts.detail.versionsEmpty': { zh: '暂无版本', en: 'No versions' },
-  'artifacts.detail.versionsError': { zh: '版本加载失败', en: 'Failed to load versions' },
-  'artifacts.detail.version': { zh: '版本', en: 'Version' },
-  'artifacts.detail.uri': { zh: '地址 (URI)', en: 'URI' },
-  'artifacts.detail.sha256': { zh: 'SHA-256', en: 'SHA-256' },
-  'artifacts.detail.createdAt': { zh: '创建时间', en: 'Created At' },
-  'artifacts.detail.none': { zh: '—', en: '—' },
-  'artifacts.dialog.createTitle': { zh: '新建制品', en: 'New Artifact' },
-  'artifacts.dialog.versionTitle': { zh: '新增版本', en: 'New Version' },
-  'artifacts.dialog.editTitle': { zh: '编辑制品', en: 'Edit Artifact' },
-  'artifacts.confirm.deleteTitle': { zh: '删除制品版本', en: 'Delete Artifact Version' },
-  'artifacts.confirm.deleteBody': {
-    zh: '确定要删除 {name} v{version} 吗？此操作不可撤销。',
-    en: 'Delete {name} v{version}? This cannot be undone.',
-  },
-  'artifacts.form.name': { zh: '名称', en: 'Name' },
-  'artifacts.form.namePlaceholder': { zh: '如 nginx-bootstrap', en: 'e.g. nginx-bootstrap' },
-  'artifacts.form.kind': { zh: '类型', en: 'Kind' },
-  'artifacts.form.version': { zh: '版本', en: 'Version' },
-  'artifacts.form.versionPlaceholder': { zh: '如 1.0.0', en: 'e.g. 1.0.0' },
-  'artifacts.form.uri': { zh: '地址 (URI)', en: 'URI' },
-  'artifacts.form.uriPlaceholder': { zh: '如 s3://bucket/path 或 oci://…', en: 'e.g. s3://bucket/path or oci://…' },
-  'artifacts.form.sha256': { zh: 'SHA-256（可选）', en: 'SHA-256 (optional)' },
-  'artifacts.form.sha256Placeholder': { zh: '内容摘要', en: 'content digest' },
-  'artifacts.form.content': { zh: '内联内容（可选）', en: 'Inline content (optional)' },
-  'artifacts.form.contentPlaceholder': { zh: '小型脚本/配置/知识包文本（≤64K）', en: 'Small script / config / knowledge text (≤64K)' },
-  'artifacts.form.contentHint': {
-    zh: '仅适用于脚本/配置/知识包（≤64K），部署时注入虚拟机。',
-    en: 'Only for script / config / knowledge (≤64K); injected into the VM at deploy.',
-  },
-  'artifacts.form.contentPackageHint': {
-    zh: '软件包不支持内联内容，请使用上面的 URI 引用制品。',
-    en: 'Packages cannot carry inline content; reference the artifact via the URI above.',
-  },
-  'artifacts.form.required': { zh: '此项为必填', en: 'This field is required' },
-  'artifacts.form.cancel': { zh: '取消', en: 'Cancel' },
-  'artifacts.form.save': { zh: '保存', en: 'Save' },
-  'artifacts.toast.created': { zh: '制品已保存', en: 'Artifact saved' },
-  'artifacts.toast.saveFailed': { zh: '保存制品失败', en: 'Failed to save artifact' },
-  'artifacts.toast.deleted': { zh: '制品版本已删除', en: 'Artifact version deleted' },
-  'artifacts.toast.deleteFailed': { zh: '删除制品失败', en: 'Failed to delete artifact' },
-  'artifacts.toast.refreshed': { zh: '制品列表已刷新', en: 'Artifacts refreshed' },
-  'artifacts.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
-}
-
-function tt(key: string): string {
-  const entry = FALLBACK[key]
-  if (entry) return entry[locale.locale]
-  return locale.t(key)
-}
-
 function fmt(template: string, vars: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, k: string) => vars[k] ?? `{${k}}`)
 }
@@ -224,7 +142,7 @@ function onKindChange(event: Event) {
 function openCreate() {
   formInitial.value = null
   formLockIdentity.value = false
-  formTitle.value = tt('artifacts.dialog.createTitle')
+  formTitle.value = locale.t('artifacts.dialog.createTitle')
   formOpen.value = true
 }
 
@@ -239,14 +157,14 @@ function openNewVersion(artifact: ArtifactNode) {
     metadata: null,
   }
   formLockIdentity.value = true
-  formTitle.value = tt('artifacts.dialog.versionTitle')
+  formTitle.value = locale.t('artifacts.dialog.versionTitle')
   formOpen.value = true
 }
 
 function openEdit(artifact: ArtifactNode) {
   formInitial.value = artifact
   formLockIdentity.value = true
-  formTitle.value = tt('artifacts.dialog.editTitle')
+  formTitle.value = locale.t('artifacts.dialog.editTitle')
   formOpen.value = true
 }
 
@@ -263,13 +181,13 @@ async function submitForm(input: UpsertArtifactInputVars) {
       mutation: UPSERT_PLATFORM_ARTIFACT,
       variables: { input },
     })
-    toast.success(tt('artifacts.toast.created'))
+    toast.success(locale.t('artifacts.toast.created'))
     formOpen.value = false
     selectedName.value = input.name
     await refetchList()
     if (versionsEnabled.value) await refetchVersions()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('artifacts.toast.saveFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('artifacts.toast.saveFailed')))
   } finally {
     saving.value = false
   }
@@ -295,13 +213,13 @@ async function confirmDelete() {
       mutation: DELETE_PLATFORM_ARTIFACT,
       variables: { id: target.id },
     })
-    toast.success(tt('artifacts.toast.deleted'))
+    toast.success(locale.t('artifacts.toast.deleted'))
     confirmOpen.value = false
     deleteTarget.value = null
     await refetchList()
     if (versionsEnabled.value) await refetchVersions()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('artifacts.toast.deleteFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('artifacts.toast.deleteFailed')))
   } finally {
     deleting.value = false
   }
@@ -312,73 +230,73 @@ async function refresh() {
   try {
     await refetchList()
     if (versionsEnabled.value) await refetchVersions()
-    toast.success(tt('artifacts.toast.refreshed'))
+    toast.success(locale.t('artifacts.toast.refreshed'))
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('artifacts.toast.refreshFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('artifacts.toast.refreshFailed')))
   }
 }
 
 const deleteBody = computed(() => {
   const t = deleteTarget.value
   if (!t) return ''
-  return fmt(tt('artifacts.confirm.deleteBody'), { name: t.name, version: t.version })
+  return fmt(locale.t('artifacts.confirm.deleteBody'), { name: t.name, version: t.version })
 })
 </script>
 
 <template>
   <section class="artifact-page">
     <header class="page-head">
-      <h1 cds-text="title" class="heading">{{ tt('artifacts.title') }}</h1>
-      <p cds-text="body" class="desc muted">{{ tt('artifacts.description') }}</p>
+      <h1 cds-text="title" class="heading">{{ locale.t('artifacts.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('artifacts.description') }}</p>
     </header>
 
     <div class="content-card">
       <div class="toolbar">
         <cds-select control-width="shrink">
-          <label>{{ tt('artifacts.filter.kind') }}</label>
+          <label>{{ locale.t('artifacts.filter.kind') }}</label>
           <select
             :value="kindFilter"
-            :aria-label="tt('artifacts.filter.kind')"
+            :aria-label="locale.t('artifacts.filter.kind')"
             @change="onKindChange"
           >
-            <option :value="ALL_KINDS">{{ tt('artifacts.filter.allKinds') }}</option>
+            <option :value="ALL_KINDS">{{ locale.t('artifacts.filter.allKinds') }}</option>
             <option v-for="k in ARTIFACT_KINDS" :key="k" :value="k">
-              {{ tt('artifacts.kind.' + k) }}
+              {{ locale.t('artifacts.kind.' + k) }}
             </option>
           </select>
         </cds-select>
 
         <cds-button action="solid" status="primary" class="create-button" @click="openCreate">
           <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
-          <span>{{ tt('artifacts.action.create') }}</span>
+          <span>{{ locale.t('artifacts.action.create') }}</span>
         </cds-button>
 
         <cds-button
           action="ghost"
           class="refresh-button"
           :disabled="listLoading"
-          :aria-label="tt('artifacts.action.refresh')"
-          :title="tt('artifacts.action.refresh')"
+          :aria-label="locale.t('artifacts.action.refresh')"
+          :title="locale.t('artifacts.action.refresh')"
           @click="refresh"
         >
           <cds-icon shape="refresh" size="md" :class="{ spinning: listLoading }"></cds-icon>
-          <span>{{ tt('artifacts.action.refresh') }}</span>
+          <span>{{ locale.t('artifacts.action.refresh') }}</span>
         </cds-button>
       </div>
 
       <div class="master-detail">
         <!-- Master: artifact list -->
-        <aside class="list-panel" :aria-label="tt('artifacts.list.title')">
-          <h2 cds-text="subsection" class="panel-title">{{ tt('artifacts.list.title') }}</h2>
+        <aside class="list-panel" :aria-label="locale.t('artifacts.list.title')">
+          <h2 cds-text="subsection" class="panel-title">{{ locale.t('artifacts.list.title') }}</h2>
 
           <p v-if="listLoading && artifacts.length === 0" class="panel-state muted">
-            {{ tt('artifacts.list.loading') }}
+            {{ locale.t('artifacts.list.loading') }}
           </p>
           <p v-else-if="listError" class="panel-state error">
-            {{ tt('artifacts.list.error') }}
+            {{ locale.t('artifacts.list.error') }}
           </p>
           <p v-else-if="artifacts.length === 0" class="panel-state muted">
-            {{ tt('artifacts.list.empty') }}
+            {{ locale.t('artifacts.list.empty') }}
           </p>
 
           <ul v-else class="artifact-list">
@@ -393,7 +311,7 @@ const deleteBody = computed(() => {
                 <span class="artifact-name" :title="artifact.name">{{ artifact.name }}</span>
                 <span class="artifact-meta">
                   <cds-badge status="info" class="kind-badge">
-                    {{ tt('artifacts.kind.' + artifact.kind) }}
+                    {{ locale.t('artifacts.kind.' + artifact.kind) }}
                   </cds-badge>
                   <small class="artifact-version muted">v{{ artifact.version }}</small>
                 </span>
@@ -404,8 +322,8 @@ const deleteBody = computed(() => {
                   <cds-button
                     action="ghost"
                     size="sm"
-                    :aria-label="tt('artifacts.row.menu')"
-                    :title="tt('artifacts.row.menu')"
+                    :aria-label="locale.t('artifacts.row.menu')"
+                    :title="locale.t('artifacts.row.menu')"
                   >
                     <cds-icon shape="ellipsis-vertical" size="sm"></cds-icon>
                   </cds-button>
@@ -413,11 +331,11 @@ const deleteBody = computed(() => {
                 <template #default="{ close }">
                   <button type="button" class="menu-item" @click="(openNewVersion(artifact), close())">
                     <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
-                    {{ tt('artifacts.row.newVersion') }}
+                    {{ locale.t('artifacts.row.newVersion') }}
                   </button>
                   <button type="button" class="menu-item" @click="(openEdit(artifact), close())">
                     <cds-icon shape="pencil" size="sm" aria-hidden="true"></cds-icon>
-                    {{ tt('artifacts.row.edit') }}
+                    {{ locale.t('artifacts.row.edit') }}
                   </button>
                   <button
                     type="button"
@@ -425,7 +343,7 @@ const deleteBody = computed(() => {
                     @click="(requestDelete(artifact), close())"
                   >
                     <cds-icon shape="trash" size="sm" aria-hidden="true"></cds-icon>
-                    {{ tt('artifacts.row.delete') }}
+                    {{ locale.t('artifacts.row.delete') }}
                   </button>
                 </template>
               </AppDropdown>
@@ -437,39 +355,39 @@ const deleteBody = computed(() => {
         <div class="detail-panel">
           <div v-if="!selectedArtifact" class="detail-empty">
             <cds-icon shape="blocks-group" size="xl"></cds-icon>
-            <p cds-text="subsection">{{ tt('artifacts.detail.empty') }}</p>
+            <p cds-text="subsection">{{ locale.t('artifacts.detail.empty') }}</p>
           </div>
 
           <template v-else>
             <header class="detail-head">
               <h2 cds-text="section" class="detail-title">{{ selectedArtifact.name }}</h2>
-              <cds-badge status="info">{{ tt('artifacts.kind.' + selectedArtifact.kind) }}</cds-badge>
+              <cds-badge status="info">{{ locale.t('artifacts.kind.' + selectedArtifact.kind) }}</cds-badge>
             </header>
 
             <section class="versions-section">
               <h3 cds-text="subsection" class="versions-title">
-                {{ tt('artifacts.detail.versions') }}
+                {{ locale.t('artifacts.detail.versions') }}
                 <span class="versions-count muted">({{ versions.length }})</span>
               </h3>
 
               <p v-if="versionsLoading && versions.length === 0" class="panel-state muted">
-                {{ tt('artifacts.detail.versionsLoading') }}
+                {{ locale.t('artifacts.detail.versionsLoading') }}
               </p>
               <p v-else-if="versionsError" class="panel-state error">
-                {{ tt('artifacts.detail.versionsError') }}
+                {{ locale.t('artifacts.detail.versionsError') }}
               </p>
               <p v-else-if="versions.length === 0" class="panel-state muted">
-                {{ tt('artifacts.detail.versionsEmpty') }}
+                {{ locale.t('artifacts.detail.versionsEmpty') }}
               </p>
 
               <div v-else class="versions-table-wrap">
                 <table class="versions-table">
                   <thead>
                     <tr>
-                      <th scope="col">{{ tt('artifacts.detail.version') }}</th>
-                      <th scope="col">{{ tt('artifacts.detail.uri') }}</th>
-                      <th scope="col">{{ tt('artifacts.detail.sha256') }}</th>
-                      <th scope="col">{{ tt('artifacts.detail.createdAt') }}</th>
+                      <th scope="col">{{ locale.t('artifacts.detail.version') }}</th>
+                      <th scope="col">{{ locale.t('artifacts.detail.uri') }}</th>
+                      <th scope="col">{{ locale.t('artifacts.detail.sha256') }}</th>
+                      <th scope="col">{{ locale.t('artifacts.detail.createdAt') }}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -477,7 +395,7 @@ const deleteBody = computed(() => {
                       <td class="cell-version">v{{ ver.version }}</td>
                       <td class="cell-uri" :title="ver.uri">{{ ver.uri }}</td>
                       <td class="cell-sha" :title="ver.sha256 ?? ''">
-                        {{ ver.sha256 || tt('artifacts.detail.none') }}
+                        {{ ver.sha256 || locale.t('artifacts.detail.none') }}
                       </td>
                       <td class="cell-created">{{ ver.createdAt }}</td>
                     </tr>
@@ -496,14 +414,13 @@ const deleteBody = computed(() => {
       :lock-identity="formLockIdentity"
       :saving="saving"
       :title="formTitle"
-      :tt="tt"
       @close="closeForm"
       @submit="submitForm"
     />
 
     <ConfirmDialog
       :open="confirmOpen"
-      :title="tt('artifacts.confirm.deleteTitle')"
+      :title="locale.t('artifacts.confirm.deleteTitle')"
       :body="deleteBody"
       danger
       @confirm="confirmDelete"

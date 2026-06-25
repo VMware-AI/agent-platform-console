@@ -8,11 +8,9 @@
  * upserts on that pair, so editing them would fork a new row rather than rename;
  * digest/signed stay editable). Mirrors the
  * AgentConfigKnowledgeDialog backdrop/card pattern.
- *
- * Self-contained: receives the local `tt` translator from the parent view so it
- * never touches the shared locale store for image.* keys.
  */
 import { computed, ref, watch } from 'vue'
+import { useLocaleStore } from '@/stores/locale'
 import type { ImageNode } from '@/api/graphql/queries/images'
 import '@/components/icons'
 
@@ -22,9 +20,9 @@ const props = defineProps<{
   image: ImageNode | null
   /** True while the parent's upsertImage mutation is in flight. */
   saving?: boolean
-  /** Local fallback translator (image.* keys not in the shared locale store). */
-  tt: (key: string) => string
 }>()
+
+const locale = useLocaleStore()
 
 const emit = defineEmits<{
   (event: 'close'): void
@@ -83,16 +81,16 @@ function submit() {
         class="img-backdrop"
         role="dialog"
         aria-modal="true"
-        :aria-label="tt(isEditing ? 'image.dialog.editTitle' : 'image.dialog.createTitle')"
+        :aria-label="locale.t(isEditing ? 'image.dialog.editTitle' : 'image.dialog.createTitle')"
         @click="onBackdropClick"
       >
         <form class="img-card" @click.stop @submit.prevent="submit">
           <h2 cds-text="section" class="img-title">
-            {{ tt(isEditing ? 'image.dialog.editTitle' : 'image.dialog.createTitle') }}
+            {{ locale.t(isEditing ? 'image.dialog.editTitle' : 'image.dialog.createTitle') }}
           </h2>
 
           <label class="img-field">
-            <span class="img-label">{{ tt('image.field.repository') }}</span>
+            <span class="img-label">{{ locale.t('image.field.repository') }}</span>
             <cds-input>
               <input
                 v-model="repository"
@@ -100,14 +98,14 @@ function submit() {
                 autocomplete="off"
                 required
                 :disabled="isEditing"
-                :placeholder="tt('image.field.repositoryPlaceholder')"
-                :aria-label="tt('image.field.repository')"
+                :placeholder="locale.t('image.field.repositoryPlaceholder')"
+                :aria-label="locale.t('image.field.repository')"
               />
             </cds-input>
           </label>
 
           <label class="img-field">
-            <span class="img-label">{{ tt('image.field.tag') }}</span>
+            <span class="img-label">{{ locale.t('image.field.tag') }}</span>
             <cds-input>
               <input
                 v-model="tag"
@@ -115,34 +113,34 @@ function submit() {
                 autocomplete="off"
                 required
                 :disabled="isEditing"
-                :placeholder="tt('image.field.tagPlaceholder')"
-                :aria-label="tt('image.field.tag')"
+                :placeholder="locale.t('image.field.tagPlaceholder')"
+                :aria-label="locale.t('image.field.tag')"
               />
             </cds-input>
           </label>
 
           <label class="img-field">
-            <span class="img-label">{{ tt('image.field.digest') }}</span>
+            <span class="img-label">{{ locale.t('image.field.digest') }}</span>
             <cds-input>
               <input
                 v-model="digest"
                 type="text"
                 autocomplete="off"
-                :placeholder="tt('image.field.digestPlaceholder')"
-                :aria-label="tt('image.field.digest')"
+                :placeholder="locale.t('image.field.digestPlaceholder')"
+                :aria-label="locale.t('image.field.digest')"
               />
             </cds-input>
-            <small class="img-hint muted">{{ tt('image.field.digestHint') }}</small>
+            <small class="img-hint muted">{{ locale.t('image.field.digestHint') }}</small>
           </label>
 
           <label class="img-check">
             <input v-model="signed" type="checkbox" class="app-checkbox" />
-            <span>{{ tt('image.field.signed') }}</span>
+            <span>{{ locale.t('image.field.signed') }}</span>
           </label>
 
           <div class="img-actions">
             <cds-button type="button" action="outline" :disabled="saving" @click="close">
-              {{ tt('image.dialog.cancel') }}
+              {{ locale.t('image.dialog.cancel') }}
             </cds-button>
             <cds-button
               type="submit"
@@ -151,7 +149,7 @@ function submit() {
               :loading-state="saving ? 'loading' : 'default'"
               :disabled="saving || !canSubmit"
             >
-              {{ tt('image.dialog.save') }}
+              {{ locale.t('image.dialog.save') }}
             </cds-button>
           </div>
         </form>

@@ -5,11 +5,9 @@
  * Both are simple single-field forms rendered as `cds-modal`s. The parent owns
  * all data + mutation calls; this component only collects input and emits it.
  * Kept as one file (two tiny dialogs) to avoid a large parent view.
- *
- * i18n is injected via the `tt` prop so the dialogs share the parent's
- * self-contained FALLBACK dictionary (the shared locale store is off-limits).
  */
 import { ref, watch } from 'vue'
+import { useLocaleStore } from '@/stores/locale'
 
 const props = defineProps<{
   /** Which dialog is open, if any. */
@@ -18,9 +16,9 @@ const props = defineProps<{
   busy: boolean
   /** Whether defining permissions is allowed (admin-only on the backend). */
   canDefinePermission: boolean
-  /** Translator from the parent's FALLBACK dictionary. */
-  tt: (key: string) => string
 }>()
+
+const locale = useLocaleStore()
 
 const emit = defineEmits<{
   (event: 'close'): void
@@ -71,18 +69,18 @@ function submitPermission() {
     @closeChange="close"
   >
     <cds-modal-header>
-      <h2 cds-text="title" class="cr-modal-title">{{ tt('customRole.create.title') }}</h2>
+      <h2 cds-text="title" class="cr-modal-title">{{ locale.t('customRole.create.title') }}</h2>
     </cds-modal-header>
     <cds-modal-content>
       <form class="cr-form" @submit.prevent="submitRole">
         <cds-input>
-          <label>{{ tt('customRole.create.nameLabel') }}</label>
+          <label>{{ locale.t('customRole.create.nameLabel') }}</label>
           <input
             v-model="roleName"
             type="text"
-            :placeholder="tt('customRole.create.namePlaceholder')"
+            :placeholder="locale.t('customRole.create.namePlaceholder')"
             :disabled="busy"
-            :aria-label="tt('customRole.create.nameLabel')"
+            :aria-label="locale.t('customRole.create.nameLabel')"
             maxlength="64"
             autofocus
           />
@@ -91,7 +89,7 @@ function submitPermission() {
     </cds-modal-content>
     <cds-modal-actions>
       <cds-button action="outline" :disabled="busy" @click="close">
-        {{ tt('customRole.action.cancel') }}
+        {{ locale.t('customRole.action.cancel') }}
       </cds-button>
       <cds-button
         status="primary"
@@ -99,7 +97,7 @@ function submitPermission() {
         :disabled="busy || roleName.trim().length === 0"
         @click="submitRole"
       >
-        {{ tt('customRole.action.create') }}
+        {{ locale.t('customRole.action.create') }}
       </cds-button>
     </cds-modal-actions>
   </cds-modal>
@@ -112,30 +110,30 @@ function submitPermission() {
     @closeChange="close"
   >
     <cds-modal-header>
-      <h2 cds-text="title" class="cr-modal-title">{{ tt('customRole.permission.addTitle') }}</h2>
+      <h2 cds-text="title" class="cr-modal-title">{{ locale.t('customRole.permission.addTitle') }}</h2>
     </cds-modal-header>
     <cds-modal-content>
       <form class="cr-form" @submit.prevent="submitPermission">
         <cds-input>
-          <label>{{ tt('customRole.permission.keyLabel') }}</label>
+          <label>{{ locale.t('customRole.permission.keyLabel') }}</label>
           <input
             v-model="permKey"
             type="text"
-            :placeholder="tt('customRole.permission.keyPlaceholder')"
+            :placeholder="locale.t('customRole.permission.keyPlaceholder')"
             :disabled="busy"
-            :aria-label="tt('customRole.permission.keyLabel')"
+            :aria-label="locale.t('customRole.permission.keyLabel')"
             maxlength="128"
             autofocus
           />
         </cds-input>
         <cds-input>
-          <label>{{ tt('customRole.permission.descLabel') }}</label>
+          <label>{{ locale.t('customRole.permission.descLabel') }}</label>
           <input
             v-model="permDescription"
             type="text"
-            :placeholder="tt('customRole.permission.descPlaceholder')"
+            :placeholder="locale.t('customRole.permission.descPlaceholder')"
             :disabled="busy"
-            :aria-label="tt('customRole.permission.descLabel')"
+            :aria-label="locale.t('customRole.permission.descLabel')"
             maxlength="256"
           />
         </cds-input>
@@ -143,7 +141,7 @@ function submitPermission() {
     </cds-modal-content>
     <cds-modal-actions>
       <cds-button action="outline" :disabled="busy" @click="close">
-        {{ tt('customRole.action.cancel') }}
+        {{ locale.t('customRole.action.cancel') }}
       </cds-button>
       <cds-button
         status="primary"
@@ -151,7 +149,7 @@ function submitPermission() {
         :disabled="busy || permKey.trim().length === 0"
         @click="submitPermission"
       >
-        {{ tt('customRole.action.save') }}
+        {{ locale.t('customRole.action.save') }}
       </cds-button>
     </cds-modal-actions>
   </cds-modal>

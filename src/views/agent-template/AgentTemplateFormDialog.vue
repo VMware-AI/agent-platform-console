@@ -10,6 +10,7 @@
  * draft — the parent performs the mutation and surfaces errors via toast.
  */
 import { computed, reactive, watch } from 'vue'
+import { useLocaleStore } from '@/stores/locale'
 import type {
   AgentTemplateNode,
   AgentTemplateStatus,
@@ -24,9 +25,9 @@ const props = defineProps<{
   template: AgentTemplateNode | null
   /** True while the parent's upsertAgentTemplate mutation is in flight. */
   saving?: boolean
-  /** Local fallback translator (agentTemplate.* keys not yet in the locale store). */
-  tt: (key: string) => string
 }>()
+
+const locale = useLocaleStore()
 
 const emit = defineEmits<{
   (event: 'close'): void
@@ -96,7 +97,7 @@ const canSubmit = computed(
 )
 
 const dialogTitle = computed(() =>
-  isEditing.value ? props.tt('agentTemplate.dialog.editTitle') : props.tt('agentTemplate.dialog.createTitle'),
+  isEditing.value ? locale.t('agentTemplate.dialog.editTitle') : locale.t('agentTemplate.dialog.createTitle'),
 )
 
 // Normalise blank optional strings to null so the backend stores absence rather
@@ -152,7 +153,7 @@ function submit() {
             <div class="at-grid">
               <label class="at-field">
                 <span class="at-label">
-                  {{ tt('agentTemplate.field.kind') }}
+                  {{ locale.t('agentTemplate.field.kind') }}
                   <em class="at-required" aria-hidden="true">*</em>
                 </span>
                 <cds-input>
@@ -161,18 +162,18 @@ function submit() {
                     type="text"
                     autocomplete="off"
                     :readonly="isEditing"
-                    :placeholder="tt('agentTemplate.field.kindPlaceholder')"
-                    :aria-label="tt('agentTemplate.field.kind')"
+                    :placeholder="locale.t('agentTemplate.field.kindPlaceholder')"
+                    :aria-label="locale.t('agentTemplate.field.kind')"
                   />
                 </cds-input>
                 <small v-if="isEditing" class="at-hint muted">
-                  {{ tt('agentTemplate.field.kindLocked') }}
+                  {{ locale.t('agentTemplate.field.kindLocked') }}
                 </small>
               </label>
 
               <label class="at-field">
                 <span class="at-label">
-                  {{ tt('agentTemplate.field.display') }}
+                  {{ locale.t('agentTemplate.field.display') }}
                   <em class="at-required" aria-hidden="true">*</em>
                 </span>
                 <cds-input>
@@ -180,96 +181,96 @@ function submit() {
                     v-model="form.display"
                     type="text"
                     autocomplete="off"
-                    :placeholder="tt('agentTemplate.field.displayPlaceholder')"
-                    :aria-label="tt('agentTemplate.field.display')"
+                    :placeholder="locale.t('agentTemplate.field.displayPlaceholder')"
+                    :aria-label="locale.t('agentTemplate.field.display')"
                   />
                 </cds-input>
               </label>
 
               <label class="at-field">
-                <span class="at-label">{{ tt('agentTemplate.field.status') }}</span>
+                <span class="at-label">{{ locale.t('agentTemplate.field.status') }}</span>
                 <cds-select>
-                  <select v-model="form.status" :aria-label="tt('agentTemplate.field.status')">
+                  <select v-model="form.status" :aria-label="locale.t('agentTemplate.field.status')">
                     <option v-for="value in STATUSES" :key="value" :value="value">
-                      {{ tt(`agentTemplate.status.${value}`) }}
+                      {{ locale.t(`agentTemplate.status.${value}`) }}
                     </option>
                   </select>
                 </cds-select>
               </label>
 
               <label class="at-field">
-                <span class="at-label">{{ tt('agentTemplate.field.version') }}</span>
+                <span class="at-label">{{ locale.t('agentTemplate.field.version') }}</span>
                 <cds-input>
                   <input
                     v-model="form.version"
                     type="text"
                     autocomplete="off"
-                    :placeholder="tt('agentTemplate.field.versionPlaceholder')"
-                    :aria-label="tt('agentTemplate.field.version')"
+                    :placeholder="locale.t('agentTemplate.field.versionPlaceholder')"
+                    :aria-label="locale.t('agentTemplate.field.version')"
                   />
                 </cds-input>
               </label>
 
               <label class="at-field">
-                <span class="at-label">{{ tt('agentTemplate.field.installMethod') }}</span>
+                <span class="at-label">{{ locale.t('agentTemplate.field.installMethod') }}</span>
                 <cds-select>
                   <select
                     v-model="form.installMethod"
-                    :aria-label="tt('agentTemplate.field.installMethod')"
+                    :aria-label="locale.t('agentTemplate.field.installMethod')"
                   >
                     <option v-for="value in INSTALL_METHODS" :key="value" :value="value">
-                      {{ tt(`agentTemplate.installMethod.${value}`) }}
+                      {{ locale.t(`agentTemplate.installMethod.${value}`) }}
                     </option>
                   </select>
                 </cds-select>
               </label>
 
               <label class="at-field at-span-2">
-                <span class="at-label">{{ tt('agentTemplate.field.installCommand') }}</span>
+                <span class="at-label">{{ locale.t('agentTemplate.field.installCommand') }}</span>
                 <cds-input>
                   <input
                     v-model="form.installCommand"
                     type="text"
                     autocomplete="off"
-                    :placeholder="tt('agentTemplate.field.installCommandPlaceholder')"
-                    :aria-label="tt('agentTemplate.field.installCommand')"
+                    :placeholder="locale.t('agentTemplate.field.installCommandPlaceholder')"
+                    :aria-label="locale.t('agentTemplate.field.installCommand')"
                   />
                 </cds-input>
               </label>
 
               <label class="at-field at-span-2">
-                <span class="at-label">{{ tt('agentTemplate.field.description') }}</span>
+                <span class="at-label">{{ locale.t('agentTemplate.field.description') }}</span>
                 <cds-textarea>
                   <textarea
                     v-model="form.description"
                     rows="2"
-                    :placeholder="tt('agentTemplate.field.descriptionPlaceholder')"
-                    :aria-label="tt('agentTemplate.field.description')"
+                    :placeholder="locale.t('agentTemplate.field.descriptionPlaceholder')"
+                    :aria-label="locale.t('agentTemplate.field.description')"
                   ></textarea>
                 </cds-textarea>
               </label>
 
               <label class="at-field at-span-2">
-                <span class="at-label">{{ tt('agentTemplate.field.knowledgeRoot') }}</span>
+                <span class="at-label">{{ locale.t('agentTemplate.field.knowledgeRoot') }}</span>
                 <cds-input>
                   <input
                     v-model="form.knowledgeRoot"
                     type="text"
                     autocomplete="off"
-                    :placeholder="tt('agentTemplate.field.knowledgeRootPlaceholder')"
-                    :aria-label="tt('agentTemplate.field.knowledgeRoot')"
+                    :placeholder="locale.t('agentTemplate.field.knowledgeRootPlaceholder')"
+                    :aria-label="locale.t('agentTemplate.field.knowledgeRoot')"
                   />
                 </cds-input>
               </label>
 
               <label class="at-field at-span-2">
-                <span class="at-label">{{ tt('agentTemplate.field.knowledgePrompt') }}</span>
+                <span class="at-label">{{ locale.t('agentTemplate.field.knowledgePrompt') }}</span>
                 <cds-textarea>
                   <textarea
                     v-model="form.knowledgePrompt"
                     rows="3"
-                    :placeholder="tt('agentTemplate.field.knowledgePromptPlaceholder')"
-                    :aria-label="tt('agentTemplate.field.knowledgePrompt')"
+                    :placeholder="locale.t('agentTemplate.field.knowledgePromptPlaceholder')"
+                    :aria-label="locale.t('agentTemplate.field.knowledgePrompt')"
                   ></textarea>
                 </cds-textarea>
               </label>
@@ -277,7 +278,7 @@ function submit() {
 
             <div class="at-actions">
               <cds-button type="button" action="outline" :disabled="saving" @click="close">
-                {{ tt('agentTemplate.action.cancel') }}
+                {{ locale.t('agentTemplate.action.cancel') }}
               </cds-button>
               <cds-button
                 type="submit"
@@ -286,7 +287,7 @@ function submit() {
                 :loading-state="saving ? 'loading' : 'default'"
                 :disabled="!canSubmit"
               >
-                {{ tt('agentTemplate.action.save') }}
+                {{ locale.t('agentTemplate.action.save') }}
               </cds-button>
             </div>
           </form>

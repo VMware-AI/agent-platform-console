@@ -16,9 +16,6 @@
  * `@hasRole(any: [admin, tenant_admin])`; membership ops are delegated
  * (platform/tenant admins OR the department's dept-admin, checked in-resolver).
  * Non-privileged callers get the backend error surfaced via toast.
- *
- * i18n is self-contained (FALLBACK + tt) — the shared locale store is off-limits
- * for this change. See report for the canonical zh/en list to fold in later.
  */
 import { computed, reactive, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
@@ -57,88 +54,10 @@ import '@/components/icons'
 const locale = useLocaleStore()
 const toast = useToast()
 
-// Local fallback dictionary for the department.* keys. The shared locale store
-// (src/stores/locale.ts) does not yet carry these keys and is off-limits for
-// this change; `locale.t` returns the raw key when an entry is missing, so this
-// view resolves department.* itself and falls back to the store for shared keys.
-const FALLBACK: Record<string, { zh: string; en: string }> = {
-  'department.title': { zh: '部门与成员管理', en: 'Departments & Memberships' },
-  'department.description': {
-    zh: '管理部门（对应 litellm 团队）及其成员归属，成员的预算与限流随其所在部门生效。',
-    en: 'Manage departments (each backed by a litellm team) and their member assignments; a member inherits the budget and limits of their department.',
-  },
-  'department.action.refresh': { zh: '刷新', en: 'Refresh' },
-  'department.action.create': { zh: '新建部门', en: 'New Department' },
-  'department.list.title': { zh: '部门列表', en: 'Departments' },
-  'department.list.loading': { zh: '加载中…', en: 'Loading…' },
-  'department.list.empty': { zh: '暂无部门', en: 'No departments' },
-  'department.list.error': { zh: '部门加载失败', en: 'Failed to load departments' },
-  'department.list.delete': { zh: '删除部门', en: 'Delete department' },
-  'department.detail.empty': { zh: '请选择左侧的一个部门以查看成员', en: 'Select a department to view its members' },
-  'department.detail.team': { zh: 'litellm 团队', en: 'litellm Team' },
-  'department.detail.tenant': { zh: '租户', en: 'Tenant' },
-  'department.detail.createdAt': { zh: '创建时间', en: 'Created At' },
-  'department.detail.none': { zh: '—', en: '—' },
-  'department.members.title': { zh: '部门成员', en: 'Members' },
-  'department.members.add': { zh: '添加成员', en: 'Add Member' },
-  'department.members.loading': { zh: '正在加载成员…', en: 'Loading members…' },
-  'department.members.empty': { zh: '该部门暂无成员', en: 'No members in this department' },
-  'department.members.error': { zh: '成员加载失败', en: 'Failed to load members' },
-  'department.members.remove': { zh: '移除成员', en: 'Remove member' },
-  'department.members.unknownUser': { zh: '未知用户', en: 'Unknown user' },
-  'department.role.user': { zh: '成员', en: 'Member' },
-  'department.role.dept_admin': { zh: '部门管理员', en: 'Dept Admin' },
-  'department.create.title': { zh: '新建部门', en: 'New Department' },
-  'department.create.nameLabel': { zh: '部门名称', en: 'Department name' },
-  'department.create.namePlaceholder': { zh: '例如：研发中心', en: 'e.g. Engineering' },
-  'department.create.budgetLabel': { zh: '共享预算（可选）', en: 'Shared budget (optional)' },
-  'department.create.budgetHint': { zh: '该部门 litellm 团队的共享额度，留空表示不限', en: 'Shared quota for the department litellm team; blank means unlimited' },
-  'department.create.cancel': { zh: '取消', en: 'Cancel' },
-  'department.create.submit': { zh: '创建', en: 'Create' },
-  'department.create.nameRequired': { zh: '请输入部门名称', en: 'Department name is required' },
-  'department.addMember.title': { zh: '添加成员', en: 'Add Member' },
-  'department.addMember.userLabel': { zh: '选择用户', en: 'Select user' },
-  'department.addMember.userPlaceholder': { zh: '请选择用户', en: 'Select a user' },
-  'department.addMember.roleLabel': { zh: '成员角色', en: 'Role' },
-  'department.addMember.usersLoading': { zh: '正在加载用户…', en: 'Loading users…' },
-  'department.addMember.noUsers': { zh: '没有可添加的用户', en: 'No users available to add' },
-  'department.addMember.allAssigned': { zh: '该部门已包含全部用户', en: 'Every user is already a member' },
-  'department.addMember.cancel': { zh: '取消', en: 'Cancel' },
-  'department.addMember.submit': { zh: '添加', en: 'Add' },
-  'department.addMember.userRequired': { zh: '请选择一个用户', en: 'Please select a user' },
-  'department.confirm.deleteTitle': { zh: '删除部门', en: 'Delete Department' },
-  'department.confirm.deleteBody': {
-    zh: '确定要删除该部门吗？其 litellm 团队与成员归属将一并解除，此操作不可撤销。',
-    en: 'Delete this department? Its litellm team and member assignments will be removed. This cannot be undone.',
-  },
-  'department.confirm.removeTitle': { zh: '移除成员', en: 'Remove Member' },
-  'department.confirm.removeBody': {
-    zh: '确定要将该成员移出此部门吗？',
-    en: 'Remove this member from the department?',
-  },
-  'department.toast.created': { zh: '部门已创建', en: 'Department created' },
-  'department.toast.createFailed': { zh: '创建部门失败', en: 'Failed to create department' },
-  'department.toast.deleted': { zh: '部门已删除', en: 'Department deleted' },
-  'department.toast.deleteFailed': { zh: '删除部门失败', en: 'Failed to delete department' },
-  'department.toast.memberAdded': { zh: '成员已添加', en: 'Member added' },
-  'department.toast.memberAddFailed': { zh: '添加成员失败', en: 'Failed to add member' },
-  'department.toast.memberRemoved': { zh: '成员已移除', en: 'Member removed' },
-  'department.toast.memberRemoveFailed': { zh: '移除成员失败', en: 'Failed to remove member' },
-  'department.toast.refreshed': { zh: '部门列表已刷新', en: 'Departments refreshed' },
-  'department.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
-}
-
-// Resolve department.* from the local fallback, otherwise defer to the store.
-function tt(key: string): string {
-  const entry = FALLBACK[key]
-  if (entry) return entry[locale.locale]
-  return locale.t(key)
-}
-
 const MEMBERSHIP_ROLES: MembershipRole[] = ['user', 'dept_admin']
 
 function roleLabel(role: MembershipRole): string {
-  return tt(`department.role.${role}`)
+  return locale.t(`department.role.${role}`)
 }
 
 /* ---------- Departments (master) ---------- */
@@ -216,7 +135,7 @@ const usersById = computed<Map<string, AccountUser>>(() => {
 
 function userLabel(userId: string): string {
   const user = usersById.value.get(userId)
-  if (!user) return `${tt('department.members.unknownUser')} (${userId})`
+  if (!user) return `${locale.t('department.members.unknownUser')} (${userId})`
   return user.displayName || user.username || user.email || userId
 }
 
@@ -250,7 +169,7 @@ function closeCreate() {
 async function submitCreate() {
   const name = createForm.name.trim()
   if (!name) {
-    toast.error(tt('department.create.nameRequired'))
+    toast.error(locale.t('department.create.nameRequired'))
     return
   }
   if (creating.value) return
@@ -263,13 +182,13 @@ async function submitCreate() {
       mutation: CREATE_DEPARTMENT_MUTATION,
       variables: { input: { name, maxBudget } },
     })
-    toast.success(tt('department.toast.created'))
+    toast.success(locale.t('department.toast.created'))
     createOpen.value = false
     await refetchDepartments()
     const created = data?.createDepartment
     if (created) selectedDepartmentId.value = created.id
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('department.toast.createFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('department.toast.createFailed')))
   } finally {
     creating.value = false
   }
@@ -298,12 +217,12 @@ async function confirmDeleteDepartment() {
       mutation: DELETE_DEPARTMENT_MUTATION,
       variables: { id: target.id },
     })
-    toast.success(tt('department.toast.deleted'))
+    toast.success(locale.t('department.toast.deleted'))
     deleteTarget.value = null
     if (selectedDepartmentId.value === target.id) selectedDepartmentId.value = null
     await refetchDepartments()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('department.toast.deleteFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('department.toast.deleteFailed')))
   } finally {
     deleting.value = false
   }
@@ -331,7 +250,7 @@ async function submitAddMember() {
   const department = selectedDepartment.value
   if (!department) return
   if (!addForm.userId) {
-    toast.error(tt('department.addMember.userRequired'))
+    toast.error(locale.t('department.addMember.userRequired'))
     return
   }
   if (addingMember.value) return
@@ -341,11 +260,11 @@ async function submitAddMember() {
       mutation: ADD_MEMBERSHIP_MUTATION,
       variables: { userId: addForm.userId, departmentId: department.id, role: addForm.role },
     })
-    toast.success(tt('department.toast.memberAdded'))
+    toast.success(locale.t('department.toast.memberAdded'))
     addMemberOpen.value = false
     await refetchMembers()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('department.toast.memberAddFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('department.toast.memberAddFailed')))
   } finally {
     addingMember.value = false
   }
@@ -375,11 +294,11 @@ async function confirmRemoveMember() {
       mutation: REMOVE_MEMBERSHIP_MUTATION,
       variables: { userId: target.userId, departmentId: department.id },
     })
-    toast.success(tt('department.toast.memberRemoved'))
+    toast.success(locale.t('department.toast.memberRemoved'))
     removeTarget.value = null
     await refetchMembers()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('department.toast.memberRemoveFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('department.toast.memberRemoveFailed')))
   } finally {
     removing.value = false
   }
@@ -392,9 +311,9 @@ async function refresh() {
   try {
     await refetchDepartments()
     if (selectedDepartmentId.value) await refetchMembers()
-    toast.success(tt('department.toast.refreshed'))
+    toast.success(locale.t('department.toast.refreshed'))
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('department.toast.refreshFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('department.toast.refreshFailed')))
   }
 }
 
@@ -410,43 +329,43 @@ function onAddRoleChange(event: Event) {
 <template>
   <section class="department-page">
     <header class="page-head">
-      <h1 cds-text="title" class="heading">{{ tt('department.title') }}</h1>
-      <p cds-text="body" class="desc muted">{{ tt('department.description') }}</p>
+      <h1 cds-text="title" class="heading">{{ locale.t('department.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('department.description') }}</p>
     </header>
 
     <div class="content-card">
       <div class="toolbar">
         <cds-button action="solid" status="primary" @click="openCreate">
           <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
-          <span>{{ tt('department.action.create') }}</span>
+          <span>{{ locale.t('department.action.create') }}</span>
         </cds-button>
 
         <cds-button
           action="ghost"
           class="refresh-button"
           :disabled="departmentsLoading"
-          :aria-label="tt('department.action.refresh')"
-          :title="tt('department.action.refresh')"
+          :aria-label="locale.t('department.action.refresh')"
+          :title="locale.t('department.action.refresh')"
           @click="refresh"
         >
           <cds-icon shape="refresh" size="md" :class="{ spinning: departmentsLoading }"></cds-icon>
-          <span>{{ tt('department.action.refresh') }}</span>
+          <span>{{ locale.t('department.action.refresh') }}</span>
         </cds-button>
       </div>
 
       <div class="master-detail">
         <!-- Master: departments list -->
-        <aside class="list-panel" :aria-label="tt('department.list.title')">
-          <h2 cds-text="subsection" class="panel-title">{{ tt('department.list.title') }}</h2>
+        <aside class="list-panel" :aria-label="locale.t('department.list.title')">
+          <h2 cds-text="subsection" class="panel-title">{{ locale.t('department.list.title') }}</h2>
 
           <p v-if="departmentsLoading && departments.length === 0" class="panel-state muted">
-            {{ tt('department.list.loading') }}
+            {{ locale.t('department.list.loading') }}
           </p>
           <p v-else-if="departmentsError" class="panel-state error">
-            {{ tt('department.list.error') }}
+            {{ locale.t('department.list.error') }}
           </p>
           <p v-else-if="departments.length === 0" class="panel-state muted">
-            {{ tt('department.list.empty') }}
+            {{ locale.t('department.list.empty') }}
           </p>
 
           <ul v-else class="dept-list">
@@ -470,8 +389,8 @@ function onAddRoleChange(event: Event) {
                     action="ghost"
                     size="sm"
                     class="row-menu-trigger"
-                    :aria-label="tt('department.list.delete')"
-                    :title="tt('department.list.delete')"
+                    :aria-label="locale.t('department.list.delete')"
+                    :title="locale.t('department.list.delete')"
                   >
                     <cds-icon shape="ellipsis-vertical" size="sm"></cds-icon>
                   </cds-button>
@@ -483,7 +402,7 @@ function onAddRoleChange(event: Event) {
                     @click="close(); requestDeleteDepartment(department)"
                   >
                     <cds-icon shape="trash" size="sm" aria-hidden="true"></cds-icon>
-                    {{ tt('department.list.delete') }}
+                    {{ locale.t('department.list.delete') }}
                   </button>
                 </template>
               </AppDropdown>
@@ -495,7 +414,7 @@ function onAddRoleChange(event: Event) {
         <div class="detail-panel">
           <div v-if="!selectedDepartment" class="detail-empty">
             <cds-icon shape="users" size="xl"></cds-icon>
-            <p cds-text="subsection">{{ tt('department.detail.empty') }}</p>
+            <p cds-text="subsection">{{ locale.t('department.detail.empty') }}</p>
           </div>
 
           <template v-else>
@@ -505,15 +424,15 @@ function onAddRoleChange(event: Event) {
 
             <dl class="detail-grid">
               <div class="detail-row">
-                <dt>{{ tt('department.detail.team') }}</dt>
-                <dd>{{ selectedDepartment.litellmTeamId || tt('department.detail.none') }}</dd>
+                <dt>{{ locale.t('department.detail.team') }}</dt>
+                <dd>{{ selectedDepartment.litellmTeamId || locale.t('department.detail.none') }}</dd>
               </div>
               <div class="detail-row">
-                <dt>{{ tt('department.detail.tenant') }}</dt>
-                <dd>{{ selectedDepartment.tenantId || tt('department.detail.none') }}</dd>
+                <dt>{{ locale.t('department.detail.tenant') }}</dt>
+                <dd>{{ selectedDepartment.tenantId || locale.t('department.detail.none') }}</dd>
               </div>
               <div class="detail-row">
-                <dt>{{ tt('department.detail.createdAt') }}</dt>
+                <dt>{{ locale.t('department.detail.createdAt') }}</dt>
                 <dd>{{ selectedDepartment.createdAt }}</dd>
               </div>
             </dl>
@@ -521,23 +440,23 @@ function onAddRoleChange(event: Event) {
             <section class="members-section">
               <div class="members-head">
                 <h3 cds-text="subsection" class="members-title">
-                  {{ tt('department.members.title') }}
+                  {{ locale.t('department.members.title') }}
                   <span class="members-count muted">({{ members.length }})</span>
                 </h3>
                 <cds-button action="outline" size="sm" @click="openAddMember">
                   <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
-                  {{ tt('department.members.add') }}
+                  {{ locale.t('department.members.add') }}
                 </cds-button>
               </div>
 
               <p v-if="membersLoading && members.length === 0" class="panel-state muted">
-                {{ tt('department.members.loading') }}
+                {{ locale.t('department.members.loading') }}
               </p>
               <p v-else-if="membersError" class="panel-state error">
-                {{ tt('department.members.error') }}
+                {{ locale.t('department.members.error') }}
               </p>
               <p v-else-if="members.length === 0" class="panel-state muted">
-                {{ tt('department.members.empty') }}
+                {{ locale.t('department.members.empty') }}
               </p>
 
               <ul v-else class="member-list">
@@ -560,8 +479,8 @@ function onAddRoleChange(event: Event) {
                     action="ghost"
                     size="sm"
                     class="member-remove"
-                    :aria-label="tt('department.members.remove')"
-                    :title="tt('department.members.remove')"
+                    :aria-label="locale.t('department.members.remove')"
+                    :title="locale.t('department.members.remove')"
                     @click="requestRemoveMember(member)"
                   >
                     <cds-icon shape="trash" size="sm"></cds-icon>
@@ -582,25 +501,25 @@ function onAddRoleChange(event: Event) {
           class="dept-backdrop"
           role="dialog"
           aria-modal="true"
-          :aria-label="tt('department.create.title')"
+          :aria-label="locale.t('department.create.title')"
           @click.self="closeCreate"
         >
           <form class="dept-card" @submit.prevent="submitCreate">
-            <h2 cds-text="section" class="dialog-title">{{ tt('department.create.title') }}</h2>
+            <h2 cds-text="section" class="dialog-title">{{ locale.t('department.create.title') }}</h2>
 
             <cds-input>
-              <label>{{ tt('department.create.nameLabel') }}</label>
+              <label>{{ locale.t('department.create.nameLabel') }}</label>
               <input
                 v-model="createForm.name"
                 type="text"
-                :placeholder="tt('department.create.namePlaceholder')"
+                :placeholder="locale.t('department.create.namePlaceholder')"
                 :disabled="creating"
                 required
               />
             </cds-input>
 
             <cds-input>
-              <label>{{ tt('department.create.budgetLabel') }}</label>
+              <label>{{ locale.t('department.create.budgetLabel') }}</label>
               <input
                 v-model="createForm.maxBudget"
                 type="number"
@@ -608,12 +527,12 @@ function onAddRoleChange(event: Event) {
                 step="0.01"
                 :disabled="creating"
               />
-              <cds-control-message>{{ tt('department.create.budgetHint') }}</cds-control-message>
+              <cds-control-message>{{ locale.t('department.create.budgetHint') }}</cds-control-message>
             </cds-input>
 
             <div class="dialog-actions">
               <cds-button type="button" action="outline" :disabled="creating" @click="closeCreate">
-                {{ tt('department.create.cancel') }}
+                {{ locale.t('department.create.cancel') }}
               </cds-button>
               <cds-button
                 type="submit"
@@ -622,7 +541,7 @@ function onAddRoleChange(event: Event) {
                 :disabled="creating || createForm.name.trim() === ''"
                 :loading-state="creating ? 'loading' : 'default'"
               >
-                {{ tt('department.create.submit') }}
+                {{ locale.t('department.create.submit') }}
               </cds-button>
             </div>
           </form>
@@ -638,29 +557,29 @@ function onAddRoleChange(event: Event) {
           class="dept-backdrop"
           role="dialog"
           aria-modal="true"
-          :aria-label="tt('department.addMember.title')"
+          :aria-label="locale.t('department.addMember.title')"
           @click.self="closeAddMember"
         >
           <form class="dept-card" @submit.prevent="submitAddMember">
-            <h2 cds-text="section" class="dialog-title">{{ tt('department.addMember.title') }}</h2>
+            <h2 cds-text="section" class="dialog-title">{{ locale.t('department.addMember.title') }}</h2>
 
             <p v-if="usersLoading" class="panel-state muted">
-              {{ tt('department.addMember.usersLoading') }}
+              {{ locale.t('department.addMember.usersLoading') }}
             </p>
             <p v-else-if="assignableUsers.length === 0" class="panel-state muted">
-              {{ users.length === 0 ? tt('department.addMember.noUsers') : tt('department.addMember.allAssigned') }}
+              {{ users.length === 0 ? locale.t('department.addMember.noUsers') : locale.t('department.addMember.allAssigned') }}
             </p>
 
             <template v-else>
               <cds-select>
-                <label>{{ tt('department.addMember.userLabel') }}</label>
+                <label>{{ locale.t('department.addMember.userLabel') }}</label>
                 <select
                   :value="addForm.userId"
-                  :aria-label="tt('department.addMember.userLabel')"
+                  :aria-label="locale.t('department.addMember.userLabel')"
                   :disabled="addingMember"
                   @change="onAddUserChange"
                 >
-                  <option value="" disabled>{{ tt('department.addMember.userPlaceholder') }}</option>
+                  <option value="" disabled>{{ locale.t('department.addMember.userPlaceholder') }}</option>
                   <option v-for="user in assignableUsers" :key="user.id" :value="user.id">
                     {{ user.displayName || user.username }}<template v-if="user.email"> ({{ user.email }})</template>
                   </option>
@@ -668,10 +587,10 @@ function onAddRoleChange(event: Event) {
               </cds-select>
 
               <cds-select>
-                <label>{{ tt('department.addMember.roleLabel') }}</label>
+                <label>{{ locale.t('department.addMember.roleLabel') }}</label>
                 <select
                   :value="addForm.role"
-                  :aria-label="tt('department.addMember.roleLabel')"
+                  :aria-label="locale.t('department.addMember.roleLabel')"
                   :disabled="addingMember"
                   @change="onAddRoleChange"
                 >
@@ -684,7 +603,7 @@ function onAddRoleChange(event: Event) {
 
             <div class="dialog-actions">
               <cds-button type="button" action="outline" :disabled="addingMember" @click="closeAddMember">
-                {{ tt('department.addMember.cancel') }}
+                {{ locale.t('department.addMember.cancel') }}
               </cds-button>
               <cds-button
                 type="submit"
@@ -693,7 +612,7 @@ function onAddRoleChange(event: Event) {
                 :disabled="addingMember || addForm.userId === '' || assignableUsers.length === 0"
                 :loading-state="addingMember ? 'loading' : 'default'"
               >
-                {{ tt('department.addMember.submit') }}
+                {{ locale.t('department.addMember.submit') }}
               </cds-button>
             </div>
           </form>
@@ -704,8 +623,8 @@ function onAddRoleChange(event: Event) {
     <!-- Delete department confirm -->
     <ConfirmDialog
       :open="deleteTarget !== null"
-      :title="tt('department.confirm.deleteTitle')"
-      :body="tt('department.confirm.deleteBody')"
+      :title="locale.t('department.confirm.deleteTitle')"
+      :body="locale.t('department.confirm.deleteBody')"
       danger
       @confirm="confirmDeleteDepartment"
       @close="cancelDeleteDepartment"
@@ -714,8 +633,8 @@ function onAddRoleChange(event: Event) {
     <!-- Remove member confirm -->
     <ConfirmDialog
       :open="removeTarget !== null"
-      :title="tt('department.confirm.removeTitle')"
-      :body="tt('department.confirm.removeBody')"
+      :title="locale.t('department.confirm.removeTitle')"
+      :body="locale.t('department.confirm.removeBody')"
       danger
       @confirm="confirmRemoveMember"
       @close="cancelRemoveMember"

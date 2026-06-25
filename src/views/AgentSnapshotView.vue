@@ -48,87 +48,8 @@ import '@/components/icons'
 const locale = useLocaleStore()
 const toast = useToast()
 
-// Local fallback dictionary for the agentSnapshot.* keys. The shared locale
-// store does not carry these and is off-limits for this change; `locale.t`
-// returns the raw key when an entry is missing, so this view resolves
-// agentSnapshot.* itself and defers to the store for shared keys
-// (mirror AgentConfigView ~45-90).
-const FALLBACK: Record<string, { zh: string; en: string }> = {
-  'agentSnapshot.title': { zh: '智能体快照与生命周期', en: 'Agent Snapshots & Lifecycle' },
-  'agentSnapshot.description': {
-    zh: '为已部署的智能体创建虚拟机快照、回滚到历史快照，并管理其运行生命周期（启动 / 停止 / 回收）。',
-    en: 'Create VM snapshots for deployed agents, revert to a prior snapshot, and manage their runtime lifecycle (start / stop / recycle).',
-  },
-  'agentSnapshot.picker.label': { zh: '选择智能体', en: 'Select Agent' },
-  'agentSnapshot.picker.placeholder': { zh: '请选择一个智能体', en: 'Pick an agent' },
-  'agentSnapshot.picker.loading': { zh: '正在加载智能体…', en: 'Loading agents…' },
-  'agentSnapshot.picker.empty': { zh: '暂无智能体', en: 'No agents' },
-  'agentSnapshot.action.refresh': { zh: '刷新', en: 'Refresh' },
-  'agentSnapshot.action.createSnapshot': { zh: '创建快照', en: 'Create Snapshot' },
-  'agentSnapshot.action.cancel': { zh: '取消', en: 'Cancel' },
-  'agentSnapshot.action.create': { zh: '创建', en: 'Create' },
-  'agentSnapshot.detail.empty': {
-    zh: '请在上方选择一个智能体以查看其快照与生命周期',
-    en: 'Select an agent above to view its snapshots and lifecycle',
-  },
-  'agentSnapshot.lifecycle.title': { zh: '生命周期', en: 'Lifecycle' },
-  'agentSnapshot.lifecycle.status': { zh: '当前状态', en: 'Status' },
-  'agentSnapshot.lifecycle.start': { zh: '启动', en: 'Start' },
-  'agentSnapshot.lifecycle.stop': { zh: '停止', en: 'Stop' },
-  'agentSnapshot.lifecycle.recycle': { zh: '回收', en: 'Recycle' },
-  'agentSnapshot.status.provisioning': { zh: '部署中', en: 'Provisioning' },
-  'agentSnapshot.status.running': { zh: '运行中', en: 'Running' },
-  'agentSnapshot.status.stopped': { zh: '已停止', en: 'Stopped' },
-  'agentSnapshot.status.exception': { zh: '异常', en: 'Exception' },
-  'agentSnapshot.list.title': { zh: '快照列表', en: 'Snapshots' },
-  'agentSnapshot.list.loading': { zh: '正在加载快照…', en: 'Loading snapshots…' },
-  'agentSnapshot.list.empty': { zh: '该智能体暂无快照', en: 'This agent has no snapshots' },
-  'agentSnapshot.list.error': { zh: '快照加载失败', en: 'Failed to load snapshots' },
-  'agentSnapshot.col.name': { zh: '名称', en: 'Name' },
-  'agentSnapshot.col.description': { zh: '描述', en: 'Description' },
-  'agentSnapshot.col.state': { zh: '电源状态', en: 'Power State' },
-  'agentSnapshot.col.createdAt': { zh: '创建时间', en: 'Created At' },
-  'agentSnapshot.col.actions': { zh: '操作', en: 'Actions' },
-  'agentSnapshot.row.revert': { zh: '回滚', en: 'Revert' },
-  'agentSnapshot.row.noDescription': { zh: '—', en: '—' },
-  'agentSnapshot.create.title': { zh: '创建快照', en: 'Create Snapshot' },
-  'agentSnapshot.create.forAgent': { zh: '将为以下智能体创建快照：', en: 'Snapshot will be taken of:' },
-  'agentSnapshot.create.nameLabel': { zh: '快照名称', en: 'Snapshot Name' },
-  'agentSnapshot.create.namePlaceholder': { zh: '例如：升级前-2026-06-25', en: 'e.g. pre-upgrade-2026-06-25' },
-  'agentSnapshot.create.descLabel': { zh: '描述（可选）', en: 'Description (optional)' },
-  'agentSnapshot.create.descPlaceholder': { zh: '记录此快照的用途', en: 'Note what this snapshot is for' },
-  'agentSnapshot.confirm.revert.title': { zh: '回滚到此快照？', en: 'Revert to this snapshot?' },
-  'agentSnapshot.confirm.revert.body': {
-    zh: '回滚是破坏性操作，将丢弃自快照「{name}」之后的所有状态，且无法撤销。确认继续？',
-    en: 'Reverting is destructive: all state since snapshot "{name}" will be discarded and cannot be undone. Continue?',
-  },
-  'agentSnapshot.confirm.recycle.title': { zh: '回收此智能体？', en: 'Recycle this agent?' },
-  'agentSnapshot.confirm.recycle.body': {
-    zh: '回收将销毁智能体「{name}」的虚拟机、吊销其网关密钥并标记为已停止，此操作无法撤销。确认继续？',
-    en: 'Recycling destroys agent "{name}"\'s VM, revokes its gateway key, and marks it stopped. This cannot be undone. Continue?',
-  },
-  'agentSnapshot.toast.created': { zh: '快照已创建', en: 'Snapshot created' },
-  'agentSnapshot.toast.createFailed': { zh: '创建快照失败', en: 'Failed to create snapshot' },
-  'agentSnapshot.toast.reverted': { zh: '已回滚到快照', en: 'Reverted to snapshot' },
-  'agentSnapshot.toast.revertFailed': { zh: '回滚失败', en: 'Failed to revert' },
-  'agentSnapshot.toast.statusChanged': { zh: '生命周期状态已更新', en: 'Lifecycle status updated' },
-  'agentSnapshot.toast.statusFailed': { zh: '更新状态失败', en: 'Failed to update status' },
-  'agentSnapshot.toast.recycled': { zh: '智能体已回收', en: 'Agent recycled' },
-  'agentSnapshot.toast.recycleFailed': { zh: '回收失败', en: 'Failed to recycle agent' },
-  'agentSnapshot.toast.refreshed': { zh: '快照列表已刷新', en: 'Snapshots refreshed' },
-  'agentSnapshot.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
-}
-
-// Resolve agentSnapshot.* from the local fallback, otherwise defer to the store.
-function tt(key: string): string {
-  const entry = FALLBACK[key]
-  if (entry) return entry[locale.locale]
-  return locale.t(key)
-}
-
-// Interpolate {token} placeholders (used by destructive-confirm bodies).
 function fmt(key: string, vars: Record<string, string>): string {
-  return tt(key).replace(/\{(\w+)\}/g, (_, k: string) => vars[k] ?? `{${k}}`)
+  return locale.t(key).replace(/\{(\w+)\}/g, (_, k: string) => vars[k] ?? `{${k}}`)
 }
 
 // --- Agent picker ------------------------------------------------------------
@@ -213,7 +134,7 @@ const STATUS_BADGE: Record<AgentLifecycleStatus, string> = {
 }
 
 function statusLabel(status: AgentLifecycleStatus): string {
-  return tt(`agentSnapshot.status.${status}`)
+  return locale.t(`agentSnapshot.status.${status}`)
 }
 function statusBadge(status: AgentLifecycleStatus): string {
   return STATUS_BADGE[status] ?? 'neutral'
@@ -250,11 +171,11 @@ async function submitCreate(payload: { name: string; description: string | null 
         input: { agentId: agent.id, name: payload.name, description: payload.description },
       },
     })
-    toast.success(tt('agentSnapshot.toast.created'))
+    toast.success(locale.t('agentSnapshot.toast.created'))
     createOpen.value = false
     await refetchSnapshots()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('agentSnapshot.toast.createFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('agentSnapshot.toast.createFailed')))
   } finally {
     creating.value = false
   }
@@ -284,11 +205,11 @@ async function confirmRevert() {
         input: { agentId: agent.id, snapshotName: snapshot.name, confirm: true },
       },
     })
-    toast.success(tt('agentSnapshot.toast.reverted'))
+    toast.success(locale.t('agentSnapshot.toast.reverted'))
     revertTarget.value = null
     await refetchSnapshots()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('agentSnapshot.toast.revertFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('agentSnapshot.toast.revertFailed')))
   } finally {
     reverting.value = false
   }
@@ -312,9 +233,9 @@ async function changeStatus(status: AgentLifecycleStatus) {
       mutation: SET_AGENT_STATUS_MUTATION,
       variables: { id: agent.id, status },
     })
-    toast.success(tt('agentSnapshot.toast.statusChanged'))
+    toast.success(locale.t('agentSnapshot.toast.statusChanged'))
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('agentSnapshot.toast.statusFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('agentSnapshot.toast.statusFailed')))
   } finally {
     changingStatus.value = false
   }
@@ -342,11 +263,11 @@ async function confirmRecycle() {
       mutation: RECYCLE_AGENT_MUTATION,
       variables: { input: { agentId: agent.id, confirm: true } },
     })
-    toast.success(tt('agentSnapshot.toast.recycled'))
+    toast.success(locale.t('agentSnapshot.toast.recycled'))
     recycleOpen.value = false
     await refetchSnapshots()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('agentSnapshot.toast.recycleFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('agentSnapshot.toast.recycleFailed')))
   } finally {
     recycling.value = false
   }
@@ -363,9 +284,9 @@ async function refresh() {
   if (!selectedAgentId.value || snapshotsLoading.value) return
   try {
     await refetchSnapshots()
-    toast.success(tt('agentSnapshot.toast.refreshed'))
+    toast.success(locale.t('agentSnapshot.toast.refreshed'))
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, tt('agentSnapshot.toast.refreshFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('agentSnapshot.toast.refreshFailed')))
   }
 }
 </script>
@@ -373,23 +294,23 @@ async function refresh() {
 <template>
   <section class="agent-snapshot-page">
     <header class="page-head">
-      <h1 cds-text="title" class="heading">{{ tt('agentSnapshot.title') }}</h1>
-      <p cds-text="body" class="desc muted">{{ tt('agentSnapshot.description') }}</p>
+      <h1 cds-text="title" class="heading">{{ locale.t('agentSnapshot.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('agentSnapshot.description') }}</p>
     </header>
 
     <div class="content-card">
       <!-- Toolbar: agent picker + refresh -->
       <div class="toolbar">
         <cds-select control-width="shrink">
-          <label>{{ tt('agentSnapshot.picker.label') }}</label>
+          <label>{{ locale.t('agentSnapshot.picker.label') }}</label>
           <select
             :value="selectedAgentId ?? ''"
-            :aria-label="tt('agentSnapshot.picker.label')"
+            :aria-label="locale.t('agentSnapshot.picker.label')"
             :disabled="agentsLoading || agents.length === 0"
             @change="onAgentChange"
           >
             <option v-if="agents.length === 0" value="" disabled>
-              {{ agentsLoading ? tt('agentSnapshot.picker.loading') : tt('agentSnapshot.picker.empty') }}
+              {{ agentsLoading ? locale.t('agentSnapshot.picker.loading') : locale.t('agentSnapshot.picker.empty') }}
             </option>
             <option v-for="agent in agents" :key="agent.id" :value="agent.id">
               {{ agent.name }}
@@ -401,26 +322,26 @@ async function refresh() {
           action="ghost"
           class="refresh-button"
           :disabled="!selectedAgentId || snapshotsLoading"
-          :aria-label="tt('agentSnapshot.action.refresh')"
-          :title="tt('agentSnapshot.action.refresh')"
+          :aria-label="locale.t('agentSnapshot.action.refresh')"
+          :title="locale.t('agentSnapshot.action.refresh')"
           @click="refresh"
         >
           <cds-icon shape="refresh" size="md" :class="{ spinning: snapshotsLoading }"></cds-icon>
-          <span>{{ tt('agentSnapshot.action.refresh') }}</span>
+          <span>{{ locale.t('agentSnapshot.action.refresh') }}</span>
         </cds-button>
       </div>
 
       <!-- Empty state when no agent is selected -->
       <div v-if="!selectedAgent" class="detail-empty">
         <cds-icon shape="history" size="xl"></cds-icon>
-        <p cds-text="subsection">{{ tt('agentSnapshot.detail.empty') }}</p>
+        <p cds-text="subsection">{{ locale.t('agentSnapshot.detail.empty') }}</p>
       </div>
 
       <template v-else>
         <!-- Lifecycle bar -->
-        <section class="lifecycle" :aria-label="tt('agentSnapshot.lifecycle.title')">
+        <section class="lifecycle" :aria-label="locale.t('agentSnapshot.lifecycle.title')">
           <div class="lifecycle-status">
-            <span class="lifecycle-label muted">{{ tt('agentSnapshot.lifecycle.status') }}</span>
+            <span class="lifecycle-label muted">{{ locale.t('agentSnapshot.lifecycle.status') }}</span>
             <cds-badge :status="statusBadge(selectedAgent.status)">
               {{ statusLabel(selectedAgent.status) }}
             </cds-badge>
@@ -433,7 +354,7 @@ async function refresh() {
               @click="changeStatus('running')"
             >
               <cds-icon shape="bolt" size="sm" aria-hidden="true"></cds-icon>
-              {{ tt('agentSnapshot.lifecycle.start') }}
+              {{ locale.t('agentSnapshot.lifecycle.start') }}
             </cds-button>
             <cds-button
               action="outline"
@@ -442,7 +363,7 @@ async function refresh() {
               @click="changeStatus('stopped')"
             >
               <cds-icon shape="stop" size="sm" aria-hidden="true"></cds-icon>
-              {{ tt('agentSnapshot.lifecycle.stop') }}
+              {{ locale.t('agentSnapshot.lifecycle.stop') }}
             </cds-button>
             <cds-button
               action="outline"
@@ -452,7 +373,7 @@ async function refresh() {
               @click="askRecycle"
             >
               <cds-icon shape="trash" size="sm" aria-hidden="true"></cds-icon>
-              {{ tt('agentSnapshot.lifecycle.recycle') }}
+              {{ locale.t('agentSnapshot.lifecycle.recycle') }}
             </cds-button>
           </div>
         </section>
@@ -461,41 +382,41 @@ async function refresh() {
         <section class="snapshots">
           <div class="snapshots-head">
             <h2 cds-text="subsection" class="snapshots-title">
-              {{ tt('agentSnapshot.list.title') }}
+              {{ locale.t('agentSnapshot.list.title') }}
               <span class="snapshots-count muted">({{ snapshots.length }})</span>
             </h2>
             <cds-button action="solid" status="primary" size="sm" @click="openCreate">
               <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
-              {{ tt('agentSnapshot.action.createSnapshot') }}
+              {{ locale.t('agentSnapshot.action.createSnapshot') }}
             </cds-button>
           </div>
 
           <p v-if="snapshotsLoading && snapshots.length === 0" class="panel-state muted">
-            {{ tt('agentSnapshot.list.loading') }}
+            {{ locale.t('agentSnapshot.list.loading') }}
           </p>
           <p v-else-if="snapshotsError" class="panel-state error">
-            {{ tt('agentSnapshot.list.error') }}
+            {{ locale.t('agentSnapshot.list.error') }}
           </p>
           <p v-else-if="snapshots.length === 0" class="panel-state muted">
-            {{ tt('agentSnapshot.list.empty') }}
+            {{ locale.t('agentSnapshot.list.empty') }}
           </p>
 
           <div v-else class="table-wrap">
             <table class="snap-table">
               <thead>
                 <tr>
-                  <th scope="col">{{ tt('agentSnapshot.col.name') }}</th>
-                  <th scope="col">{{ tt('agentSnapshot.col.description') }}</th>
-                  <th scope="col">{{ tt('agentSnapshot.col.state') }}</th>
-                  <th scope="col">{{ tt('agentSnapshot.col.createdAt') }}</th>
-                  <th scope="col" class="actions-col">{{ tt('agentSnapshot.col.actions') }}</th>
+                  <th scope="col">{{ locale.t('agentSnapshot.col.name') }}</th>
+                  <th scope="col">{{ locale.t('agentSnapshot.col.description') }}</th>
+                  <th scope="col">{{ locale.t('agentSnapshot.col.state') }}</th>
+                  <th scope="col">{{ locale.t('agentSnapshot.col.createdAt') }}</th>
+                  <th scope="col" class="actions-col">{{ locale.t('agentSnapshot.col.actions') }}</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="snapshot in snapshots" :key="snapshot.name">
                   <td class="cell-name" :title="snapshot.name">{{ snapshot.name }}</td>
                   <td class="cell-desc muted">
-                    {{ snapshot.description || tt('agentSnapshot.row.noDescription') }}
+                    {{ snapshot.description || locale.t('agentSnapshot.row.noDescription') }}
                   </td>
                   <td>{{ snapshot.state }}</td>
                   <td>{{ snapshot.createdAt }}</td>
@@ -508,7 +429,7 @@ async function refresh() {
                       @click="askRevert(snapshot)"
                     >
                       <cds-icon shape="two-way-arrows" size="sm" aria-hidden="true"></cds-icon>
-                      {{ tt('agentSnapshot.row.revert') }}
+                      {{ locale.t('agentSnapshot.row.revert') }}
                     </cds-button>
                   </td>
                 </tr>
@@ -524,7 +445,6 @@ async function refresh() {
       :open="createOpen"
       :agent-name="selectedAgent?.name ?? ''"
       :saving="creating"
-      :tt="tt"
       @close="closeCreate"
       @submit="submitCreate"
     />
@@ -532,7 +452,7 @@ async function refresh() {
     <!-- Revert confirm (destructive) -->
     <ConfirmDialog
       :open="!!revertTarget"
-      :title="tt('agentSnapshot.confirm.revert.title')"
+      :title="locale.t('agentSnapshot.confirm.revert.title')"
       :body="revertBody"
       :danger="true"
       @confirm="confirmRevert"
@@ -542,7 +462,7 @@ async function refresh() {
     <!-- Recycle confirm (destructive) -->
     <ConfirmDialog
       :open="recycleOpen"
-      :title="tt('agentSnapshot.confirm.recycle.title')"
+      :title="locale.t('agentSnapshot.confirm.recycle.title')"
       :body="recycleBody"
       :danger="true"
       @confirm="confirmRecycle"

@@ -8,6 +8,7 @@
  * wholesale (LLD-11 K2). Mirrors the BindRoleDialog backdrop/card pattern.
  */
 import { computed, ref, watch } from 'vue'
+import { useLocaleStore } from '@/stores/locale'
 import type {
   AgentConfigNode,
   KnowledgeArtifactNode,
@@ -24,9 +25,9 @@ const props = defineProps<{
   saving?: boolean
   /** True while the artifact picker list is still loading. */
   artifactsLoading?: boolean
-  /** Local fallback translator (agentConfig.* keys not yet in the locale store). */
-  tt: (key: string) => string
 }>()
+
+const locale = useLocaleStore()
 
 const emit = defineEmits<{
   (event: 'close'): void
@@ -86,12 +87,12 @@ function submit() {
         class="kp-backdrop"
         role="dialog"
         aria-modal="true"
-        :aria-label="tt('agentConfig.knowledge.dialogTitle')"
+        :aria-label="locale.t('agentConfig.knowledge.dialogTitle')"
         @click="onBackdropClick"
       >
         <div class="kp-card" @click.stop>
           <h2 cds-text="section" class="kp-title">
-            {{ tt('agentConfig.knowledge.dialogTitle') }}
+            {{ locale.t('agentConfig.knowledge.dialogTitle') }}
             <span v-if="config" class="kp-subtitle muted">{{ config.name }}</span>
           </h2>
 
@@ -100,18 +101,18 @@ function submit() {
               :value="search"
               type="search"
               autocomplete="off"
-              :placeholder="tt('agentConfig.knowledge.searchPlaceholder')"
-              :aria-label="tt('agentConfig.knowledge.searchPlaceholder')"
+              :placeholder="locale.t('agentConfig.knowledge.searchPlaceholder')"
+              :aria-label="locale.t('agentConfig.knowledge.searchPlaceholder')"
               @input="search = ($event.target as HTMLInputElement).value"
             />
           </cds-input>
 
           <div class="kp-list">
             <p v-if="artifactsLoading" class="kp-state muted">
-              {{ tt('agentConfig.knowledge.loading') }}
+              {{ locale.t('agentConfig.knowledge.loading') }}
             </p>
             <p v-else-if="filteredArtifacts.length === 0" class="kp-state muted">
-              {{ tt('agentConfig.knowledge.emptyArtifacts') }}
+              {{ locale.t('agentConfig.knowledge.emptyArtifacts') }}
             </p>
             <label
               v-for="artifact in filteredArtifacts"
@@ -131,12 +132,12 @@ function submit() {
           </div>
 
           <p class="kp-selected muted">
-            {{ tt('agentConfig.knowledge.selectedCount').replace('{count}', String(selectedCount)) }}
+            {{ locale.t('agentConfig.knowledge.selectedCount').replace('{count}', String(selectedCount)) }}
           </p>
 
           <div class="kp-actions">
             <cds-button type="button" action="outline" :disabled="saving" @click="close">
-              {{ tt('agentConfig.knowledge.cancel') }}
+              {{ locale.t('agentConfig.knowledge.cancel') }}
             </cds-button>
             <cds-button
               type="button"
@@ -146,7 +147,7 @@ function submit() {
               :disabled="saving"
               @click="submit"
             >
-              {{ tt('agentConfig.knowledge.save') }}
+              {{ locale.t('agentConfig.knowledge.save') }}
             </cds-button>
           </div>
         </div>
