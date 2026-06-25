@@ -4,8 +4,9 @@
  *
  * UX: a small form over repository / tag / digest / signed. On submit it emits
  * the immutable draft; the parent calls `upsertImage(input)` then refetches.
- * Editing an existing image pre-fills repository+tag but keeps them editable
- * (the backend upserts on the repository+tag pair). Mirrors the
+ * Editing an existing image pre-fills and LOCKS repository+tag (the backend
+ * upserts on that pair, so editing them would fork a new row rather than rename;
+ * digest/signed stay editable). Mirrors the
  * AgentConfigKnowledgeDialog backdrop/card pattern.
  *
  * Self-contained: receives the local `tt` translator from the parent view so it
@@ -98,6 +99,7 @@ function submit() {
                 type="text"
                 autocomplete="off"
                 required
+                :disabled="isEditing"
                 :placeholder="tt('image.field.repositoryPlaceholder')"
                 :aria-label="tt('image.field.repository')"
               />
@@ -112,6 +114,7 @@ function submit() {
                 type="text"
                 autocomplete="off"
                 required
+                :disabled="isEditing"
                 :placeholder="tt('image.field.tagPlaceholder')"
                 :aria-label="tt('image.field.tag')"
               />

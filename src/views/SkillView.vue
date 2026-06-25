@@ -13,7 +13,7 @@
  * i18n is self-contained (FALLBACK + tt) so this view never edits the shared
  * locale store. See the report for the canonical zh/en list to add later.
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { apolloClient } from '@/api/graphql/client'
 import AppDropdown from '@/components/AppDropdown.vue'
@@ -149,6 +149,12 @@ const filteredSkills = computed(() => {
 
 const totalCount = computed(() => filteredSkills.value.length)
 const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)))
+// Keep the current page in range as the (filtered/refetched) total shrinks —
+// e.g. after deleting the whole last page. Reactive so it tracks the computed
+// rather than racing a post-refetch imperative read.
+watch(totalPages, (pages) => {
+  if (currentPage.value > pages) currentPage.value = pages
+})
 const visibleSkills = computed(() => {
   const offset = (currentPage.value - 1) * pageSize.value
   return filteredSkills.value.slice(offset, offset + pageSize.value)
@@ -323,7 +329,6 @@ async function confirmDelete() {
   }
   selectedIds.value = new Set([...selectedIds.value].filter((id) => !deletedIds.includes(id)))
   await refetch()
-  if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
 }
 
 async function refreshSkills() {

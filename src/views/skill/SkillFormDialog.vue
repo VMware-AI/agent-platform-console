@@ -111,6 +111,7 @@ function submit() {
             :value="name"
             maxlength="128"
             autocomplete="off"
+            :disabled="isEditing"
             :placeholder="tt('skill.form.namePlaceholder')"
             @input="name = ($event.target as HTMLInputElement).value"
           />
@@ -125,6 +126,7 @@ function submit() {
             :value="version"
             maxlength="64"
             autocomplete="off"
+            :disabled="isEditing"
             :placeholder="tt('skill.form.versionPlaceholder')"
             @input="version = ($event.target as HTMLInputElement).value"
           />
