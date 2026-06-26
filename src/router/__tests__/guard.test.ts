@@ -41,7 +41,7 @@ describe('resolveGuard (pure predicate)', () => {
   describe('authentication gate', () => {
     it('redirects an anonymous visitor on a protected route to login', () => {
       expect(resolveGuard({}, 'overview', ANON)).toEqual({ name: 'login' })
-      expect(resolveGuard({ admin: true }, 'platform.skills', ANON)).toEqual({ name: 'login' })
+      expect(resolveGuard({ admin: true }, 'platform.resources', ANON)).toEqual({ name: 'login' })
       expect(
         resolveGuard({ roles: ['admin', 'tenant_admin'] }, 'platform.users', ANON),
       ).toEqual({ name: 'login' })
@@ -59,13 +59,13 @@ describe('resolveGuard (pure predicate)', () => {
 
   describe('admin-only routes (meta.admin)', () => {
     it('allows only the admin role', () => {
-      expect(resolveGuard({ admin: true }, 'platform.skills', ADMIN)).toBe(true)
+      expect(resolveGuard({ admin: true }, 'platform.resources', ADMIN)).toBe(true)
     })
 
     it.each([TENANT_ADMIN, OBSERVABILITY, PLAIN_USER, ROLELESS])(
       'bounces non-admin role=%o to overview',
       (auth) => {
-        expect(resolveGuard({ admin: true }, 'platform.skills', auth)).toEqual({
+        expect(resolveGuard({ admin: true }, 'platform.resources', auth)).toEqual({
           name: 'overview',
         })
       },
@@ -101,7 +101,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/login', name: 'login', component: GuardStub, meta: { public: true } },
   { path: '/', name: 'overview', component: GuardStub },
   { path: '/agents/list', name: 'agents.list', component: GuardStub },
-  { path: '/platform/skills', name: 'platform.skills', component: GuardStub, meta: { admin: true } },
+  { path: '/platform/resources', name: 'platform.resources', component: GuardStub, meta: { admin: true } },
   {
     path: '/observability/audit',
     name: 'obs.audit',
@@ -135,13 +135,13 @@ describe('router beforeEach integration', () => {
 
   it('lets an admin reach an admin-only route', async () => {
     const router = makeRouter(ADMIN)
-    await router.push('/platform/skills')
-    expect(router.currentRoute.value.name).toBe('platform.skills')
+    await router.push('/platform/resources')
+    expect(router.currentRoute.value.name).toBe('platform.resources')
   })
 
   it('bounces a plain user off an admin-only route to overview', async () => {
     const router = makeRouter(PLAIN_USER)
-    await router.push('/platform/skills')
+    await router.push('/platform/resources')
     expect(router.currentRoute.value.name).toBe('overview')
   })
 
