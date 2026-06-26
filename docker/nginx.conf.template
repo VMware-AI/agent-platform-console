@@ -1,4 +1,5 @@
-# Rendered by /entrypoint.sh from this template via envsubst ${BACKEND_BASE_URL}.
+# Rendered by /entrypoint.sh from this template. The only thing envsubst
+# replaces is the BACKEND_BASE_URL token on the proxy_pass line below.
 # DO NOT put any other $VAR here — envsubst would mangle it.
 
 server {
@@ -48,7 +49,7 @@ server {
         try_files $uri =404;
     }
 
-    # GraphQL proxy — ${BACKEND_BASE_URL} is the ONLY envsubst placeholder.
+    # GraphQL proxy — the BACKEND_BASE_URL token is the ONLY envsubst placeholder.
     # Default behaviour of nginx: passes the Cookie header through. We set
     # X-Forwarded-* so the upstream can recover the real client IP / scheme.
     location = /query {
