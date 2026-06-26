@@ -94,6 +94,7 @@ function makePool(over: Partial<ResourcePool> = {}): ResourcePool {
     name: 'vCenter OC1',
     endpoint: 'https://vc.example.local/sdk',
     contentLibraryName: 'cl-vc-oc1',
+    insecure: false,
     connectionStatus: 'CONNECTED',
     esxiHostCount: 4,
     vmInstanceCount: 12,
@@ -610,6 +611,48 @@ describe('CreateOrEditResourcePoolDialog — test connection {ok, message}', () 
       mode: 'create',
       input: { name: 'Trimmed Name', endpoint: 'https://vc/sdk', contentLibraryName: 'cl-trim' },
     })
+    dlg.unmount()
+  })
+
+  it('pre-fills the insecure checkbox from the pool on edit (LLD-13)', async () => {
+    const dlg = mountDialog(makePool({ insecure: true }))
+    await flushPromises()
+
+    const cb = document.body.querySelector(
+      '.resource-check input[type="checkbox"]',
+    ) as HTMLInputElement
+    expect(cb).not.toBeNull()
+    expect(cb.checked).toBe(true)
+    dlg.unmount()
+  })
+
+  it('carries insecure=true in the submit payload when the checkbox is toggled on (LLD-13)', async () => {
+    const dlg = mountDialog()
+
+    const texts = document.body.querySelectorAll<HTMLInputElement>(
+      '.resource-form input[type="text"]',
+    )
+    texts[0].value = 'vc-skip-tls'
+    texts[0].dispatchEvent(new Event('input'))
+    texts[1].value = 'https://vc/sdk'
+    texts[1].dispatchEvent(new Event('input'))
+    texts[2].value = 'cl-x'
+    texts[2].dispatchEvent(new Event('input'))
+
+    const cb = document.body.querySelector(
+      '.resource-check input[type="checkbox"]',
+    ) as HTMLInputElement
+    cb.checked = true
+    cb.dispatchEvent(new Event('change'))
+    await flushPromises()
+
+    const form = document.body.querySelector('.resource-form') as HTMLFormElement
+    form.dispatchEvent(new Event('submit'))
+    await flushPromises()
+
+    const emitted = dlg.emitted('submit')
+    expect(emitted).toBeTruthy()
+    expect(emitted![0][0]).toMatchObject({ mode: 'create', input: { insecure: true } })
     dlg.unmount()
   })
 })

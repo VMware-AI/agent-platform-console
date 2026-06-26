@@ -6,6 +6,7 @@ const RESOURCE_POOL_FIELDS = /* GraphQL */ `
     name
     endpoint
     contentLibraryName
+    insecure
     connectionStatus
     esxiHostCount
     vmInstanceCount

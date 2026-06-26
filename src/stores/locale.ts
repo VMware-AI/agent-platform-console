@@ -341,6 +341,8 @@ export const STRINGS: Dict = {
   'resources.form.endpoint':        { zh: 'VC 地址',              en: '' },
   'resources.form.contentLibrary':  { zh: '内容库名称',          en: '' },
   'resources.form.contentLibraryPlaceholder': { zh: 'cl-vc-example', en: '' },
+  'resources.form.insecure':        { zh: '跳过 TLS 验证',        en: '' },
+  'resources.form.insecureHint':    { zh: '仅用于自签名 / 内网 CA 的 vCenter；生产环境请保持验证', en: '' },
   'resources.form.testConnection':  { zh: '测试连接',            en: '' },
   'resources.form.testConnection.success': { zh: '连接成功',      en: '' },
   'resources.form.testConnection.failure': { zh: '连接失败',      en: '' },

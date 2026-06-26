@@ -344,6 +344,8 @@ export interface ResourcePool {
   name: string
   endpoint: string
   contentLibraryName: string
+  /** Skip vCenter TLS verification for this pool (self-signed/internal CA). LLD-13. */
+  insecure: boolean
   connectionStatus: PoolConnectionStatus
   esxiHostCount: number
   vmInstanceCount: number
@@ -396,12 +398,16 @@ export interface CreateResourcePoolInput {
   name: string
   endpoint: string
   contentLibraryName: string
+  /** Skip vCenter TLS verification (self-signed/internal CA); omit = false. LLD-13. */
+  insecure?: boolean
 }
 
 export interface UpdateResourcePoolInput {
   name?: string | null
   endpoint?: string | null
   contentLibraryName?: string | null
+  /** Skip vCenter TLS verification (self-signed/internal CA); omit = unchanged. LLD-13. */
+  insecure?: boolean | null
 }
 
 export interface TestResourcePoolConnectionInput {
