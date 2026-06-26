@@ -65,7 +65,10 @@ describe('locale integrity', () => {
     const sourceKeys = [...LOCALE_SOURCE.matchAll(/^ {2}'([^']+)':/gm)].map((m) => m[1])
     // No collapse: every source line corresponds to one runtime entry.
     expect(sourceKeys.length).toBe(Object.keys(STRINGS).length)
-    expect(sourceKeys.length).toBeGreaterThan(1000)
+    // v1 dropped ~400 retired-page keys from the original ~1400; we still
+    // expect a substantial map. Threshold guards against accidental mass
+    // deletion, not the exact count.
+    expect(sourceKeys.length).toBeGreaterThan(700)
   })
 
   it('every entry has a non-empty zh (except deliberately-blank labels)', () => {
