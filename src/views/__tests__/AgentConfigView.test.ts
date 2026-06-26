@@ -1,13 +1,12 @@
 /**
- * Component tests for AgentConfigView.vue — the master-detail Agent Config page
+ * Component tests for AgentConfigView.vue — the Agent Config management table
  * (LLD-11 OKF knowledge grounding).
  *
  * What the unit actually does (see the SFC header):
  *   - useQuery(AGENT_CONFIGS_QUERY, queryVars) → master list, filterable by
  *     agentType (omitting the var when "__ALL__" is selected)
  *   - useQuery(KNOWLEDGE_ARTIFACTS_QUERY)       → the picker's artifact catalog
- *   - selecting a config drives the read-only detail pane + its mounted
- *     knowledge edge
+ *   - row actions drive the read-only detail modal + mounted knowledge edge
  *   - the only mutation is apolloClient.mutate(SET_AGENT_CONFIG_KNOWLEDGE),
  *     which on success toasts agentConfig.toast.saved, closes the dialog, and
  *     refetches the config list; on failure toasts the GraphQL error message
@@ -125,8 +124,13 @@ const mountConfig = {
 
 // ---- DOM helpers ---------------------------------------------------------
 
-function configButtons(wrapper: VueWrapper): HTMLButtonElement[] {
-  return wrapper.findAll('.config-item').map((w) => w.element as HTMLButtonElement)
+function rowActions(wrapper: VueWrapper) {
+  return wrapper.findAll('.row-action')
+}
+function actionByText(wrapper: VueWrapper, text: string) {
+  const action = rowActions(wrapper).find((button) => button.text() === text)
+  if (!action) throw new Error(`missing row action: ${text}`)
+  return action
 }
 function dialogCard(): HTMLElement | null {
   return document.body.querySelector('.kp-backdrop')
@@ -187,16 +191,16 @@ describe('AgentConfigView', () => {
     configsLoading.value = true
     configsResult.value = undefined
     wrapper = mountView()
-    const state = wrapper.find('.list-panel .panel-state')
+    const state = wrapper.find('cds-grid-placeholder p')
     expect(state.exists()).toBe(true)
     expect(state.text()).toBe('加载中…')
-    expect(wrapper.find('.config-list').exists()).toBe(false)
+    expect(wrapper.find('cds-grid-row').exists()).toBe(false)
   })
 
   it('shows the error state when the configs query errors', () => {
     configsError.value = new Error('boom')
     wrapper = mountView()
-    const state = wrapper.find('.list-panel .panel-state.error')
+    const state = wrapper.find('cds-grid-placeholder p')
     expect(state.exists()).toBe(true)
     expect(state.text()).toBe('配置加载失败')
   })
@@ -204,49 +208,45 @@ describe('AgentConfigView', () => {
   it('shows the empty state when there are no configs', () => {
     configsResult.value = { agentConfigs: [] }
     wrapper = mountView()
-    const state = wrapper.find('.list-panel .panel-state.muted')
+    const state = wrapper.find('cds-grid-placeholder p')
     expect(state.exists()).toBe(true)
     expect(state.text()).toBe('暂无智能体配置')
-    // Detail pane shows the empty placeholder too.
-    expect(wrapper.find('.detail-empty').exists()).toBe(true)
+    expect(wrapper.find('cds-grid-row').exists()).toBe(false)
   })
 
-  it('renders one list row per config and auto-selects the first', async () => {
+  it('renders one table row per config', async () => {
     configsResult.value = { agentConfigs: [CFG_GOOSE, CFG_CLAUDE] }
     wrapper = mountView()
     await flushPromises()
 
-    const rows = configButtons(wrapper)
+    const rows = wrapper.findAll('cds-grid-row')
     expect(rows).toHaveLength(2)
-    expect(rows[0].textContent).toContain('Default Goose')
-    expect(rows[1].textContent).toContain('Claude Worker')
-
-    // First config is selected by the immediate watcher → detail shows it.
-    expect(rows[0].getAttribute('aria-pressed')).toBe('true')
-    const detailTitle = wrapper.find('.detail-title')
-    expect(detailTitle.text()).toBe('Default Goose')
+    expect(rows[0].text()).toContain('Default Goose')
+    expect(rows[1].text()).toContain('Claude Worker')
+    expect(rowActions(wrapper)).toHaveLength(6)
   })
 
   it('renders the default badge text from the locale key for default configs', async () => {
     configsResult.value = { agentConfigs: [CFG_GOOSE] }
     wrapper = mountView()
     await flushPromises()
-    // Detail head badge ("默认") + isDefault row → "是".
-    expect(wrapper.find('.detail-head').text()).toContain('默认')
+    expect(wrapper.find('cds-grid-row').text()).toContain('默认')
+
+    await actionByText(wrapper, '查看').trigger('click')
+    await flushPromises()
     const isDefaultRow = wrapper.findAll('.detail-row dd')[1]
     expect(isDefaultRow.text()).toBe('是')
   })
 
-  it('selecting a config swaps the detail pane to that config', async () => {
+  it('viewing a config opens the detail modal for that config', async () => {
     configsResult.value = { agentConfigs: [CFG_GOOSE, CFG_CLAUDE] }
     wrapper = mountView()
     await flushPromises()
 
-    await wrapper.findAll('.config-item')[1].trigger('click')
+    await rowActions(wrapper)[3].trigger('click')
+    await flushPromises()
 
-    expect(wrapper.find('.detail-title').text()).toBe('Claude Worker')
-    expect(configButtons(wrapper)[1].getAttribute('aria-pressed')).toBe('true')
-    expect(configButtons(wrapper)[0].getAttribute('aria-pressed')).toBe('false')
+    expect(wrapper.find('cds-modal-header').text()).toContain('Claude Worker')
     // Non-default config → "否" on the isDefault row.
     expect(wrapper.findAll('.detail-row dd')[1].text()).toBe('否')
   })
@@ -256,7 +256,7 @@ describe('AgentConfigView', () => {
     wrapper = mountView()
     await flushPromises()
 
-    const select = wrapper.find('.toolbar select')
+    const select = wrapper.find('.type-filter select')
     const optionValues = select.findAll('option').map((o) => (o.element as HTMLOptionElement).value)
     // "__ALL__" sentinel + one per distinct type (sorted).
     expect(optionValues).toEqual(['__ALL__', 'claude', 'goose'])
@@ -272,6 +272,9 @@ describe('AgentConfigView', () => {
     wrapper = mountView()
     await flushPromises()
 
+    await actionByText(wrapper, '查看').trigger('click')
+    await flushPromises()
+
     const packs = wrapper.findAll('.pack-item')
     expect(packs).toHaveLength(1)
     expect(packs[0].text()).toContain('Runbook')
@@ -284,6 +287,9 @@ describe('AgentConfigView', () => {
     configsResult.value = { agentConfigs: [CFG_CLAUDE] }
     wrapper = mountView()
     await flushPromises()
+    await actionByText(wrapper, '查看').trigger('click')
+    await flushPromises()
+
     expect(wrapper.find('.pack-item').exists()).toBe(false)
     expect(wrapper.find('.knowledge-section .panel-state.muted').text()).toBe('尚未挂载任何知识包')
   })
@@ -296,7 +302,7 @@ describe('AgentConfigView', () => {
 
     // The "Edit packs" button opens the dialog (Teleported to body).
     expect(dialogCard()).toBeNull()
-    await wrapper.find('.knowledge-head cds-button').trigger('click')
+    await actionByText(wrapper, '编辑').trigger('click')
     await flushPromises()
 
     const card = dialogCard()
@@ -313,7 +319,7 @@ describe('AgentConfigView', () => {
     wrapper = mountView()
     await flushPromises()
 
-    await wrapper.find('.knowledge-head cds-button').trigger('click')
+    await actionByText(wrapper, '编辑').trigger('click')
     await flushPromises()
 
     // Add a2 to the pre-checked set (a1 already on).
@@ -355,7 +361,7 @@ describe('AgentConfigView', () => {
     wrapper = mountView()
     await flushPromises()
 
-    await wrapper.find('.knowledge-head cds-button').trigger('click')
+    await actionByText(wrapper, '编辑').trigger('click')
     await flushPromises()
 
     const submitBtn = document.body.querySelector<HTMLElement>('.kp-actions cds-button[status="primary"]')!
@@ -379,10 +385,8 @@ describe('AgentConfigView', () => {
     wrapper = mountView()
     await flushPromises()
 
-    // cds-button is a custom element, so :disabled is serialized to the string
-    // "false" when not loading (it is not omitted). Assert the value, not presence.
     const refreshBtn = wrapper.find('.refresh-button')
-    expect(refreshBtn.attributes('disabled')).toBe('false')
+    expect((refreshBtn.element as HTMLButtonElement).disabled).toBe(false)
     await refreshBtn.trigger('click')
     await flushPromises()
     expect(refetchConfigs).toHaveBeenCalledTimes(1)
@@ -395,7 +399,7 @@ describe('AgentConfigView', () => {
     await flushPromises()
 
     const refreshBtn = wrapper.find('.refresh-button')
-    expect(refreshBtn.attributes('disabled')).toBe('true')
+    expect((refreshBtn.element as HTMLButtonElement).disabled).toBe(true)
     await refreshBtn.trigger('click')
     await flushPromises()
     expect(refetchConfigs).not.toHaveBeenCalled()
