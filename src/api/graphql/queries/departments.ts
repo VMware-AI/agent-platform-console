@@ -87,8 +87,13 @@ export const REMOVE_MEMBERSHIP_MUTATION = gql`
 
 /* ---------- Types ---------- */
 
-/** Mirrors backend `enum MembershipRole`. */
-export type MembershipRole = 'user' | 'dept_admin'
+/**
+ * Mirrors backend `enum MembershipRole`. Exported as a runtime `as const`
+ * array so it can be iterated (enum → locale-key coverage test); the TS union
+ * type is derived from the array to keep a single source of truth.
+ */
+export const MEMBERSHIP_ROLES = ['user', 'dept_admin'] as const
+export type MembershipRole = (typeof MEMBERSHIP_ROLES)[number]
 
 export interface DepartmentNode {
   id: string

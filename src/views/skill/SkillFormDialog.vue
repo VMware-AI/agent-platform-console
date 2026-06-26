@@ -81,51 +81,61 @@ function submit() {
     <cds-modal-content>
       <form class="skill-form" @submit.prevent="submit">
         <cds-input :status="attempted && !nameValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('skill.form.name') }}</label>
+          <label for="skill-form-name">{{ locale.t('skill.form.name') }}</label>
           <input
+            id="skill-form-name"
             :value="name"
             maxlength="128"
             autocomplete="off"
             :disabled="isEditing"
             :placeholder="locale.t('skill.form.namePlaceholder')"
+            :aria-invalid="attempted && !nameValid"
+            :aria-describedby="attempted && !nameValid ? 'skill-form-name-error' : undefined"
             @input="name = ($event.target as HTMLInputElement).value"
           />
-          <cds-control-message v-if="attempted && !nameValid" status="error">
+          <cds-control-message v-if="attempted && !nameValid" id="skill-form-name-error" status="error">
             {{ locale.t('skill.form.nameError') }}
           </cds-control-message>
         </cds-input>
 
         <cds-input :status="attempted && !versionValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('skill.form.version') }}</label>
+          <label for="skill-form-version">{{ locale.t('skill.form.version') }}</label>
           <input
+            id="skill-form-version"
             :value="version"
             maxlength="64"
             autocomplete="off"
             :disabled="isEditing"
             :placeholder="locale.t('skill.form.versionPlaceholder')"
+            :aria-invalid="attempted && !versionValid"
+            :aria-describedby="attempted && !versionValid ? 'skill-form-version-error' : undefined"
             @input="version = ($event.target as HTMLInputElement).value"
           />
-          <cds-control-message v-if="attempted && !versionValid" status="error">
+          <cds-control-message v-if="attempted && !versionValid" id="skill-form-version-error" status="error">
             {{ locale.t('skill.form.versionError') }}
           </cds-control-message>
         </cds-input>
 
         <cds-input :status="attempted && !uriValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('skill.form.uri') }}</label>
+          <label for="skill-form-uri">{{ locale.t('skill.form.uri') }}</label>
           <input
+            id="skill-form-uri"
             :value="uri"
             autocomplete="off"
             :placeholder="locale.t('skill.form.uriPlaceholder')"
+            :aria-invalid="attempted && !uriValid"
+            :aria-describedby="attempted && !uriValid ? 'skill-form-uri-error' : undefined"
             @input="uri = ($event.target as HTMLInputElement).value"
           />
-          <cds-control-message v-if="attempted && !uriValid" status="error">
+          <cds-control-message v-if="attempted && !uriValid" id="skill-form-uri-error" status="error">
             {{ locale.t('skill.form.uriError') }}
           </cds-control-message>
         </cds-input>
 
         <cds-textarea>
-          <label>{{ locale.t('skill.form.description') }}</label>
+          <label for="skill-form-description">{{ locale.t('skill.form.description') }}</label>
           <textarea
+            id="skill-form-description"
             rows="3"
             :value="description"
             :placeholder="locale.t('skill.form.descriptionPlaceholder')"

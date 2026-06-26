@@ -333,8 +333,8 @@ async function refresh() {
 
       <!-- Empty state when no agent is selected -->
       <div v-if="!selectedAgent" class="detail-empty">
-        <cds-icon shape="history" size="xl"></cds-icon>
-        <p cds-text="subsection">{{ locale.t('agentSnapshot.detail.empty') }}</p>
+        <cds-icon shape="history" size="xl" aria-hidden="true"></cds-icon>
+        <p cds-text="subsection" aria-live="polite">{{ locale.t('agentSnapshot.detail.empty') }}</p>
       </div>
 
       <template v-else>
@@ -391,13 +391,17 @@ async function refresh() {
             </cds-button>
           </div>
 
-          <p v-if="snapshotsLoading && snapshots.length === 0" class="panel-state muted">
+          <p
+            v-if="snapshotsLoading && snapshots.length === 0"
+            class="panel-state muted"
+            aria-live="polite"
+          >
             {{ locale.t('agentSnapshot.list.loading') }}
           </p>
-          <p v-else-if="snapshotsError" class="panel-state error">
+          <p v-else-if="snapshotsError" class="panel-state error" role="alert">
             {{ locale.t('agentSnapshot.list.error') }}
           </p>
-          <p v-else-if="snapshots.length === 0" class="panel-state muted">
+          <p v-else-if="snapshots.length === 0" class="panel-state muted" aria-live="polite">
             {{ locale.t('agentSnapshot.list.empty') }}
           </p>
 

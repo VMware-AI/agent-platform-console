@@ -289,13 +289,13 @@ const deleteBody = computed(() => {
         <aside class="list-panel" :aria-label="locale.t('artifacts.list.title')">
           <h2 cds-text="subsection" class="panel-title">{{ locale.t('artifacts.list.title') }}</h2>
 
-          <p v-if="listLoading && artifacts.length === 0" class="panel-state muted">
+          <p v-if="listLoading && artifacts.length === 0" class="panel-state muted" role="status" aria-live="polite">
             {{ locale.t('artifacts.list.loading') }}
           </p>
-          <p v-else-if="listError" class="panel-state error">
+          <p v-else-if="listError" class="panel-state error" role="alert" aria-live="assertive">
             {{ locale.t('artifacts.list.error') }}
           </p>
-          <p v-else-if="artifacts.length === 0" class="panel-state muted">
+          <p v-else-if="artifacts.length === 0" class="panel-state muted" role="status" aria-live="polite">
             {{ locale.t('artifacts.list.empty') }}
           </p>
 
@@ -353,8 +353,8 @@ const deleteBody = computed(() => {
 
         <!-- Detail: selected artifact's versions -->
         <div class="detail-panel">
-          <div v-if="!selectedArtifact" class="detail-empty">
-            <cds-icon shape="blocks-group" size="xl"></cds-icon>
+          <div v-if="!selectedArtifact" class="detail-empty" role="status" aria-live="polite">
+            <cds-icon shape="blocks-group" size="xl" aria-hidden="true"></cds-icon>
             <p cds-text="subsection">{{ locale.t('artifacts.detail.empty') }}</p>
           </div>
 
@@ -370,18 +370,18 @@ const deleteBody = computed(() => {
                 <span class="versions-count muted">({{ versions.length }})</span>
               </h3>
 
-              <p v-if="versionsLoading && versions.length === 0" class="panel-state muted">
+              <p v-if="versionsLoading && versions.length === 0" class="panel-state muted" role="status" aria-live="polite">
                 {{ locale.t('artifacts.detail.versionsLoading') }}
               </p>
-              <p v-else-if="versionsError" class="panel-state error">
+              <p v-else-if="versionsError" class="panel-state error" role="alert" aria-live="assertive">
                 {{ locale.t('artifacts.detail.versionsError') }}
               </p>
-              <p v-else-if="versions.length === 0" class="panel-state muted">
+              <p v-else-if="versions.length === 0" class="panel-state muted" role="status" aria-live="polite">
                 {{ locale.t('artifacts.detail.versionsEmpty') }}
               </p>
 
               <div v-else class="versions-table-wrap">
-                <table class="versions-table">
+                <table class="versions-table" :aria-label="locale.t('artifacts.detail.versions')">
                   <thead>
                     <tr>
                       <th scope="col">{{ locale.t('artifacts.detail.version') }}</th>

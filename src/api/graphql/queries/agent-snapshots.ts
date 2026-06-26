@@ -79,8 +79,13 @@ export const RECYCLE_AGENT_MUTATION = gql`
  * Real backend AgentStatus enum (agent.graphql). NOTE: this is lowercase and
  * differs from the stale `AgentStatus` in src/api/graphql/types.ts
  * (RUNNING/STOPPED/ERROR) — that one is not used here.
+ *
+ * Exported as a runtime `as const` array so it can be iterated (enum →
+ * locale-key coverage test); the TS union type is derived from the array to
+ * keep a single source of truth.
  */
-export type AgentLifecycleStatus = 'provisioning' | 'running' | 'stopped' | 'exception'
+export const AGENT_LIFECYCLE_STATUSES = ['provisioning', 'running', 'stopped', 'exception'] as const
+export type AgentLifecycleStatus = (typeof AGENT_LIFECYCLE_STATUSES)[number]
 
 export interface AgentSnapshotNode {
   name: string

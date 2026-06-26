@@ -323,13 +323,13 @@ async function refresh() {
         <aside class="list-panel" :aria-label="locale.t('customRole.list.title')">
           <h2 cds-text="subsection" class="panel-title">{{ locale.t('customRole.list.title') }}</h2>
 
-          <p v-if="rolesLoading && roles.length === 0" class="panel-state muted">
+          <p v-if="rolesLoading && roles.length === 0" class="panel-state muted" aria-live="polite">
             {{ locale.t('customRole.list.loading') }}
           </p>
-          <p v-else-if="rolesError" class="panel-state error">
+          <p v-else-if="rolesError" class="panel-state error" role="alert">
             {{ locale.t('customRole.list.error') }}
           </p>
-          <p v-else-if="roles.length === 0" class="panel-state muted">
+          <p v-else-if="roles.length === 0" class="panel-state muted" aria-live="polite">
             {{ locale.t('customRole.list.empty') }}
           </p>
 
@@ -368,8 +368,8 @@ async function refresh() {
         <!-- Detail: permission matrix -->
         <div class="detail-panel">
           <div v-if="!selectedRole" class="detail-empty">
-            <cds-icon shape="shield-check" size="xl"></cds-icon>
-            <p cds-text="subsection">{{ locale.t('customRole.detail.empty') }}</p>
+            <cds-icon shape="shield-check" size="xl" aria-hidden="true"></cds-icon>
+            <p cds-text="subsection" aria-live="polite">{{ locale.t('customRole.detail.empty') }}</p>
           </div>
 
           <template v-else>
@@ -418,10 +418,14 @@ async function refresh() {
                 />
               </cds-input>
 
-              <p v-if="permsLoading && matrixKeys.length === 0" class="panel-state muted">
+              <p
+                v-if="permsLoading && matrixKeys.length === 0"
+                class="panel-state muted"
+                aria-live="polite"
+              >
                 {{ locale.t('customRole.matrix.loading') }}
               </p>
-              <p v-else-if="filteredMatrixKeys.length === 0" class="panel-state muted">
+              <p v-else-if="filteredMatrixKeys.length === 0" class="panel-state muted" aria-live="polite">
                 {{ locale.t('customRole.matrix.empty') }}
               </p>
 
@@ -478,6 +482,7 @@ async function refresh() {
       :hidden="!pendingDeleteRole"
       :closable="!deleting"
       size="sm"
+      :aria-label="locale.t('customRole.delete.title')"
       @closeChange="cancelDelete"
     >
       <cds-modal-header>

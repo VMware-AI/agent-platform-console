@@ -11,7 +11,7 @@
  * Both queries/mutations are gated `@hasPermission(perm: "route:manage")`; the
  * backend surfaces denials as GraphQL errors shown via toast.
  */
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { apolloClient } from '@/api/graphql/client'
 import { useLocaleStore } from '@/stores/locale'
@@ -45,6 +45,43 @@ const toast = useToast()
 
 type TabKey = 'upstreams' | 'tiers'
 const activeTab = ref<TabKey>('upstreams')
+
+// a11y: a proper tablist with roving tabindex + arrow-key navigation. Only the
+// active tab is in the tab order; Left/Right/Home/End move (and activate) the
+// selection per the WAI-ARIA tabs pattern.
+const TAB_ORDER: TabKey[] = ['upstreams', 'tiers']
+const tabRefs = ref<Record<TabKey, HTMLButtonElement | null>>({
+  upstreams: null,
+  tiers: null,
+})
+
+function setTabRef(key: TabKey, el: Element | null) {
+  tabRefs.value[key] = el as HTMLButtonElement | null
+}
+
+function selectTab(key: TabKey) {
+  activeTab.value = key
+}
+
+function onTabKeydown(event: KeyboardEvent) {
+  const current = TAB_ORDER.indexOf(activeTab.value)
+  let nextIndex = current
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+    nextIndex = (current + 1) % TAB_ORDER.length
+  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    nextIndex = (current - 1 + TAB_ORDER.length) % TAB_ORDER.length
+  } else if (event.key === 'Home') {
+    nextIndex = 0
+  } else if (event.key === 'End') {
+    nextIndex = TAB_ORDER.length - 1
+  } else {
+    return
+  }
+  event.preventDefault()
+  const nextKey = TAB_ORDER[nextIndex]
+  activeTab.value = nextKey
+  nextTick(() => tabRefs.value[nextKey]?.focus())
+}
 
 // ---- Upstreams ----
 const {
@@ -211,23 +248,33 @@ function tierLevelLabel(level: string): string {
     <div class="content-card">
       <div class="tabs" role="tablist" :aria-label="locale.t('upstreamRouter.title')">
         <button
+          :ref="(el) => setTabRef('upstreams', el as Element | null)"
+          id="ur-tab-upstreams"
           type="button"
           role="tab"
           class="tab"
           :class="{ active: activeTab === 'upstreams' }"
           :aria-selected="activeTab === 'upstreams'"
-          @click="activeTab = 'upstreams'"
+          :tabindex="activeTab === 'upstreams' ? 0 : -1"
+          aria-controls="ur-panel-upstreams"
+          @click="selectTab('upstreams')"
+          @keydown="onTabKeydown"
         >
           <cds-icon shape="router" size="sm" aria-hidden="true"></cds-icon>
           {{ locale.t('upstreamRouter.tab.upstreams') }}
         </button>
         <button
+          :ref="(el) => setTabRef('tiers', el as Element | null)"
+          id="ur-tab-tiers"
           type="button"
           role="tab"
           class="tab"
           :class="{ active: activeTab === 'tiers' }"
           :aria-selected="activeTab === 'tiers'"
-          @click="activeTab = 'tiers'"
+          :tabindex="activeTab === 'tiers' ? 0 : -1"
+          aria-controls="ur-panel-tiers"
+          @click="selectTab('tiers')"
+          @keydown="onTabKeydown"
         >
           <cds-icon shape="forking" size="sm" aria-hidden="true"></cds-icon>
           {{ locale.t('upstreamRouter.tab.tiers') }}
@@ -250,7 +297,14 @@ function tierLevelLabel(level: string): string {
       </div>
 
       <!-- Upstreams tab -->
-      <div v-show="activeTab === 'upstreams'" class="tab-panel" role="tabpanel">
+      <div
+        v-show="activeTab === 'upstreams'"
+        id="ur-panel-upstreams"
+        class="tab-panel"
+        role="tabpanel"
+        tabindex="0"
+        aria-labelledby="ur-tab-upstreams"
+      >
         <div class="toolbar">
           <cds-button action="outline" status="primary" @click="openCreateUpstream">
             <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
@@ -283,7 +337,7 @@ function tierLevelLabel(level: string): string {
               </cds-grid-cell>
               <cds-grid-cell>
                 <cds-badge :status="upstream.enabled ? 'success' : 'neutral'" class="status-badge">
-                  <cds-icon :shape="upstream.enabled ? 'check-circle' : 'ban'" size="sm"></cds-icon>
+                  <cds-icon :shape="upstream.enabled ? 'check-circle' : 'ban'" size="sm" aria-hidden="true"></cds-icon>
                   {{ locale.t(upstream.enabled ? 'upstreamRouter.status.enabled' : 'upstreamRouter.status.disabled') }}
                 </cds-badge>
               </cds-grid-cell>
@@ -301,15 +355,15 @@ function tierLevelLabel(level: string): string {
               </cds-grid-cell>
             </cds-grid-row>
 
-            <cds-grid-placeholder v-if="upstreamsLoading">
+            <cds-grid-placeholder v-if="upstreamsLoading" role="status" aria-live="polite">
               <p cds-text="subsection">{{ locale.t('upstreamRouter.upstream.loading') }}</p>
             </cds-grid-placeholder>
-            <cds-grid-placeholder v-else-if="upstreamsError">
-              <cds-icon shape="ban" size="xl"></cds-icon>
+            <cds-grid-placeholder v-else-if="upstreamsError" role="alert" aria-live="assertive">
+              <cds-icon shape="ban" size="xl" aria-hidden="true"></cds-icon>
               <p cds-text="subsection">{{ locale.t('upstreamRouter.upstream.error') }}</p>
             </cds-grid-placeholder>
-            <cds-grid-placeholder v-else-if="upstreams.length === 0">
-              <cds-icon shape="router" size="xl"></cds-icon>
+            <cds-grid-placeholder v-else-if="upstreams.length === 0" role="status" aria-live="polite">
+              <cds-icon shape="router" size="xl" aria-hidden="true"></cds-icon>
               <p cds-text="subsection">{{ locale.t('upstreamRouter.upstream.empty') }}</p>
               <cds-button action="outline" size="sm" @click="openCreateUpstream">
                 {{ locale.t('upstreamRouter.action.create') }}
@@ -320,7 +374,14 @@ function tierLevelLabel(level: string): string {
       </div>
 
       <!-- Router tiers tab -->
-      <div v-show="activeTab === 'tiers'" class="tab-panel" role="tabpanel">
+      <div
+        v-show="activeTab === 'tiers'"
+        id="ur-panel-tiers"
+        class="tab-panel"
+        role="tabpanel"
+        tabindex="0"
+        aria-labelledby="ur-tab-tiers"
+      >
         <div class="toolbar">
           <cds-button
             action="outline"
@@ -360,15 +421,15 @@ function tierLevelLabel(level: string): string {
               </cds-grid-cell>
             </cds-grid-row>
 
-            <cds-grid-placeholder v-if="tiersLoading">
+            <cds-grid-placeholder v-if="tiersLoading" role="status" aria-live="polite">
               <p cds-text="subsection">{{ locale.t('upstreamRouter.tier.loading') }}</p>
             </cds-grid-placeholder>
-            <cds-grid-placeholder v-else-if="tiersError">
-              <cds-icon shape="ban" size="xl"></cds-icon>
+            <cds-grid-placeholder v-else-if="tiersError" role="alert" aria-live="assertive">
+              <cds-icon shape="ban" size="xl" aria-hidden="true"></cds-icon>
               <p cds-text="subsection">{{ locale.t('upstreamRouter.tier.error') }}</p>
             </cds-grid-placeholder>
-            <cds-grid-placeholder v-else-if="tiers.length === 0">
-              <cds-icon shape="forking" size="xl"></cds-icon>
+            <cds-grid-placeholder v-else-if="tiers.length === 0" role="status" aria-live="polite">
+              <cds-icon shape="forking" size="xl" aria-hidden="true"></cds-icon>
               <p cds-text="subsection">{{ locale.t('upstreamRouter.tier.empty') }}</p>
               <cds-button action="outline" size="sm" @click="openCreateTier">
                 {{ locale.t('upstreamRouter.action.addTier') }}

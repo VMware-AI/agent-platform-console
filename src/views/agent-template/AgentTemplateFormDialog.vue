@@ -9,7 +9,7 @@
  * only when creating; on edit it is shown read-only. Submit emits an immutable
  * draft — the parent performs the mutation and surfaces errors via toast.
  */
-import { computed, reactive, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
 import type {
   AgentTemplateNode,
@@ -67,12 +67,54 @@ const form = reactive<FormState>(emptyForm())
 
 const isEditing = computed(() => Boolean(props.template))
 
+// a11y: focus management. Move focus into the dialog on open, return it to the
+// element that triggered the dialog on close, and trap Tab within the card.
+const cardEl = ref<HTMLElement | null>(null)
+const firstFieldEl = ref<HTMLInputElement | null>(null)
+let lastFocused: HTMLElement | null = null
+
+function focusableInCard(): HTMLElement[] {
+  if (!cardEl.value) return []
+  return Array.from(
+    cardEl.value.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  )
+}
+
+function onDialogKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    e.stopPropagation()
+    close()
+    return
+  }
+  if (e.key !== 'Tab') return
+  const focusable = focusableInCard()
+  if (focusable.length === 0) return
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const active = document.activeElement as HTMLElement | null
+  if (e.shiftKey && active === first) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault()
+    first.focus()
+  }
+}
+
 // Reset the form whenever the dialog opens (or the edit target changes) so it
 // never shows stale values from a previous open.
 watch(
   () => [props.open, props.template] as const,
   ([open, template]) => {
-    if (!open) return
+    if (!open) {
+      if (lastFocused) {
+        lastFocused.focus()
+        lastFocused = null
+      }
+      return
+    }
     const next = emptyForm()
     if (template) {
       next.kind = template.kind
@@ -86,6 +128,8 @@ watch(
       next.knowledgePrompt = template.knowledgePrompt ?? ''
     }
     Object.assign(form, next)
+    lastFocused = document.activeElement as HTMLElement | null
+    nextTick(() => firstFieldEl.value?.focus())
   },
   { immediate: true },
 )
@@ -145,8 +189,9 @@ function submit() {
         aria-modal="true"
         :aria-label="dialogTitle"
         @click="onBackdropClick"
+        @keydown="onDialogKeydown"
       >
-        <div class="at-card" @click.stop>
+        <div ref="cardEl" class="at-card" @click.stop>
           <h2 cds-text="section" class="at-title">{{ dialogTitle }}</h2>
 
           <form class="at-form" @submit.prevent="submit">
@@ -158,12 +203,14 @@ function submit() {
                 </span>
                 <cds-input>
                   <input
+                    ref="firstFieldEl"
                     v-model="form.kind"
                     type="text"
                     autocomplete="off"
                     :readonly="isEditing"
                     :placeholder="locale.t('agentTemplate.field.kindPlaceholder')"
                     :aria-label="locale.t('agentTemplate.field.kind')"
+                    :aria-required="!isEditing"
                   />
                 </cds-input>
                 <small v-if="isEditing" class="at-hint muted">
@@ -183,6 +230,7 @@ function submit() {
                     autocomplete="off"
                     :placeholder="locale.t('agentTemplate.field.displayPlaceholder')"
                     :aria-label="locale.t('agentTemplate.field.display')"
+                    aria-required="true"
                   />
                 </cds-input>
               </label>

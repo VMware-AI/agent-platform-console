@@ -9,7 +9,7 @@
  * digest/signed stay editable). Mirrors the
  * AgentConfigKnowledgeDialog backdrop/card pattern.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
 import type { ImageNode } from '@/api/graphql/queries/images'
 import '@/components/icons'
@@ -36,16 +36,62 @@ const signed = ref(false)
 
 const isEditing = computed(() => props.image !== null)
 
+// a11y: focus management. Move focus into the dialog on open, return it to the
+// triggering element on close, and trap Tab within the card (mirrors
+// CreateSnapshotDialog).
+const cardEl = ref<HTMLElement | null>(null)
+const firstFieldEl = ref<HTMLInputElement | null>(null)
+let lastFocused: HTMLElement | null = null
+
+function focusableInCard(): HTMLElement[] {
+  if (!cardEl.value) return []
+  return Array.from(
+    cardEl.value.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  )
+}
+
+function onDialogKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.stopPropagation()
+    close()
+    return
+  }
+  if (event.key !== 'Tab') return
+  const focusable = focusableInCard()
+  if (focusable.length === 0) return
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const active = document.activeElement as HTMLElement | null
+  if (event.shiftKey && active === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
 // Reset the form whenever the dialog (re)opens so stale input never leaks
 // between create/edit sessions. New objects only — no in-place mutation.
+// Also drive focus in/out for accessibility.
 watch(
   () => [props.open, props.image] as const,
   ([open, image]) => {
-    if (!open) return
+    if (!open) {
+      if (lastFocused) {
+        lastFocused.focus()
+        lastFocused = null
+      }
+      return
+    }
     repository.value = image?.repository ?? ''
     tag.value = image?.tag ?? ''
     digest.value = image?.digest ?? ''
     signed.value = image?.signed ?? false
+    lastFocused = document.activeElement as HTMLElement | null
+    nextTick(() => firstFieldEl.value?.focus())
   },
   { immediate: true },
 )
@@ -83,8 +129,9 @@ function submit() {
         aria-modal="true"
         :aria-label="locale.t(isEditing ? 'image.dialog.editTitle' : 'image.dialog.createTitle')"
         @click="onBackdropClick"
+        @keydown="onDialogKeydown"
       >
-        <form class="img-card" @click.stop @submit.prevent="submit">
+        <form ref="cardEl" class="img-card" @click.stop @submit.prevent="submit">
           <h2 cds-text="section" class="img-title">
             {{ locale.t(isEditing ? 'image.dialog.editTitle' : 'image.dialog.createTitle') }}
           </h2>
@@ -93,6 +140,7 @@ function submit() {
             <span class="img-label">{{ locale.t('image.field.repository') }}</span>
             <cds-input>
               <input
+                ref="firstFieldEl"
                 v-model="repository"
                 type="text"
                 autocomplete="off"
@@ -128,9 +176,10 @@ function submit() {
                 autocomplete="off"
                 :placeholder="locale.t('image.field.digestPlaceholder')"
                 :aria-label="locale.t('image.field.digest')"
+                aria-describedby="img-digest-hint"
               />
             </cds-input>
-            <small class="img-hint muted">{{ locale.t('image.field.digestHint') }}</small>
+            <small id="img-digest-hint" class="img-hint muted">{{ locale.t('image.field.digestHint') }}</small>
           </label>
 
           <label class="img-check">

@@ -41,9 +41,14 @@ export const UPSERT_AGENT_TEMPLATE = gql`
   ${AGENT_TEMPLATE_FIELDS}
 `
 
-// Mirrors the schema enums (agent.graphql).
-export type InstallMethod = 'offline_tar' | 'curl' | 'unset'
-export type AgentTemplateStatus = 'active' | 'deferred'
+// Mirrors the schema enums (agent.graphql). Exported as runtime `as const`
+// arrays so they can be iterated (enum → locale-key coverage test); the TS
+// union types are derived from the arrays to keep a single source of truth.
+export const INSTALL_METHODS = ['offline_tar', 'curl', 'unset'] as const
+export type InstallMethod = (typeof INSTALL_METHODS)[number]
+
+export const AGENT_TEMPLATE_STATUSES = ['active', 'deferred'] as const
+export type AgentTemplateStatus = (typeof AGENT_TEMPLATE_STATUSES)[number]
 
 export interface AgentTemplateNode {
   id: string

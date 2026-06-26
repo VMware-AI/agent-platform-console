@@ -204,7 +204,7 @@ async function refreshImages() {
             </cds-grid-cell>
             <cds-grid-cell>
               <cds-badge :status="image.signed ? 'success' : 'neutral'" class="status-badge">
-                <cds-icon :shape="image.signed ? 'shield-check' : 'ban'" size="sm"></cds-icon>
+                <cds-icon :shape="image.signed ? 'shield-check' : 'ban'" size="sm" aria-hidden="true"></cds-icon>
                 {{ locale.t(image.signed ? 'image.signed.yes' : 'image.signed.no') }}
               </cds-badge>
             </cds-grid-cell>
@@ -225,19 +225,19 @@ async function refreshImages() {
             </cds-grid-cell>
           </cds-grid-row>
 
-          <cds-grid-placeholder v-if="loading">
-            <cds-icon shape="sync" size="xl"></cds-icon>
+          <cds-grid-placeholder v-if="loading" role="status" aria-live="polite">
+            <cds-icon shape="sync" size="xl" aria-hidden="true"></cds-icon>
             <p cds-text="subsection">{{ locale.t('image.loading') }}</p>
           </cds-grid-placeholder>
-          <cds-grid-placeholder v-else-if="error">
-            <cds-icon shape="error-standard" size="xl"></cds-icon>
+          <cds-grid-placeholder v-else-if="error" role="alert" aria-live="assertive">
+            <cds-icon shape="error-standard" size="xl" aria-hidden="true"></cds-icon>
             <p cds-text="subsection">{{ locale.t('image.error') }}</p>
             <cds-button action="outline" size="sm" @click="refreshImages">
               {{ locale.t('image.action.refresh') }}
             </cds-button>
           </cds-grid-placeholder>
-          <cds-grid-placeholder v-else-if="images.length === 0">
-            <cds-icon shape="storage" size="xl"></cds-icon>
+          <cds-grid-placeholder v-else-if="images.length === 0" role="status" aria-live="polite">
+            <cds-icon shape="storage" size="xl" aria-hidden="true"></cds-icon>
             <p cds-text="subsection">{{ locale.t('image.empty') }}</p>
             <cds-button action="outline" size="sm" @click="openCreate">
               {{ locale.t('image.action.create') }}
