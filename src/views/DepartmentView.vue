@@ -49,6 +49,11 @@ import {
   type RemoveMembershipResult,
   type RemoveMembershipVars,
 } from '@/api/graphql/queries/departments'
+import {
+  GATEWAY_CONNECTIONS_LIST_QUERY,
+  type GatewayConnectionNode,
+  type GatewayConnectionsListResult,
+} from '@/api/graphql/queries/gateway-connections'
 import '@/components/icons'
 
 const locale = useLocaleStore()
@@ -211,6 +216,31 @@ const assignableUsers = computed<AccountUser[]>(() => {
     )
 })
 
+/* ---------- Gateway connections (create-form picker + detail display) ----------
+ * A department's litellm team is hosted on a gateway connection; null → the
+ * platform default gateway (LLD-13 §3.3). The list feeds the create dialog's
+ * optional picker and resolves a department's gatewayConnectionId → a name for
+ * the read-only detail panel. */
+const { result: gatewaysResult, loading: gatewaysLoading } =
+  useQuery<GatewayConnectionsListResult>(GATEWAY_CONNECTIONS_LIST_QUERY)
+
+const gatewayConnections = computed<GatewayConnectionNode[]>(
+  () => gatewaysResult.value?.gatewayConnections ?? [],
+)
+
+const gatewaysById = computed<Map<string, GatewayConnectionNode>>(() => {
+  const map = new Map<string, GatewayConnectionNode>()
+  for (const g of gatewayConnections.value) map.set(g.id, g)
+  return map
+})
+
+// Resolve a department's gateway id to a display name; null (or a vanished id)
+// falls back to the "platform default gateway" label.
+function gatewayLabel(id: string | null): string {
+  if (!id) return locale.t('department.gateway.default')
+  return gatewaysById.value.get(id)?.name ?? id
+}
+
 /* ---------- Create department ---------- */
 
 const createOpen = ref(false)
@@ -218,11 +248,16 @@ const creating = ref(false)
 // maxBudget is bound to a <input type="number">, whose v-model coerces the value
 // to a JS number once the user types — so the runtime type is string | number
 // (empty string when blank). Parse it through String(...) in submitCreate.
-const createForm = reactive<{ name: string; maxBudget: string | number }>({ name: '', maxBudget: '' })
+const createForm = reactive<{
+  name: string
+  maxBudget: string | number
+  gatewayConnectionId: string
+}>({ name: '', maxBudget: '', gatewayConnectionId: '' })
 
 function openCreate() {
   createForm.name = ''
   createForm.maxBudget = ''
+  createForm.gatewayConnectionId = ''
   rememberTrigger()
   createOpen.value = true
   nextTick(() => createNameEl.value?.focus())
@@ -250,7 +285,14 @@ async function submitCreate() {
   try {
     const { data } = await apolloClient.mutate<CreateDepartmentResult, CreateDepartmentVars>({
       mutation: CREATE_DEPARTMENT_MUTATION,
-      variables: { input: { name, maxBudget } },
+      variables: {
+        input: {
+          name,
+          maxBudget,
+          // Empty selection → omit (null) so the backend uses the platform default gateway.
+          gatewayConnectionId: createForm.gatewayConnectionId || null,
+        },
+      },
     })
     toast.success(locale.t('department.toast.created'))
     createOpen.value = false
@@ -507,6 +549,10 @@ function onAddRoleChange(event: Event) {
                 <dd>{{ selectedDepartment.litellmTeamId || locale.t('department.detail.none') }}</dd>
               </div>
               <div class="detail-row">
+                <dt>{{ locale.t('department.detail.gateway') }}</dt>
+                <dd>{{ gatewayLabel(selectedDepartment.gatewayConnectionId) }}</dd>
+              </div>
+              <div class="detail-row">
                 <dt>{{ locale.t('department.detail.tenant') }}</dt>
                 <dd>{{ selectedDepartment.tenantId || locale.t('department.detail.none') }}</dd>
               </div>
@@ -617,6 +663,21 @@ function onAddRoleChange(event: Event) {
               />
               <cds-control-message>{{ locale.t('department.create.budgetHint') }}</cds-control-message>
             </cds-input>
+
+            <cds-select>
+              <label>{{ locale.t('department.create.gatewayLabel') }}</label>
+              <select
+                v-model="createForm.gatewayConnectionId"
+                :aria-label="locale.t('department.create.gatewayLabel')"
+                :disabled="creating || gatewaysLoading"
+              >
+                <option value="">{{ locale.t('department.gateway.default') }}</option>
+                <option v-for="gw in gatewayConnections" :key="gw.id" :value="gw.id">
+                  {{ gw.name }}
+                </option>
+              </select>
+              <cds-control-message>{{ locale.t('department.create.gatewayHint') }}</cds-control-message>
+            </cds-select>
 
             <div class="dialog-actions">
               <cds-button type="button" action="outline" :disabled="creating" @click="closeCreate">

@@ -29,6 +29,7 @@ import type {
   ResourcePool,
   VsphereResourcePool,
 } from '@/api/graphql/types'
+import type { DepartmentNode } from '@/api/graphql/queries/departments'
 
 // --- mocks -----------------------------------------------------------------
 
@@ -118,6 +119,20 @@ const POOL_B = makePool({ id: 'pool-b', name: 'Beta', endpoint: 'vc-b.example.co
 const VPOOL_1: VsphereResourcePool = { name: 'Resources', path: '/DC0/host/DC0_C0/Resources' }
 const VPOOL_2: VsphereResourcePool = { name: 'Prod', path: '/DC0/host/DC0_C0/Resources/Prod' }
 
+function makeDepartment(over: Partial<DepartmentNode> = {}): DepartmentNode {
+  return {
+    id: 'dept-1',
+    tenantId: null,
+    name: 'Engineering',
+    litellmTeamId: 'team-eng',
+    gatewayConnectionId: null,
+    createdAt: '2026-01-01T00:00:00Z',
+    ...over,
+  }
+}
+const DEPT_A = makeDepartment({ id: 'dept-a', name: 'Alpha Dept' })
+const DEPT_B = makeDepartment({ id: 'dept-b', name: 'Beta Dept' })
+
 const mountConfig = {
   global: {
     config: {
@@ -139,6 +154,7 @@ interface MountProps {
   open?: boolean
   template?: OvaTemplateFamily | null
   pools?: ResourcePool[]
+  departments?: DepartmentNode[]
   deploying?: boolean
 }
 
@@ -149,6 +165,7 @@ function mountDialog(props: MountProps = {}) {
       open: props.open ?? true,
       template: props.template ?? makeFamily(),
       pools: props.pools ?? [POOL_A, POOL_B],
+      departments: props.departments ?? [DEPT_A, DEPT_B],
       deploying: props.deploying ?? false,
     },
   })
@@ -169,6 +186,10 @@ function poolSelect(): HTMLSelectElement {
 }
 function targetPoolSelect(): HTMLSelectElement {
   return selects()[2]
+}
+// The department picker is appended after the three existing selects → index 3.
+function departmentSelect(): HTMLSelectElement {
+  return selects()[3]
 }
 function inputs(): HTMLInputElement[] {
   return Array.from(wrapper!.element.querySelectorAll<HTMLInputElement>('input'))
@@ -362,6 +383,7 @@ describe('DeployAgentDialog — submit emits deploy input', () => {
       templateFamilyId: 'fam-1',
       templateVersionId: 'ver-old',
       resourcePoolId: 'pool-b',
+      departmentId: null, // left on the platform-default option → null
       targetResourcePool: null, // empty selection → null (inherit source pool)
       hostname: 'agent-vm-01', // trimmed
       maxBudget: null, // blank budget → null
@@ -419,6 +441,54 @@ describe('DeployAgentDialog — submit emits deploy input', () => {
   })
 })
 
+describe('DeployAgentDialog — department routing picker', () => {
+  it('lists a platform-default option plus one per department', async () => {
+    setVspherePools([])
+    mountDialog({ departments: [DEPT_A, DEPT_B] })
+    await flushPromises()
+
+    const opts = Array.from(departmentSelect().querySelectorAll('option'))
+    // First option is the platform default (empty value); then one per department.
+    expect(opts[0].value).toBe('')
+    expect(opts[0].textContent?.trim()).toBe(locale.t('marketplace.deploy.departmentDefault'))
+    expect(opts.slice(1).map((o) => o.value)).toEqual(['dept-a', 'dept-b'])
+    expect(opts[1].textContent).toContain('Alpha Dept')
+    // Defaults to the platform-default (empty) selection.
+    expect(departmentSelect().value).toBe('')
+  })
+
+  it('emits the chosen departmentId on submit', async () => {
+    setVspherePools([])
+    mountDialog({ departments: [DEPT_A, DEPT_B] })
+    await flushPromises()
+
+    setValue(nameInput(), 'Routed Agent')
+    setValue(departmentSelect(), 'dept-b')
+    await flushPromises()
+
+    clickSubmit()
+    await flushPromises()
+
+    expect(submitEvents()).toHaveLength(1)
+    expect(submitEvents()[0].departmentId).toBe('dept-b')
+  })
+
+  it('emits departmentId null when left on the platform default', async () => {
+    setVspherePools([])
+    mountDialog({ departments: [DEPT_A, DEPT_B] })
+    await flushPromises()
+
+    setValue(nameInput(), 'Default Routed')
+    // leave the department picker on its default ('') option
+    await flushPromises()
+
+    clickSubmit()
+    await flushPromises()
+
+    expect(submitEvents()[0].departmentId).toBeNull()
+  })
+})
+
 describe('DeployAgentDialog — validation', () => {
   it('blocks submit and shows the name error when the name is blank', async () => {
     setVspherePools([])
@@ -456,9 +526,17 @@ describe('DeployAgentDialog — validation', () => {
     mountDialog()
     await flushPromises()
 
-    // Required target pool unselected, but no attempt yet → no error shown.
-    expect(controlMessages()).not.toContain(locale.t('marketplace.deploy.error.targetPool'))
-    expect(controlMessages().filter((m) => m.length > 0)).toHaveLength(0)
+    // Required target pool unselected, but no attempt yet → no validation error
+    // shown. (The optional department picker's neutral hint always renders, so we
+    // assert the absence of the error messages specifically, not of all messages.)
+    const errorMessages = [
+      locale.t('marketplace.deploy.error.version'),
+      locale.t('marketplace.deploy.error.pool'),
+      locale.t('marketplace.deploy.error.name'),
+      locale.t('marketplace.deploy.error.targetPool'),
+      locale.t('marketplace.deploy.error.maxBudget'),
+    ]
+    expect(controlMessages().filter((m) => errorMessages.includes(m))).toHaveLength(0)
   })
 
   it('blocks submit and shows the budget error when a negative budget is typed', async () => {

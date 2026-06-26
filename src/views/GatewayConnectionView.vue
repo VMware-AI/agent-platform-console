@@ -259,6 +259,9 @@ function isClickableEndpoint(value: string): boolean {
         <cds-grid-row v-for="connection in connections" :key="connection.id">
           <cds-grid-cell>
             <strong class="conn-name" :title="connection.name">{{ connection.name }}</strong>
+            <cds-badge v-if="connection.isDefault" status="info" class="default-badge">
+              {{ locale.t('gatewayConn.badge.default') }}
+            </cds-badge>
           </cds-grid-cell>
           <cds-grid-cell class="endpoint-cell">
             <a
@@ -414,6 +417,9 @@ function isClickableEndpoint(value: string): boolean {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.default-badge {
+  margin-top: 4px;
 }
 .endpoint-cell {
   word-break: break-all;

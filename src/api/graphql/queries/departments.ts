@@ -20,6 +20,7 @@ const DEPARTMENT_FIELDS = gql`
     tenantId
     name
     litellmTeamId
+    gatewayConnectionId
     createdAt
   }
 `
@@ -100,6 +101,8 @@ export interface DepartmentNode {
   tenantId: string | null
   name: string
   litellmTeamId: string | null
+  /** The gateway connection hosting this department's litellm team (LLD-13 §3.3). */
+  gatewayConnectionId: string | null
   createdAt: string
 }
 
@@ -128,6 +131,8 @@ export interface CreateDepartmentVars {
     name: string
     /** Shared budget for the litellm team backing this department. */
     maxBudget?: number | null
+    /** Gateway connection hosting this department's litellm team; omit → default (LLD-13). */
+    gatewayConnectionId?: string | null
   }
 }
 

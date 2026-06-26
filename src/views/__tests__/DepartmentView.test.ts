@@ -33,6 +33,10 @@ import type {
   DepartmentMembersResult,
   MembershipNode,
 } from '@/api/graphql/queries/departments'
+import type {
+  GatewayConnectionNode,
+  GatewayConnectionsListResult,
+} from '@/api/graphql/queries/gateway-connections'
 import type { AccountUser } from '@/api/graphql/types'
 
 // ---------------------------------------------------------------------------
@@ -56,6 +60,9 @@ let refetchMembers: Mock
 
 let usersResult: Ref<UsersQueryResult | undefined>
 let usersLoading: Ref<boolean>
+
+let gatewaysResult: Ref<GatewayConnectionsListResult | undefined>
+let gatewaysLoading: Ref<boolean>
 
 /**
  * Pull the operation name off a gql document so we can route useQuery. Some
@@ -89,6 +96,8 @@ vi.mock('@vue/apollo-composable', () => ({
         }
       case 'Users':
         return { result: usersResult, loading: usersLoading }
+      case 'GatewayConnectionsList':
+        return { result: gatewaysResult, loading: gatewaysLoading }
       default:
         throw new Error(`unexpected useQuery operation: ${operationName(doc)}`)
     }
@@ -125,6 +134,21 @@ function makeDepartment(over: Partial<DepartmentNode> = {}): DepartmentNode {
     tenantId: 't1',
     name: 'Engineering',
     litellmTeamId: 'team-eng',
+    gatewayConnectionId: null,
+    createdAt: '2026-01-01T00:00:00Z',
+    ...over,
+  }
+}
+
+function makeGateway(over: Partial<GatewayConnectionNode> = {}): GatewayConnectionNode {
+  return {
+    id: 'gw1',
+    name: 'Primary Gateway',
+    endpoint: 'https://litellm.example.com',
+    publicUrl: null,
+    isDefault: false,
+    status: 'connected',
+    loadBalanceStrategy: 'simple_shuffle',
     createdAt: '2026-01-01T00:00:00Z',
     ...over,
   }
@@ -173,6 +197,9 @@ beforeEach(() => {
 
   usersResult = ref<UsersQueryResult | undefined>({ users: { nodes: [] } })
   usersLoading = ref(false)
+
+  gatewaysResult = ref<GatewayConnectionsListResult | undefined>({ gatewayConnections: [] })
+  gatewaysLoading = ref(false)
 
   mutateMock.mockReset()
   mutateMock.mockResolvedValue({ data: {} })
@@ -453,6 +480,109 @@ describe('DepartmentView', () => {
     }
     expect(call.variables.input.name).toBe('Research')
     expect(call.variables.input.maxBudget).toBe(250)
+  })
+
+  it('lists the gateway picker: a default option plus one per gateway connection', async () => {
+    const locale = useLocaleStore()
+    departmentsResult.value = { departments: [] }
+    gatewaysResult.value = {
+      gatewayConnections: [
+        makeGateway({ id: 'gw-7', name: 'Edge GW' }),
+        makeGateway({ id: 'gw-8', name: 'Core GW' }),
+      ],
+    }
+    wrapper = mount(DepartmentView, mountConfig)
+
+    await wrapper.find('.toolbar cds-button').trigger('click')
+    await flushPromises()
+
+    // The create dialog's only <select> is the gateway picker.
+    const gwSelect = document.body.querySelector<HTMLSelectElement>('.dept-card select')!
+    const opts = Array.from(gwSelect.querySelectorAll('option'))
+    // First option is the "platform default" (empty value); then one per connection.
+    expect(opts[0].value).toBe('')
+    expect(opts[0].textContent).toContain(locale.t('department.gateway.default'))
+    expect(opts.slice(1).map((o) => o.value)).toEqual(['gw-7', 'gw-8'])
+    expect(opts[1].textContent).toContain('Edge GW')
+  })
+
+  it('creates a department with a selected gateway: forwards gatewayConnectionId', async () => {
+    departmentsResult.value = { departments: [] }
+    gatewaysResult.value = { gatewayConnections: [makeGateway({ id: 'gw-7', name: 'Edge GW' })] }
+    mutateMock.mockResolvedValueOnce({ data: { createDepartment: makeDepartment({ id: 'newg' }) } })
+    wrapper = mount(DepartmentView, mountConfig)
+
+    await wrapper.find('.toolbar cds-button').trigger('click')
+    await flushPromises()
+
+    const nameInput = document.body.querySelectorAll<HTMLInputElement>('.dept-card input')[0]
+    nameInput.value = 'Research'
+    nameInput.dispatchEvent(new Event('input'))
+
+    const gwSelect = document.body.querySelector<HTMLSelectElement>('.dept-card select')!
+    gwSelect.value = 'gw-7'
+    gwSelect.dispatchEvent(new Event('change'))
+    await flushPromises()
+
+    const form = document.body.querySelector<HTMLFormElement>('.dept-card')!
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await flushPromises()
+
+    expect(mutateMock).toHaveBeenCalledTimes(1)
+    const call = mutateMock.mock.calls[0][0] as {
+      variables: { input: { gatewayConnectionId: string | null } }
+    }
+    expect(call.variables.input.gatewayConnectionId).toBe('gw-7')
+  })
+
+  it('omits gatewayConnectionId (null) when the picker is left on the platform default', async () => {
+    departmentsResult.value = { departments: [] }
+    gatewaysResult.value = { gatewayConnections: [makeGateway({ id: 'gw-7', name: 'Edge GW' })] }
+    mutateMock.mockResolvedValueOnce({ data: { createDepartment: makeDepartment({ id: 'newd' }) } })
+    wrapper = mount(DepartmentView, mountConfig)
+
+    await wrapper.find('.toolbar cds-button').trigger('click')
+    await flushPromises()
+
+    const nameInput = document.body.querySelectorAll<HTMLInputElement>('.dept-card input')[0]
+    nameInput.value = 'Research'
+    nameInput.dispatchEvent(new Event('input'))
+    // Leave the gateway picker on its default ('') option.
+    await flushPromises()
+
+    const form = document.body.querySelector<HTMLFormElement>('.dept-card')!
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await flushPromises()
+
+    const call = mutateMock.mock.calls[0][0] as {
+      variables: { input: { gatewayConnectionId: string | null } }
+    }
+    expect(call.variables.input.gatewayConnectionId).toBeNull()
+  })
+
+  it('shows the department gateway in the detail panel, resolving id → name', async () => {
+    const locale = useLocaleStore()
+    departmentsResult.value = {
+      departments: [makeDepartment({ id: 'd1', name: 'Engineering', gatewayConnectionId: 'gw-7' })],
+    }
+    gatewaysResult.value = { gatewayConnections: [makeGateway({ id: 'gw-7', name: 'Edge GW' })] }
+    wrapper = mount(DepartmentView, mountConfig)
+    await flushPromises()
+
+    const grid = wrapper.find('.detail-grid')
+    expect(grid.text()).toContain(locale.t('department.detail.gateway'))
+    expect(grid.text()).toContain('Edge GW')
+  })
+
+  it('falls back to the platform-default label when a department has no gateway', async () => {
+    const locale = useLocaleStore()
+    departmentsResult.value = {
+      departments: [makeDepartment({ id: 'd1', gatewayConnectionId: null })],
+    }
+    wrapper = mount(DepartmentView, mountConfig)
+    await flushPromises()
+
+    expect(wrapper.find('.detail-grid').text()).toContain(locale.t('department.gateway.default'))
   })
 
   it('surfaces a graphql error via toast when create fails and keeps the dialog open', async () => {

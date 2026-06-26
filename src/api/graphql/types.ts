@@ -624,6 +624,12 @@ export interface DeployAgentInput {
   /** Target vCenter resource pool. */
   resourcePoolId: string
   /**
+   * Department whose gateway issues the agent's virtual key + whose gateway
+   * public_url is baked into the VM's cloud-init (LLD-13 §3.3). Omitted →
+   * platform default gateway.
+   */
+  departmentId?: string | null
+  /**
    * Optional vSphere resource-pool inventory PATH to place the VM clone in
    * (VsphereResourcePool.path, e.g. "/DC0/host/DC0_C0/Resources"). A true OVA
    * template has no source resource pool, so a real deploy must supply one or

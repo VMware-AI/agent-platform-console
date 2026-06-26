@@ -94,6 +94,8 @@ function makeConnection(over: Partial<GatewayConnectionNode> = {}): GatewayConne
     id: 'conn-1',
     name: 'Primary Gateway',
     endpoint: 'https://litellm.example.com',
+    publicUrl: null,
+    isDefault: false,
     status: 'connected',
     loadBalanceStrategy: 'simple_shuffle',
     createdAt: '2026-01-01T00:00:00Z',
@@ -225,6 +227,20 @@ describe('GatewayConnectionView — list states', () => {
     expect(second.textContent).toContain(locale.t('gatewayConn.strategy.latency'))
   })
 
+  it('shows a default badge only on the gateway flagged isDefault', async () => {
+    setListData([
+      makeConnection({ id: 'a', name: 'Alpha Gateway', isDefault: true }),
+      makeConnection({ id: 'b', name: 'Beta Gateway', isDefault: false }),
+    ])
+    mountView()
+    await flushPromises()
+
+    // The default badge renders in the flagged row's name cell only.
+    expect(rows()[0].querySelector('.default-badge')).not.toBeNull()
+    expect(rows()[0].textContent).toContain(locale.t('gatewayConn.badge.default'))
+    expect(rows()[1].querySelector('.default-badge')).toBeNull()
+  })
+
   it('renders an http endpoint as a link but a non-http endpoint as plain text', async () => {
     setListData([CONN_A, CONN_B])
     mountView()
@@ -327,6 +343,45 @@ describe('GatewayConnectionView — register dialog', () => {
     expect(summarySlot.refetch).toHaveBeenCalled()
     // Dialog closes on success.
     expect(registerModal()).toBeNull()
+  })
+
+  it('forwards the optional publicUrl and isDefault flag in the register input', async () => {
+    mutateMock.mockResolvedValue({ data: { registerGatewayConnection: makeConnection() } })
+    setListData([CONN_A])
+    setSummaryData(makeSummary())
+    mountView()
+    await flushPromises()
+
+    wrapper!.element.querySelector<HTMLElement>('.toolbar cds-button')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    const form = registerModal()!
+    const setVal = (sel: string, v: string) => {
+      const el = form.querySelector<HTMLInputElement>(sel)!
+      el.value = v
+      el.dispatchEvent(new Event('input'))
+    }
+    setVal('#gw-form-name', 'Edge Gateway')
+    setVal('#gw-form-endpoint', 'https://edge.example.com')
+    setVal('#gw-form-public-url', 'https://edge.vm.internal')
+    // Tick the "platform default gateway" checkbox.
+    const defaultCheckbox = form.querySelector<HTMLInputElement>('#gw-form-default')!
+    defaultCheckbox.checked = true
+    defaultCheckbox.dispatchEvent(new Event('change'))
+    await flushPromises()
+
+    form.dispatchEvent(new Event('submit'))
+    await flushPromises()
+
+    expect(mutateMock).toHaveBeenCalledTimes(1)
+    const arg = mutateMock.mock.calls[0][0] as { variables: { input: Record<string, unknown> } }
+    expect(arg.variables.input).toMatchObject({
+      name: 'Edge Gateway',
+      endpoint: 'https://edge.example.com',
+      publicUrl: 'https://edge.vm.internal',
+      isDefault: true,
+    })
   })
 
   it('surfaces the backend GraphQL error via toast and keeps the dialog open on failure', async () => {

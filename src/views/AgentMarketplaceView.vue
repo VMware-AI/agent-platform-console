@@ -19,6 +19,11 @@ import {
   DEPLOY_AGENT_MUTATION,
 } from '@/api/graphql/queries/ovaTemplates'
 import { RESOURCE_POOLS_QUERY } from '@/api/graphql/queries/resourcePools'
+import {
+  DEPARTMENTS_QUERY,
+  type DepartmentNode,
+  type DepartmentsResult,
+} from '@/api/graphql/queries/departments'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
 import type {
   AgentType,
@@ -91,6 +96,15 @@ const poolsResult = useQuery<ResourcePoolsQueryResult, ResourcePoolsQueryVars>(
   () => ({ fetchPolicy: 'cache-and-network' }),
 )
 const pools = computed<ResourcePool[]>(() => poolsResult.result.value?.resourcePools.nodes ?? [])
+
+/* ---- Departments (deploy dialog's optional gateway-routing picker, LLD-13 §3.3) ----
+   The picked department decides which gateway issues the agent's virtual key and
+   whose public_url is baked into cloud-init. Fetched here (like pools) and passed
+   to the dialog as a prop so the dialog stays presentational. */
+const departmentsResult = useQuery<DepartmentsResult>(DEPARTMENTS_QUERY)
+const departments = computed<DepartmentNode[]>(
+  () => departmentsResult.result.value?.departments ?? [],
+)
 
 /* ---- Pager helpers ---- */
 function goToPage(p: number) {
@@ -525,6 +539,7 @@ const typeFilterLabel = computed(() => {
       :open="deployDialogOpen"
       :template="deployingTemplate"
       :pools="pools"
+      :departments="departments"
       :deploying="deploying"
       @close="closeDeployDialog"
       @submit="onSubmitDeploy"

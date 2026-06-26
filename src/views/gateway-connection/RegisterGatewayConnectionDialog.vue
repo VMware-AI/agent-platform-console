@@ -36,6 +36,8 @@ const DEFAULT_STRATEGY: LoadBalanceStrategy = 'simple_shuffle'
 const name = ref('')
 const endpoint = ref('')
 const masterKey = ref('')
+const publicUrl = ref('')
+const isDefault = ref(false)
 const loadBalanceStrategy = ref<LoadBalanceStrategy>(DEFAULT_STRATEGY)
 const attempted = ref(false)
 
@@ -44,12 +46,19 @@ const nameValid = computed(() => {
   return length >= 2 && length <= 64
 })
 const endpointValid = computed(() => /^https?:\/\/.+/i.test(endpoint.value.trim()))
-const formValid = computed(() => nameValid.value && endpointValid.value)
+// Optional; when provided it must be an http(s) URL (provisioned VMs dial it).
+const publicUrlValid = computed(() => {
+  const v = publicUrl.value.trim()
+  return v === '' || /^https?:\/\/.+/i.test(v)
+})
+const formValid = computed(() => nameValid.value && endpointValid.value && publicUrlValid.value)
 
 function reset() {
   name.value = ''
   endpoint.value = ''
   masterKey.value = ''
+  publicUrl.value = ''
+  isDefault.value = false
   loadBalanceStrategy.value = DEFAULT_STRATEGY
   attempted.value = false
 }
@@ -70,11 +79,15 @@ function submit() {
   attempted.value = true
   if (!formValid.value || props.saving) return
   const trimmedKey = masterKey.value.trim()
+  const trimmedPublicUrl = publicUrl.value.trim()
   emit('submit', {
     name: name.value.trim(),
     endpoint: endpoint.value.trim(),
     masterKey: trimmedKey === '' ? undefined : trimmedKey,
     loadBalanceStrategy: loadBalanceStrategy.value,
+    // Blank → omit (undefined) so the backend falls back to the endpoint.
+    publicUrl: trimmedPublicUrl === '' ? undefined : trimmedPublicUrl,
+    isDefault: isDefault.value,
   })
 }
 </script>
@@ -120,6 +133,25 @@ function submit() {
           </cds-control-message>
         </cds-input>
 
+        <cds-input :status="attempted && !publicUrlValid ? 'error' : 'neutral'">
+          <label for="gw-form-public-url">{{ locale.t('gatewayConn.form.publicUrl') }}</label>
+          <input
+            id="gw-form-public-url"
+            :value="publicUrl"
+            autocomplete="off"
+            :placeholder="locale.t('gatewayConn.form.publicUrlPlaceholder')"
+            :aria-invalid="attempted && !publicUrlValid"
+            :aria-describedby="attempted && !publicUrlValid ? 'gw-form-public-url-error' : 'gw-form-public-url-hint'"
+            @input="publicUrl = ($event.target as HTMLInputElement).value"
+          />
+          <cds-control-message v-if="attempted && !publicUrlValid" id="gw-form-public-url-error" status="error">
+            {{ locale.t('gatewayConn.form.publicUrlError') }}
+          </cds-control-message>
+          <cds-control-message v-else id="gw-form-public-url-hint" status="neutral">
+            {{ locale.t('gatewayConn.form.publicUrlHint') }}
+          </cds-control-message>
+        </cds-input>
+
         <cds-input>
           <label for="gw-form-master-key">{{ locale.t('gatewayConn.form.masterKey') }}</label>
           <input
@@ -149,6 +181,19 @@ function submit() {
             </option>
           </select>
         </cds-select>
+
+        <cds-checkbox>
+          <label for="gw-form-default">{{ locale.t('gatewayConn.form.isDefault') }}</label>
+          <input
+            id="gw-form-default"
+            type="checkbox"
+            :checked="isDefault"
+            @change="isDefault = ($event.target as HTMLInputElement).checked"
+          />
+          <cds-control-message status="neutral">
+            {{ locale.t('gatewayConn.form.isDefaultHint') }}
+          </cds-control-message>
+        </cds-checkbox>
       </form>
     </cds-modal-content>
 

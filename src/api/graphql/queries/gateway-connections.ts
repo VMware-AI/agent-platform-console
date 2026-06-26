@@ -43,6 +43,8 @@ const GATEWAY_CONNECTION_FIELDS = gql`
     id
     name
     endpoint
+    publicUrl
+    isDefault
     status
     loadBalanceStrategy
     createdAt
@@ -95,6 +97,10 @@ export interface GatewayConnectionNode {
   id: string
   name: string
   endpoint: string
+  /** URL provisioned VMs/agents call; falls back to endpoint when null (LLD-13 §3.3). */
+  publicUrl: string | null
+  /** The platform default gateway — used for ops with no department context. At most one. */
+  isDefault: boolean
   status: GatewayStatus
   loadBalanceStrategy: LoadBalanceStrategy
   createdAt: string
@@ -123,6 +129,10 @@ export interface RegisterGatewayConnectionInput {
   masterKey?: string | null
   masterKeyRef?: string | null
   loadBalanceStrategy?: LoadBalanceStrategy | null
+  /** URL provisioned VMs call; omitted → falls back to endpoint (LLD-13 §3.3). */
+  publicUrl?: string | null
+  /** Mark this the platform default gateway; setting true clears the flag on any other. */
+  isDefault?: boolean | null
 }
 
 export interface RegisterGatewayConnectionVars {

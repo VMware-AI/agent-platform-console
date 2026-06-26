@@ -22,12 +22,14 @@ import type {
   VsphereResourcePoolsQueryResult,
   VsphereResourcePoolsQueryVars,
 } from '@/api/graphql/types'
+import type { DepartmentNode } from '@/api/graphql/queries/departments'
 import '@/components/icons'
 
 const props = defineProps<{
   open: boolean
   template: OvaTemplateFamily | null
   pools: ResourcePool[]
+  departments: DepartmentNode[]
   deploying: boolean
 }>()
 
@@ -44,6 +46,9 @@ const name = ref('')
 // The selected vSphere placement pool's inventory PATH (sent as targetResourcePool).
 const targetResourcePool = ref('')
 const hostname = ref('')
+// The chosen department whose gateway issues the agent's virtual key + whose
+// gateway public_url is baked into cloud-init (LLD-13 §3.3). '' = platform default.
+const departmentId = ref<string>('')
 // Bound to a <input type="number"> whose v-model coerces a typed value to a JS
 // number, so the runtime type is string | number ('' when blank). Normalize via
 // String(...) before any string op (see budgetValid / submit).
@@ -61,6 +66,7 @@ watch(
       name.value = `${props.template.name}_${Date.now() % 100000}`
       targetResourcePool.value = ''
       hostname.value = ''
+      departmentId.value = ''
       maxBudget.value = ''
       attempted.value = false
     }
@@ -124,6 +130,8 @@ function submit() {
     templateFamilyId: props.template?.id ?? '',
     templateVersionId: templateVersionId.value,
     resourcePoolId: resourcePoolId.value,
+    // The department whose gateway routes this agent (LLD-13 §3.3); '' → null = default.
+    departmentId: departmentId.value || null,
     // The picked vSphere pool's inventory PATH. A true OVA template has no source
     // resource pool, so a real deploy must place the clone here; empty inherits
     // the source's pool (only valid for regular-VM sources, e.g. vcsim).
@@ -257,6 +265,21 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
           </select>
           <cds-control-message v-if="attempted && !targetPoolValid()" status="error">
             {{ locale.t('marketplace.deploy.error.targetPool') }}
+          </cds-control-message>
+        </cds-select>
+
+        <!-- 部门（可选）：决定由哪个部门的网关发放该智能体的虚拟密钥，并将该网关
+             public_url 注入 cloud-init（LLD-13 §3.3）。不选 = 平台默认网关。 -->
+        <cds-select class="full-row">
+          <label>{{ locale.t('marketplace.deploy.department') }}</label>
+          <select v-model="departmentId">
+            <option value="">{{ locale.t('marketplace.deploy.departmentDefault') }}</option>
+            <option v-for="d in props.departments" :key="d.id" :value="d.id">
+              {{ d.name }}
+            </option>
+          </select>
+          <cds-control-message status="neutral">
+            {{ locale.t('marketplace.deploy.departmentHint') }}
           </cds-control-message>
         </cds-select>
 
