@@ -40,6 +40,7 @@ const form = reactive({
   name: '',
   endpoint: '',
   contentLibraryName: '',
+  insecure: false,
 })
 
 const isEdit = computed(() => !!props.pool)
@@ -65,6 +66,7 @@ watch(
       form.name = props.pool?.name ?? ''
       form.endpoint = props.pool?.endpoint ?? ''
       form.contentLibraryName = props.pool?.contentLibraryName ?? ''
+      form.insecure = props.pool?.insecure ?? false
       // Reset the test-connection alert every time the dialog re-opens.
       testResult.value = null
     }
@@ -135,6 +137,7 @@ function onSubmit() {
     name: form.name.trim(),
     endpoint: form.endpoint.trim(),
     contentLibraryName: form.contentLibraryName.trim(),
+    insecure: form.insecure,
   }
   emit('submit', { mode: isEdit.value ? 'update' : 'create', input })
 }
@@ -194,6 +197,18 @@ function onBackdropClick(e: MouseEvent) {
                 :placeholder="locale.t('resources.form.contentLibraryPlaceholder')"
                 @input="(e: Event) => form.contentLibraryName = (e.target as HTMLInputElement).value"
               />
+            </label>
+
+            <label class="resource-check">
+              <input
+                type="checkbox"
+                :checked="form.insecure"
+                @change="(e: Event) => form.insecure = (e.target as HTMLInputElement).checked"
+              />
+              <span>
+                <span class="resource-check-label">{{ locale.t('resources.form.insecure') }}</span>
+                <span class="resource-check-hint">{{ locale.t('resources.form.insecureHint') }}</span>
+              </span>
             </label>
 
             <div class="resource-test">
@@ -305,6 +320,28 @@ function onBackdropClick(e: MouseEvent) {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.resource-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+.resource-check input {
+  margin-top: 2px;
+}
+.resource-check-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cds-alias-typography-color-300, #565656);
+}
+.resource-check-hint {
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+  color: var(--cds-alias-typography-color-400, #80838a);
 }
 
 .resource-test {
