@@ -112,6 +112,29 @@ src/
 
 - **后端**: [agent-platform-backend](https://github.com/VMware-AI/agent-platform-backend) — 提供智能体 / 资源池 / 观测等业务接口
 
+### Docker 构建与运行
+
+仓库根目录提供 `Dockerfile`(多阶段构建)与 `Makefile`。最终镜像用 `nginx` 提供静态资源,并把 `/query` 反代到后端;后端地址在容器启动时通过 `BACKEND_BASE_URL` 环境变量注入,无需重新构建镜像即可切换后端。
+
+```bash
+# 构建镜像(标签: agent-platform-console:local)
+make docker-build
+
+# 运行容器,指向本机 8080 后端(默认值,适用于 macOS / OrbStack / Docker Desktop)
+make docker-run
+
+# 或指向 docker-compose 中名为 backend 的服务
+BACKEND_BASE_URL=http://backend:8080 make docker-run
+
+# 实时跟踪日志
+make docker-logs
+
+# 升级代码后一键重建
+make docker-rebuild
+```
+
+构建阶段使用 `node:24-alpine`,运行阶段使用 `nginx:1.31.2`(基于 Debian trixie)。容器启动时,`docker/entrypoint.sh` 通过 `envsubst` 将 `BACKEND_BASE_URL` 注入到 `docker/nginx.conf.template`,生成 `/etc/nginx/conf.d/default.conf`。模板中**仅**该变量会被替换,nginx 自身的运行时变量(`$uri`、`$host` 等)原样保留。
+
 ### License
 
 [Apache License 2.0](./LICENSE)
@@ -216,6 +239,29 @@ src/
 ### Related
 
 - **Backend**: [agent-platform-backend](https://github.com/VMware-AI/agent-platform-backend) — provides agent / pool / observability business APIs
+
+### Build & Run with Docker
+
+The repo ships a multi-stage `Dockerfile` and a `Makefile` at the root. The final image is `nginx` serving the static SPA and reverse-proxying `/query` to the backend. The backend URL is injected at container start via the `BACKEND_BASE_URL` environment variable, so you do not need to rebuild the image to point at a different backend.
+
+```bash
+# Build the image (tag: agent-platform-console:local)
+make docker-build
+
+# Run it, pointing at a backend on the host (default port 8080)
+make docker-run
+
+# Or point at a docker-compose service named `backend`
+BACKEND_BASE_URL=http://backend:8080 make docker-run
+
+# Tail logs
+make docker-logs
+
+# Rebuild after a code change
+make docker-rebuild
+```
+
+The image is built on `node:24-alpine` and runs on `nginx:1.31.2` (Debian trixie base). At container start, `docker/entrypoint.sh` runs `envsubst` against `docker/nginx.conf.template` and writes the rendered file to `/etc/nginx/conf.d/default.conf`. Only `BACKEND_BASE_URL` is substituted; every nginx runtime variable (`$uri`, `$host`, …) is preserved verbatim.
 
 ### License
 
