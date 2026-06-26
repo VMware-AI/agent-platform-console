@@ -466,32 +466,6 @@ export interface TestResourcePoolConnectionResult {
 }
 
 /* ============================================================
- * Platform Settings — agentUser (LLD-13 §3.2)
- * ============================================================ */
-
-export interface PlatformSettings {
-  /** OS user that installed agents run as on the host ({{AGENT_USER}}). */
-  agentUser: string
-}
-
-export interface UpdatePlatformSettingsInput {
-  /** New agentUser; blank/empty is rejected by the backend. Omit = unchanged. */
-  agentUser?: string | null
-}
-
-export interface PlatformSettingsQueryResult {
-  platformSettings: PlatformSettings
-}
-
-export interface UpdatePlatformSettingsVars {
-  input: UpdatePlatformSettingsInput
-}
-
-export interface UpdatePlatformSettingsResult {
-  updatePlatformSettings: PlatformSettings
-}
-
-/* ============================================================
  * Agent Marketplace — OvaTemplateFamily + OvaTemplateVersion
  * ============================================================ */
 
