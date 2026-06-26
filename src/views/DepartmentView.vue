@@ -215,7 +215,10 @@ const assignableUsers = computed<AccountUser[]>(() => {
 
 const createOpen = ref(false)
 const creating = ref(false)
-const createForm = reactive<{ name: string; maxBudget: string }>({ name: '', maxBudget: '' })
+// maxBudget is bound to a <input type="number">, whose v-model coerces the value
+// to a JS number once the user types — so the runtime type is string | number
+// (empty string when blank). Parse it through String(...) in submitCreate.
+const createForm = reactive<{ name: string; maxBudget: string | number }>({ name: '', maxBudget: '' })
 
 function openCreate() {
   createForm.name = ''
@@ -238,8 +241,10 @@ async function submitCreate() {
     return
   }
   if (creating.value) return
-  // Parse the optional budget defensively: blank → omit; non-numeric → omit.
-  const parsedBudget = createForm.maxBudget.trim() === '' ? null : Number(createForm.maxBudget)
+  // Parse the optional budget defensively. The number-input v-model may hand us a
+  // number or a string, so normalize via String(): blank → omit; non-numeric → omit.
+  const rawBudget = String(createForm.maxBudget).trim()
+  const parsedBudget = rawBudget === '' ? null : Number(rawBudget)
   const maxBudget = parsedBudget !== null && Number.isFinite(parsedBudget) ? parsedBudget : null
   creating.value = true
   try {
