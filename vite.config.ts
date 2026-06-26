@@ -1,9 +1,38 @@
 import { fileURLToPath, URL } from 'node:url'
 
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
+/**
+ * Default backend for the Vite dev proxy. The browser hits `/query` on the dev
+ * server (same origin so the httpOnly `ap_session` cookie is sent — see
+ * LLD-12), and the proxy forwards to BACKEND_BASE_URL.
+ *
+ * Override at invocation:
+ *   BACKEND_BASE_URL=http://10.0.0.5:8080 npm run dev
+ *
+ * The same env var also drives the docker image at runtime (see
+ * docker/entrypoint.sh + nginx.conf.template) — one name, two stages.
+ */
+const DEFAULT_BACKEND = 'http://127.0.0.1:8080'
+
+// Prod build opts are only applied when NODE_ENV=production (set by
+// `npm run build:prod`, which Dockerfile invokes by default). Local
+// `npm run build` and `npm run dev` keep Vite defaults so debugging stays
+// readable (no `drop: console`, sourcemaps on, etc).
+const isProd = (process.env.NODE_ENV ?? 'development') === 'production'
+
+// loadEnv with prefixes='' reads ALL env vars (including non-VITE_ ones)
+// from process.env AND .env files. We need this to pick up BACKEND_BASE_URL,
+// which is intentionally NOT prefixed because it is the docker runtime
+// contract, not a Vite compile-time constant.
+const env = loadEnv(isProd ? 'production' : 'development', process.cwd(), '')
+const backendBaseUrl = env.BACKEND_BASE_URL || DEFAULT_BACKEND
+
 // https://vite.dev/config/
+// NOTE: keep this as a plain object (not a function) so vitest.config.ts can
+// `mergeConfig(viteConfig, ...)` without tripping over UserConfigFnObject in
+// vitest 4's narrower type definitions.
 export default defineConfig({
   plugins: [
     vue({
@@ -25,11 +54,40 @@ export default defineConfig({
     proxy: {
       // Proxy the GraphQL endpoint so the browser sees it SAME-ORIGIN in dev —
       // required for the SameSite=Lax `ap_session` cookie to be sent on the POST
-      // (LLD-12). Set VITE_GRAPHQL_ENDPOINT=/query (relative) to route through it.
+      // (LLD-12). VITE_GRAPHQL_ENDPOINT in .env is the same-origin path the
+      // app POSTs to; the proxy then forwards to the real backend.
       '/query': {
-        target: 'http://127.0.0.1:8080',
+        target: backendBaseUrl,
         changeOrigin: true,
       },
     },
   },
+  build: isProd
+    ? {
+        target: 'es2022',
+        minify: 'esbuild',
+        cssCodeSplit: true,
+        sourcemap: false,
+        chunkSizeWarningLimit: 600,
+        reportCompressedSize: false,
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              vue: ['vue', 'vue-router', 'pinia'],
+              apollo: ['@apollo/client', '@vue/apollo-composable', 'graphql'],
+              clarity: ['@cds/core', '@cds/city'],
+            },
+          },
+        },
+      }
+    : undefined,
+  // Top-level `esbuild` (Vite 6) is forwarded to esbuild for both transform
+  // AND minify. `drop` lives on esbuild's CompressOptions (not Transform),
+  // which Vite's ESBuildOptions type does not declare — declare just the
+  // field we use so ESLint's no-explicit-any rule stays happy. Verified in
+  // vite runtime: esbuild options are merged into both the loader and the
+  // minifier (dist/node/chunks/dep-*.js).
+  esbuild: isProd
+    ? { drop: ['console', 'debugger'] as ('console' | 'debugger')[] }
+    : undefined,
 })

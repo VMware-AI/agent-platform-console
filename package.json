@@ -14,12 +14,14 @@
     "url": "https://github.com/gyj0825/agent-platform-console/issues"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.0.0"
   },
   "scripts": {
     "dev": "vite",
     "build": "run-p type-check \"build-only {@}\" --",
     "build-only": "vite build",
+    "build:prod": "run-s type-check build-only:prod",
+    "build-only:prod": "NODE_ENV=production vite build --mode production",
     "preview": "vite preview",
     "type-check": "vue-tsc --build",
     "test": "vitest",

@@ -3,11 +3,14 @@ import { ApolloClient, HttpLink, InMemoryCache } from '@apollo/client/core'
 /**
  * Single Apollo Client for the app, wired to the real agent-platform-backend.
  *
- * Transport: HTTP POST to `VITE_GRAPHQL_ENDPOINT` (default same-origin `/query`).
- * Auth: httpOnly session cookie (LLD-12). `login` makes the backend set the
- * `ap_session` cookie; `credentials: 'include'` replays it on every request, so
- * the session id is never exposed to JS (no localStorage token to exfiltrate via
- * XSS). `me` rehydrates on reload; `logout` clears the cookie server-side.
+ * Transport: HTTP POST to the same-origin path `/query`. The path is the
+ * fixed contract between this SPA and the docker nginx config
+ * (docker/nginx.conf.template `location = /query { proxy_pass …; }`); it is
+ * intentionally not configurable. Auth: httpOnly session cookie (LLD-12).
+ * `login` makes the backend set the `ap_session` cookie; `credentials:
+ * 'include'` replays it on every request, so the session id is never exposed
+ * to JS (no localStorage token to exfiltrate via XSS). `me` rehydrates on
+ * reload; `logout` clears the cookie server-side.
  *
  * CSRF is enforced backend-side via an Origin/Referer allowlist (the browser
  * always sends Origin on the POST), so the console origin must be in the
@@ -17,7 +20,7 @@ import { ApolloClient, HttpLink, InMemoryCache } from '@apollo/client/core'
  */
 
 const httpLink = new HttpLink({
-  uri: (import.meta.env.VITE_GRAPHQL_ENDPOINT as string | undefined) ?? '/query',
+  uri: '/query',
   // Send + receive the httpOnly ap_session cookie on every request.
   credentials: 'include',
 })
