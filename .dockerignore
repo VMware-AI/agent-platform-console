@@ -1,0 +1,42 @@
+# Build output
+node_modules
+dist
+dist-ssr
+coverage
+
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# Claude Code local config
+.claude
+
+# IDE / editor
+.vscode
+.idea
+.DS_Store
+*.swp
+*.swo
+
+# Local env files — must NOT leak into the image
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Specs and plans — docs only, irrelevant to build
+docs/superpowers
+
+# CI
+.github
+
+# Docker meta-files
+Dockerfile
+.dockerignore
+docker-compose*.yml
