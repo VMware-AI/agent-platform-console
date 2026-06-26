@@ -44,7 +44,10 @@ const name = ref('')
 // The selected vSphere placement pool's inventory PATH (sent as targetResourcePool).
 const targetResourcePool = ref('')
 const hostname = ref('')
-const maxBudget = ref('')
+// Bound to a <input type="number"> whose v-model coerces a typed value to a JS
+// number, so the runtime type is string | number ('' when blank). Normalize via
+// String(...) before any string op (see budgetValid / submit).
+const maxBudget = ref<string | number>('')
 const attempted = ref(false)
 
 watch(
@@ -96,8 +99,9 @@ const versionValid = () => !!templateVersionId.value
 const poolValid = () => !!resourcePoolId.value
 const nameValid = () => name.value.trim().length > 0
 const budgetValid = () => {
-  if (!maxBudget.value.trim()) return true
-  const n = Number(maxBudget.value)
+  const raw = String(maxBudget.value).trim()
+  if (!raw) return true
+  const n = Number(raw)
   return Number.isFinite(n) && n >= 0
 }
 // A placement pool is required when vCenter offers any (a real OVA template has
@@ -113,7 +117,8 @@ function formValid(): boolean {
 function submit() {
   attempted.value = true
   if (!formValid()) return
-  const budget = maxBudget.value.trim() ? Number(maxBudget.value) : null
+  const rawBudget = String(maxBudget.value).trim()
+  const budget = rawBudget ? Number(rawBudget) : null
   emit('submit', {
     name: name.value.trim(),
     templateFamilyId: props.template?.id ?? '',
