@@ -66,6 +66,7 @@ function submitPermission() {
     :hidden="mode !== 'createRole'"
     :closable="!busy"
     size="sm"
+    :aria-label="locale.t('customRole.create.title')"
     @closeChange="close"
   >
     <cds-modal-header>
@@ -83,6 +84,7 @@ function submitPermission() {
             :aria-label="locale.t('customRole.create.nameLabel')"
             maxlength="64"
             autofocus
+            aria-required="true"
           />
         </cds-input>
       </form>
@@ -107,6 +109,7 @@ function submitPermission() {
     :hidden="mode !== 'addPermission'"
     :closable="!busy"
     size="sm"
+    :aria-label="locale.t('customRole.permission.addTitle')"
     @closeChange="close"
   >
     <cds-modal-header>
@@ -124,6 +127,7 @@ function submitPermission() {
             :aria-label="locale.t('customRole.permission.keyLabel')"
             maxlength="128"
             autofocus
+            aria-required="true"
           />
         </cds-input>
         <cds-input>

@@ -12,7 +12,7 @@
  * rejected by the backend for kind=package, so the textarea is disabled when
  * kind=package. Mirrors the AgentConfigKnowledgeDialog backdrop/card pattern.
  */
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
 import {
   ARTIFACT_KINDS,
@@ -57,10 +57,53 @@ function blankForm(): FormState {
 const form = reactive<FormState>(blankForm())
 const submitted = ref(false)
 
+// a11y: focus management. Move focus into the dialog on open, return it to the
+// triggering element on close, and trap Tab within the card (mirrors
+// CreateSnapshotDialog).
+const cardEl = ref<HTMLElement | null>(null)
+const firstFieldEl = ref<HTMLInputElement | null>(null)
+let lastFocused: HTMLElement | null = null
+
+function focusableInCard(): HTMLElement[] {
+  if (!cardEl.value) return []
+  return Array.from(
+    cardEl.value.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  )
+}
+
+function onDialogKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.stopPropagation()
+    close()
+    return
+  }
+  if (event.key !== 'Tab') return
+  const focusable = focusableInCard()
+  if (focusable.length === 0) return
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const active = document.activeElement as HTMLElement | null
+  if (event.shiftKey && active === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
 watch(
   () => [props.open, props.initial] as const,
   ([open]) => {
-    if (!open) return
+    if (!open) {
+      if (lastFocused) {
+        lastFocused.focus()
+        lastFocused = null
+      }
+      return
+    }
     submitted.value = false
     const src = props.initial
     form.name = src?.name ?? ''
@@ -69,6 +112,13 @@ watch(
     form.uri = src?.uri ?? ''
     form.content = src?.content ?? ''
     form.sha256 = src?.sha256 ?? ''
+    lastFocused = document.activeElement as HTMLElement | null
+    // Focus the first enabled field; name is disabled when identity is locked.
+    nextTick(() => {
+      const focusable = focusableInCard()
+      if (firstFieldEl.value && !firstFieldEl.value.disabled) firstFieldEl.value.focus()
+      else focusable[0]?.focus()
+    })
   },
   { immediate: true },
 )
@@ -117,8 +167,9 @@ function submit() {
         aria-modal="true"
         :aria-label="title"
         @click="onBackdropClick"
+        @keydown="onDialogKeydown"
       >
-        <div class="af-card" @click.stop>
+        <div ref="cardEl" class="af-card" @click.stop>
           <h2 cds-text="section" class="af-title">{{ title }}</h2>
 
           <form class="af-form" @submit.prevent="submit">
@@ -126,15 +177,18 @@ function submit() {
               <span class="af-label">{{ locale.t('artifacts.form.name') }} *</span>
               <cds-input>
                 <input
+                  ref="firstFieldEl"
                   v-model="form.name"
                   type="text"
                   autocomplete="off"
                   :disabled="lockIdentity || saving"
                   :aria-label="locale.t('artifacts.form.name')"
                   :placeholder="locale.t('artifacts.form.namePlaceholder')"
+                  :aria-invalid="submitted && !nameValid"
+                  :aria-describedby="submitted && !nameValid ? 'af-name-error' : undefined"
                 />
               </cds-input>
-              <small v-if="submitted && !nameValid" class="af-error">
+              <small v-if="submitted && !nameValid" id="af-name-error" class="af-error">
                 {{ locale.t('artifacts.form.required') }}
               </small>
             </label>
@@ -165,9 +219,11 @@ function submit() {
                     :disabled="saving"
                     :aria-label="locale.t('artifacts.form.version')"
                     :placeholder="locale.t('artifacts.form.versionPlaceholder')"
+                    :aria-invalid="submitted && !versionValid"
+                    :aria-describedby="submitted && !versionValid ? 'af-version-error' : undefined"
                   />
                 </cds-input>
-                <small v-if="submitted && !versionValid" class="af-error">
+                <small v-if="submitted && !versionValid" id="af-version-error" class="af-error">
                   {{ locale.t('artifacts.form.required') }}
                 </small>
               </label>
@@ -183,9 +239,11 @@ function submit() {
                   :disabled="saving"
                   :aria-label="locale.t('artifacts.form.uri')"
                   :placeholder="locale.t('artifacts.form.uriPlaceholder')"
+                  :aria-invalid="submitted && !uriValid"
+                  :aria-describedby="submitted && !uriValid ? 'af-uri-error' : undefined"
                 />
               </cds-input>
-              <small v-if="submitted && !uriValid" class="af-error">
+              <small v-if="submitted && !uriValid" id="af-uri-error" class="af-error">
                 {{ locale.t('artifacts.form.required') }}
               </small>
             </label>
@@ -212,11 +270,12 @@ function submit() {
                 rows="5"
                 :disabled="isPackage || saving"
                 :aria-label="locale.t('artifacts.form.content')"
+                aria-describedby="af-content-hint"
                 :placeholder="
                   isPackage ? locale.t('artifacts.form.contentPackageHint') : locale.t('artifacts.form.contentPlaceholder')
                 "
               ></textarea>
-              <small class="af-hint muted">
+              <small id="af-content-hint" class="af-hint muted">
                 {{ isPackage ? locale.t('artifacts.form.contentPackageHint') : locale.t('artifacts.form.contentHint') }}
               </small>
             </label>

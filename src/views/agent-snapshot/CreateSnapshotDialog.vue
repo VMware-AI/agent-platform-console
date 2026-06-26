@@ -5,7 +5,7 @@
  * values. Mirrors the ConfirmDialog backdrop + card pattern (Teleport →
  * backdrop → card) so it matches the rest of the console.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
 import '@/components/icons'
 
@@ -27,13 +27,55 @@ const emit = defineEmits<{
 const name = ref('')
 const description = ref('')
 
-// Reset the form whenever the dialog opens so a previous entry never leaks.
+// a11y: focus management. Move focus into the dialog on open, return it to the
+// element that triggered the dialog on close, and trap Tab within the card.
+const cardEl = ref<HTMLElement | null>(null)
+const nameInputEl = ref<HTMLInputElement | null>(null)
+let lastFocused: HTMLElement | null = null
+
+function focusableInCard(): HTMLElement[] {
+  if (!cardEl.value) return []
+  return Array.from(
+    cardEl.value.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  )
+}
+
+function onDialogKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    e.stopPropagation()
+    close()
+    return
+  }
+  if (e.key !== 'Tab') return
+  const focusable = focusableInCard()
+  if (focusable.length === 0) return
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const active = document.activeElement as HTMLElement | null
+  if (e.shiftKey && active === first) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault()
+    first.focus()
+  }
+}
+
+// Reset the form whenever the dialog opens so a previous entry never leaks, and
+// drive focus in/out for accessibility.
 watch(
   () => props.open,
   (open) => {
     if (open) {
       name.value = ''
       description.value = ''
+      lastFocused = document.activeElement as HTMLElement | null
+      nextTick(() => nameInputEl.value?.focus())
+    } else if (lastFocused) {
+      lastFocused.focus()
+      lastFocused = null
     }
   },
 )
@@ -69,8 +111,9 @@ function onBackdropClick(e: MouseEvent) {
         aria-modal="true"
         :aria-label="locale.t('agentSnapshot.create.title')"
         @click="onBackdropClick"
+        @keydown="onDialogKeydown"
       >
-        <form class="snap-card" @submit.prevent="submit">
+        <form ref="cardEl" class="snap-card" @submit.prevent="submit">
           <h2 cds-text="section" class="snap-title">{{ locale.t('agentSnapshot.create.title') }}</h2>
           <p cds-text="body" class="snap-sub muted">
             {{ locale.t('agentSnapshot.create.forAgent') }}
@@ -80,12 +123,14 @@ function onBackdropClick(e: MouseEvent) {
           <cds-input class="field">
             <label>{{ locale.t('agentSnapshot.create.nameLabel') }}</label>
             <input
+              ref="nameInputEl"
               v-model="name"
               type="text"
               :placeholder="locale.t('agentSnapshot.create.namePlaceholder')"
               :aria-label="locale.t('agentSnapshot.create.nameLabel')"
               maxlength="120"
               required
+              aria-required="true"
             />
           </cds-input>
 

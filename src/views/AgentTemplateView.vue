@@ -160,21 +160,27 @@ async function refresh() {
                 <cds-icon
                   :shape="template.status === 'active' ? 'check-circle' : 'ban'"
                   size="sm"
+                  aria-hidden="true"
                 ></cds-icon>
                 {{ locale.t(`agentTemplate.status.${template.status}`) }}
               </cds-badge>
             </cds-grid-cell>
             <cds-grid-cell>
-              <button type="button" class="row-action" @click="openEdit(template)">
-                <cds-icon shape="pencil" size="sm"></cds-icon>
+              <button
+                type="button"
+                class="row-action"
+                :aria-label="`${locale.t('agentTemplate.action.edit')} ${template.display}`"
+                @click="openEdit(template)"
+              >
+                <cds-icon shape="pencil" size="sm" aria-hidden="true"></cds-icon>
                 <span>{{ locale.t('agentTemplate.action.edit') }}</span>
               </button>
             </cds-grid-cell>
           </cds-grid-row>
 
           <cds-grid-placeholder v-if="!loading && templates.length === 0">
-            <cds-icon :shape="error ? 'ban' : 'blocks-group'" size="xl"></cds-icon>
-            <p cds-text="subsection">
+            <cds-icon :shape="error ? 'ban' : 'blocks-group'" size="xl" aria-hidden="true"></cds-icon>
+            <p cds-text="subsection" :role="error ? 'alert' : undefined" aria-live="polite">
               {{ error ? locale.t('agentTemplate.loadError') : locale.t('agentTemplate.empty') }}
             </p>
             <cds-button v-if="!error" action="outline" size="sm" @click="openCreate">

@@ -17,7 +17,7 @@
  * (platform/tenant admins OR the department's dept-admin, checked in-resolver).
  * Non-privileged callers get the backend error surfaced via toast.
  */
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { apolloClient } from '@/api/graphql/client'
 import { useLocaleStore } from '@/stores/locale'
@@ -58,6 +58,68 @@ const MEMBERSHIP_ROLES: MembershipRole[] = ['user', 'dept_admin']
 
 function roleLabel(role: MembershipRole): string {
   return locale.t(`department.role.${role}`)
+}
+
+/* ---------- Dialog focus management (a11y) ----------
+ * Move focus into a modal when it opens, return it to the trigger on close, and
+ * trap Tab within the open dialog card. Shared by both inline dialogs. */
+const createCardEl = ref<HTMLElement | null>(null)
+const createNameEl = ref<HTMLInputElement | null>(null)
+const addCardEl = ref<HTMLElement | null>(null)
+let lastDialogFocus: HTMLElement | null = null
+
+function focusableIn(card: HTMLElement | null): HTMLElement[] {
+  if (!card) return []
+  return Array.from(
+    card.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  )
+}
+
+function trapTab(e: KeyboardEvent, card: HTMLElement | null) {
+  if (e.key !== 'Tab') return
+  const focusable = focusableIn(card)
+  if (focusable.length === 0) return
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const active = document.activeElement as HTMLElement | null
+  if (e.shiftKey && active === first) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault()
+    first.focus()
+  }
+}
+
+function rememberTrigger() {
+  lastDialogFocus = document.activeElement as HTMLElement | null
+}
+
+function restoreTrigger() {
+  if (lastDialogFocus) {
+    lastDialogFocus.focus()
+    lastDialogFocus = null
+  }
+}
+
+function onCreateKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    e.stopPropagation()
+    closeCreate()
+    return
+  }
+  trapTab(e, createCardEl.value)
+}
+
+function onAddMemberKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    e.stopPropagation()
+    closeAddMember()
+    return
+  }
+  trapTab(e, addCardEl.value)
 }
 
 /* ---------- Departments (master) ---------- */
@@ -158,12 +220,15 @@ const createForm = reactive<{ name: string; maxBudget: string }>({ name: '', max
 function openCreate() {
   createForm.name = ''
   createForm.maxBudget = ''
+  rememberTrigger()
   createOpen.value = true
+  nextTick(() => createNameEl.value?.focus())
 }
 
 function closeCreate() {
   if (creating.value) return
   createOpen.value = false
+  restoreTrigger()
 }
 
 async function submitCreate() {
@@ -184,6 +249,7 @@ async function submitCreate() {
     })
     toast.success(locale.t('department.toast.created'))
     createOpen.value = false
+    restoreTrigger()
     await refetchDepartments()
     const created = data?.createDepartment
     if (created) selectedDepartmentId.value = created.id
@@ -238,12 +304,15 @@ function openAddMember() {
   if (!selectedDepartment.value) return
   addForm.userId = ''
   addForm.role = 'user'
+  rememberTrigger()
   addMemberOpen.value = true
+  nextTick(() => focusableIn(addCardEl.value)[0]?.focus())
 }
 
 function closeAddMember() {
   if (addingMember.value) return
   addMemberOpen.value = false
+  restoreTrigger()
 }
 
 async function submitAddMember() {
@@ -262,6 +331,7 @@ async function submitAddMember() {
     })
     toast.success(locale.t('department.toast.memberAdded'))
     addMemberOpen.value = false
+    restoreTrigger()
     await refetchMembers()
   } catch (error) {
     toast.error(graphqlErrorMessage(error, locale.t('department.toast.memberAddFailed')))
@@ -358,13 +428,17 @@ function onAddRoleChange(event: Event) {
         <aside class="list-panel" :aria-label="locale.t('department.list.title')">
           <h2 cds-text="subsection" class="panel-title">{{ locale.t('department.list.title') }}</h2>
 
-          <p v-if="departmentsLoading && departments.length === 0" class="panel-state muted">
+          <p
+            v-if="departmentsLoading && departments.length === 0"
+            class="panel-state muted"
+            aria-live="polite"
+          >
             {{ locale.t('department.list.loading') }}
           </p>
-          <p v-else-if="departmentsError" class="panel-state error">
+          <p v-else-if="departmentsError" class="panel-state error" role="alert">
             {{ locale.t('department.list.error') }}
           </p>
-          <p v-else-if="departments.length === 0" class="panel-state muted">
+          <p v-else-if="departments.length === 0" class="panel-state muted" aria-live="polite">
             {{ locale.t('department.list.empty') }}
           </p>
 
@@ -413,8 +487,8 @@ function onAddRoleChange(event: Event) {
         <!-- Detail: selected department + members -->
         <div class="detail-panel">
           <div v-if="!selectedDepartment" class="detail-empty">
-            <cds-icon shape="users" size="xl"></cds-icon>
-            <p cds-text="subsection">{{ locale.t('department.detail.empty') }}</p>
+            <cds-icon shape="users" size="xl" aria-hidden="true"></cds-icon>
+            <p cds-text="subsection" aria-live="polite">{{ locale.t('department.detail.empty') }}</p>
           </div>
 
           <template v-else>
@@ -449,13 +523,17 @@ function onAddRoleChange(event: Event) {
                 </cds-button>
               </div>
 
-              <p v-if="membersLoading && members.length === 0" class="panel-state muted">
+              <p
+                v-if="membersLoading && members.length === 0"
+                class="panel-state muted"
+                aria-live="polite"
+              >
                 {{ locale.t('department.members.loading') }}
               </p>
-              <p v-else-if="membersError" class="panel-state error">
+              <p v-else-if="membersError" class="panel-state error" role="alert">
                 {{ locale.t('department.members.error') }}
               </p>
-              <p v-else-if="members.length === 0" class="panel-state muted">
+              <p v-else-if="members.length === 0" class="panel-state muted" aria-live="polite">
                 {{ locale.t('department.members.empty') }}
               </p>
 
@@ -503,18 +581,22 @@ function onAddRoleChange(event: Event) {
           aria-modal="true"
           :aria-label="locale.t('department.create.title')"
           @click.self="closeCreate"
+          @keydown="onCreateKeydown"
         >
-          <form class="dept-card" @submit.prevent="submitCreate">
+          <form ref="createCardEl" class="dept-card" @submit.prevent="submitCreate">
             <h2 cds-text="section" class="dialog-title">{{ locale.t('department.create.title') }}</h2>
 
             <cds-input>
               <label>{{ locale.t('department.create.nameLabel') }}</label>
               <input
+                ref="createNameEl"
                 v-model="createForm.name"
                 type="text"
                 :placeholder="locale.t('department.create.namePlaceholder')"
+                :aria-label="locale.t('department.create.nameLabel')"
                 :disabled="creating"
                 required
+                aria-required="true"
               />
             </cds-input>
 
@@ -525,6 +607,7 @@ function onAddRoleChange(event: Event) {
                 type="number"
                 min="0"
                 step="0.01"
+                :aria-label="locale.t('department.create.budgetLabel')"
                 :disabled="creating"
               />
               <cds-control-message>{{ locale.t('department.create.budgetHint') }}</cds-control-message>
@@ -559,14 +642,15 @@ function onAddRoleChange(event: Event) {
           aria-modal="true"
           :aria-label="locale.t('department.addMember.title')"
           @click.self="closeAddMember"
+          @keydown="onAddMemberKeydown"
         >
-          <form class="dept-card" @submit.prevent="submitAddMember">
+          <form ref="addCardEl" class="dept-card" @submit.prevent="submitAddMember">
             <h2 cds-text="section" class="dialog-title">{{ locale.t('department.addMember.title') }}</h2>
 
-            <p v-if="usersLoading" class="panel-state muted">
+            <p v-if="usersLoading" class="panel-state muted" aria-live="polite">
               {{ locale.t('department.addMember.usersLoading') }}
             </p>
-            <p v-else-if="assignableUsers.length === 0" class="panel-state muted">
+            <p v-else-if="assignableUsers.length === 0" class="panel-state muted" aria-live="polite">
               {{ users.length === 0 ? locale.t('department.addMember.noUsers') : locale.t('department.addMember.allAssigned') }}
             </p>
 

@@ -88,49 +88,58 @@ function submit() {
     <cds-modal-content>
       <form class="gateway-form" @submit.prevent="submit">
         <cds-input :status="attempted && !nameValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('gatewayConn.form.name') }}</label>
+          <label for="gw-form-name">{{ locale.t('gatewayConn.form.name') }}</label>
           <input
+            id="gw-form-name"
             :value="name"
             maxlength="64"
             autocomplete="off"
             :placeholder="locale.t('gatewayConn.form.namePlaceholder')"
+            :aria-invalid="attempted && !nameValid"
+            :aria-describedby="attempted && !nameValid ? 'gw-form-name-error' : undefined"
             @input="name = ($event.target as HTMLInputElement).value"
           />
-          <cds-control-message v-if="attempted && !nameValid" status="error">
+          <cds-control-message v-if="attempted && !nameValid" id="gw-form-name-error" status="error">
             {{ locale.t('gatewayConn.form.nameError') }}
           </cds-control-message>
         </cds-input>
 
         <cds-input :status="attempted && !endpointValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('gatewayConn.form.endpoint') }}</label>
+          <label for="gw-form-endpoint">{{ locale.t('gatewayConn.form.endpoint') }}</label>
           <input
+            id="gw-form-endpoint"
             :value="endpoint"
             autocomplete="off"
             placeholder="https://litellm.example.com"
+            :aria-invalid="attempted && !endpointValid"
+            :aria-describedby="attempted && !endpointValid ? 'gw-form-endpoint-error' : undefined"
             @input="endpoint = ($event.target as HTMLInputElement).value"
           />
-          <cds-control-message v-if="attempted && !endpointValid" status="error">
+          <cds-control-message v-if="attempted && !endpointValid" id="gw-form-endpoint-error" status="error">
             {{ locale.t('gatewayConn.form.endpointError') }}
           </cds-control-message>
         </cds-input>
 
         <cds-input>
-          <label>{{ locale.t('gatewayConn.form.masterKey') }}</label>
+          <label for="gw-form-master-key">{{ locale.t('gatewayConn.form.masterKey') }}</label>
           <input
+            id="gw-form-master-key"
             type="password"
             :value="masterKey"
             autocomplete="new-password"
             :placeholder="locale.t('gatewayConn.form.masterKeyPlaceholder')"
+            aria-describedby="gw-form-master-key-hint"
             @input="masterKey = ($event.target as HTMLInputElement).value"
           />
-          <cds-control-message status="neutral">
+          <cds-control-message id="gw-form-master-key-hint" status="neutral">
             {{ locale.t('gatewayConn.form.masterKeyHint') }}
           </cds-control-message>
         </cds-input>
 
         <cds-select>
-          <label>{{ locale.t('gatewayConn.form.strategy') }}</label>
+          <label for="gw-form-strategy">{{ locale.t('gatewayConn.form.strategy') }}</label>
           <select
+            id="gw-form-strategy"
             :value="loadBalanceStrategy"
             :aria-label="locale.t('gatewayConn.form.strategy')"
             @change="loadBalanceStrategy = ($event.target as HTMLSelectElement).value as LoadBalanceStrategy"

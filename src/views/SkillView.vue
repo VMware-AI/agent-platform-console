@@ -476,8 +476,8 @@ function goToPage(page: number) {
             </cds-grid-cell>
           </cds-grid-row>
 
-          <cds-grid-placeholder v-if="visibleSkills.length === 0">
-            <cds-icon shape="book" size="xl"></cds-icon>
+          <cds-grid-placeholder v-if="visibleSkills.length === 0" role="status" aria-live="polite">
+            <cds-icon shape="book" size="xl" aria-hidden="true"></cds-icon>
             <p cds-text="subsection">{{ locale.t('skill.empty') }}</p>
             <cds-button action="outline" size="sm" @click="openCreate">
               {{ locale.t('skill.action.create') }}

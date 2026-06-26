@@ -204,7 +204,7 @@ function isClickableEndpoint(value: string): boolean {
       <p cds-text="body" class="desc muted">{{ locale.t('gatewayConn.description') }}</p>
     </header>
 
-    <cds-alert v-if="syncSummary" status="info" class="sync-summary">
+    <cds-alert v-if="syncSummary" status="info" class="sync-summary" aria-live="polite">
       <div class="summary-row">
         <span class="summary-label">{{ locale.t('gatewayConn.summary.title') }}</span>
         <cds-badge :status="syncStateBadge(syncSummary.state)">
@@ -238,7 +238,7 @@ function isClickableEndpoint(value: string): boolean {
       </cds-button>
     </div>
 
-    <cds-alert v-if="error" status="danger" closable>
+    <cds-alert v-if="error" status="danger" closable role="alert">
       {{ locale.t('gatewayConn.error') }}
     </cds-alert>
 
@@ -286,26 +286,27 @@ function isClickableEndpoint(value: string): boolean {
                 type="button"
                 class="row-action"
                 :disabled="testingId === connection.id"
+                :aria-busy="testingId === connection.id"
                 @click="testConnection(connection)"
               >
-                <cds-icon shape="sync" size="sm" :class="{ spinning: testingId === connection.id }"></cds-icon>
+                <cds-icon shape="sync" size="sm" aria-hidden="true" :class="{ spinning: testingId === connection.id }"></cds-icon>
                 <span>{{ locale.t('gatewayConn.action.test') }}</span>
               </button>
               <button type="button" class="row-action danger" @click="requestDelete(connection)">
-                <cds-icon shape="trash" size="sm"></cds-icon>
+                <cds-icon shape="trash" size="sm" aria-hidden="true"></cds-icon>
                 <span>{{ locale.t('gatewayConn.action.delete') }}</span>
               </button>
             </div>
           </cds-grid-cell>
         </cds-grid-row>
 
-        <cds-grid-placeholder v-if="loading && connections.length === 0">
-          <cds-progress-circle size="xl" status="info"></cds-progress-circle>
+        <cds-grid-placeholder v-if="loading && connections.length === 0" role="status" aria-live="polite">
+          <cds-progress-circle size="xl" status="info" aria-hidden="true"></cds-progress-circle>
           <p cds-text="subsection">{{ locale.t('gatewayConn.loading') }}</p>
         </cds-grid-placeholder>
 
-        <cds-grid-placeholder v-else-if="connections.length === 0">
-          <cds-icon shape="internet-of-things" size="xl"></cds-icon>
+        <cds-grid-placeholder v-else-if="connections.length === 0" role="status" aria-live="polite">
+          <cds-icon shape="internet-of-things" size="xl" aria-hidden="true"></cds-icon>
           <p cds-text="subsection">{{ locale.t('gatewayConn.empty') }}</p>
           <cds-button action="outline" size="sm" @click="openRegister">
             {{ locale.t('gatewayConn.action.register') }}
