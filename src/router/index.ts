@@ -67,6 +67,9 @@ const router = createRouter({
         // 技能 / 镜像: upsert/delete are @hasRole(any: [admin]) — admin-only.
         { path: 'platform/skills', name: 'platform.skills', component: () => import('@/views/SkillView.vue'), meta: { admin: true } },
         { path: 'platform/images', name: 'platform.images', component: () => import('@/views/ImageView.vue'), meta: { admin: true } },
+        // 平台设置: platformSettings query + updatePlatformSettings are admin-only
+        // (LLD-13 §3.2) — guard like the other @hasRole(any:[admin]) pages.
+        { path: 'platform/settings', name: 'platform.settings', component: () => import('@/views/PlatformSettingsView.vue'), meta: { admin: true } },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: { name: 'overview' } },
