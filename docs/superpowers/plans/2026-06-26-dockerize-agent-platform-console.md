@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add containerized delivery to `agent-platform-console` via a `Makefile` and a multi-stage `Dockerfile` (Node 24-alpine builder → nginx 1.31.2-debian runtime), with the backend URL injected at runtime via `BACKEND_BASE_URL`.
+**Goal:** Add containerized delivery to `agent-platform-console` via a `Makefile` and a multi-stage `Dockerfile` (Node 24-alpine builder → nginx 1.31.2 runtime), with the backend URL injected at runtime via `BACKEND_BASE_URL`.
 
 **Architecture:** Static SPA built once at image build time, served by nginx in the runtime image. The nginx config is rendered at container start from a template by a small `entrypoint.sh` that runs `envsubst` against `BACKEND_BASE_URL` (the only variable ever substituted). The `Makefile` is a thin wrapper around `npm` and `docker` commands — no logic, just targets.
 
@@ -28,7 +28,7 @@
 | `docker/nginx.conf.template` | Create | Nginx `server { }` template with `${BACKEND_BASE_URL}` as the only envsubst placeholder. |
 | `docker/entrypoint.sh` | Create | `set -eu` shell script: default `BACKEND_BASE_URL`, run envsubst, exec CMD. |
 | `.dockerignore` | Create | Exclude `node_modules`, `dist`, `.git`, `.env`, docs, etc., from build context. |
-| `Dockerfile` | Create | Multi-stage: builder (`node:24-alpine`) → runtime (`nginx:1.31.2-debian`). |
+| `Dockerfile` | Create | Multi-stage: builder (`node:24-alpine`) → runtime (`nginx:1.31.2`). |
 | `Makefile` | Create | `help / install / dev / build / preview / test* / lint / format / clean / clean:all / docker:build / docker:run / docker:stop / docker:logs / docker:rebuild`. |
 | `README.md` | Modify | Append a "Build & Run with Docker" section (do not replace existing content). |
 
@@ -132,9 +132,11 @@ cd "$(git rev-parse --show-toplevel)"
 docker run --rm \
   -v "$PWD/docker/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro" \
   -e BACKEND_BASE_URL=http://localhost:8080 \
-  nginx:1.31.2-debian \
-  sh -c 'envsubst "\${BACKEND_BASE_URL}" < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -t'
+  nginx:1.31.2 \
+  sh -c 'envsubst '"'"'${BACKEND_BASE_URL}'"'"' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -t'
 ```
+
+> **envsubst quoting caveat:** the inner `'"'"'` pattern is shell-in-shell quoting. The outer `sh -c '...'` uses single quotes, so the inner `${BACKEND_BASE_URL}` would normally be passed through literally — but envsubst then sees it AND the outer shell NEVER expands it (correct). The extra `'"'"'` is needed because inside the outer `'...'` block, writing a literal single quote requires the four-char sequence: end the current single-quoted string, start a double-quoted string containing `'`, then end it. If you use double quotes around `${BACKEND_BASE_URL}` instead, the outer shell expands the variable before envsubst runs, so envsubst receives `http://localhost:8080` (no `$`) and substitutes nothing — nginx then sees the literal `${BACKEND_BASE_URL}` and fails its parser with `unknown "backend_base_url" variable`.
 
 Expected output (last 2 lines):
 ```
@@ -163,7 +165,7 @@ git commit -m "feat(docker): add nginx config template with runtime backend URL"
 
 **Context:**
 - The official `nginx` image already has `envsubst` from the `gettext-base` package — no install needed.
-- `nginx:1.31.2-debian` runs as root; `/etc/nginx/conf.d/default.conf` is writable.
+- `nginx:1.31.2` runs as root; `/etc/nginx/conf.d/default.conf` is writable.
 
 - [ ] **Step 1: Write the script**
 
@@ -351,7 +353,7 @@ git commit -m "chore(docker): add .dockerignore to shrink build context"
 - Produces: an image tagged `agent-platform-console:local` (named by the Makefile in Task 7). Exposes port 80, runs `nginx -g 'daemon off;'` after the entrypoint renders the config.
 - Consumes:
   - From host: `package.json`, `package-lock.json`, `docker/`, `src/`, `public/`, `index.html`, `tsconfig*.json`, `vite.config.ts`, `vitest.config.ts`, `env.d.ts`, `.env*` (per `.dockerignore` rules; `.env.example` is whitelisted back in).
-  - `node:24-alpine` (builder) and `nginx:1.31.2-debian` (runtime).
+  - `node:24-alpine` (builder) and `nginx:1.31.2` (runtime).
 
 **Context:**
 - `package.json:21` — `npm run build` runs `npm-run-all type-check build-only`. `vue-tsc` is dev-only and lives in `node_modules`, so it must be installed in the builder stage.
@@ -383,7 +385,7 @@ COPY . .
 RUN npm run build
 
 # ---------- Runtime stage ----------
-FROM nginx:1.31.2-debian AS runtime
+FROM nginx:1.31.2 AS runtime
 
 # Render the nginx config from the template at container start. The template
 # is copied under /etc/nginx/templates/; entrypoint.sh writes the rendered
@@ -437,7 +439,7 @@ Expected: size is roughly 50-80 MB (the nginx-debian base is ~140MB, our additio
 ```sh
 cd "$(git rev-parse --show-toplevel)"
 git add Dockerfile
-git commit -m "feat(docker): add multi-stage Dockerfile (node 24 alpine -> nginx 1.31.2 debian)"
+git commit -m "feat(docker): add multi-stage Dockerfile (node 24 alpine -> nginx 1.31.2)"
 ```
 
 ---
@@ -756,7 +758,7 @@ make docker-logs
 make docker-rebuild
 ```
 
-The image is built on `node:24-alpine` and runs on `nginx:1.31.2-debian`.
+The image is built on `node:24-alpine` and runs on `nginx:1.31.2`.
 The only file written to disk at container start is
 `/etc/nginx/conf.d/default.conf`, rendered by `docker/entrypoint.sh` from
 `docker/nginx.conf.template` via `envsubst ${BACKEND_BASE_URL}`. No other

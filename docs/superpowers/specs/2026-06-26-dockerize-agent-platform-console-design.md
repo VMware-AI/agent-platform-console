@@ -17,7 +17,7 @@
 | 项 | 决定 |
 | --- | --- |
 | 构建基础镜像 | `node:24-alpine` |
-| 运行基础镜像 | `nginx:1.31.2-debian` |
+| 运行基础镜像 | `nginx:1.31.2` |
 | 注入方式 | 构建时 Vite 打包；运行后端地址通过 Nginx envsubst |
 | 默认后端 | `http://backend:8080`（docker-compose service 名），可被 `BACKEND_BASE_URL` 覆盖 |
 | Makefile 范围 | 完整常用目标 |
@@ -52,7 +52,7 @@
                                        │
                                        │  仅复制 /app/dist + docker/ 资产
                                        ▼
-┌───────────────────── Runtime stage (nginx:1.31.2-debian) ───────────────────────┐
+┌───────────────────── Runtime stage (nginx:1.31.2) ───────────────────────┐
 │                                                                                  │
 │  /entrypoint.sh (envsubst $BACKEND_BASE_URL → /etc/nginx/conf.d/default.conf)    │
 │  nginx -g 'daemon off;'                                                          │
@@ -75,7 +75,7 @@
 ```
 # syntax=docker/dockerfile:1.7
 ARG NODE_IMAGE=node:24-alpine
-ARG NGINX_IMAGE=nginx:1.31.2-debian
+ARG NGINX_IMAGE=nginx:1.31.2
 
 FROM ${NODE_IMAGE} AS builder
 WORKDIR /app

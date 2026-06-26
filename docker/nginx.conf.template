@@ -1,0 +1,63 @@
+# Rendered by /entrypoint.sh from this template via envsubst ${BACKEND_BASE_URL}.
+# DO NOT put any other $VAR here — envsubst would mangle it.
+
+server {
+    listen       80;
+    listen       [::]:80;
+    server_name  _;
+
+    root  /usr/share/nginx/html;
+    index index.html;
+
+    client_max_body_size 16m;
+
+    access_log /var/log/nginx/access.log;
+    error_log  /var/log/nginx/error.log warn;
+
+    # gzip text-ish responses
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_types
+        text/plain
+        text/css
+        text/javascript
+        application/javascript
+        application/json
+        application/xml
+        image/svg+xml;
+
+    # SPA fallback — every unknown path returns index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # The HTML shell must never be cached, so deploys take effect immediately.
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        add_header Pragma "no-cache" always;
+        add_header Expires "0" always;
+    }
+
+    # Vite emits content-hashed assets under /assets/ — safe to cache forever.
+    location /assets/ {
+        access_log off;
+        expires 1y;
+        add_header Cache-Control "public, immutable" always;
+        try_files $uri =404;
+    }
+
+    # GraphQL proxy — ${BACKEND_BASE_URL} is the ONLY envsubst placeholder.
+    # Default behaviour of nginx: passes the Cookie header through. We set
+    # X-Forwarded-* so the upstream can recover the real client IP / scheme.
+    location = /query {
+        proxy_pass ${BACKEND_BASE_URL}/query;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+}
