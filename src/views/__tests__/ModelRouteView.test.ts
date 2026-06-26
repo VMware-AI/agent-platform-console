@@ -10,7 +10,7 @@
  *   - deleteModelRoute via ConfirmDialog (teleported → `.confirm-backdrop`),
  *   - updateModelRoute(uiStrategy) via the per-row strategy menu.
  *
- * Mocking strategy (mirrors GatewayConnectionView.test.ts):
+ * Mocking strategy (mirrors ModelRouteView.test.ts):
  *   - `@vue/apollo-composable`'s `useQuery` is mocked and routed by the parsed
  *     document's operation name (`ModelRoutes` vs `ModelGateways`) to two
  *     independently-controllable slots so every list state (loading / empty /

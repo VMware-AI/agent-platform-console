@@ -7,7 +7,7 @@
  * pool enumeration (VSPHERE_RESOURCE_POOLS_QUERY) via useQuery, keyed off the
  * selected platform resource pool.
  *
- * Mocking strategy (mirrors GatewayConnectionView.test.ts):
+ * Mocking strategy (mirrors ModelRouteView.test.ts):
  *   - `@vue/apollo-composable`'s `useQuery` is mocked with a single controllable
  *     slot (result / loading) so the vSphere-pool states (loading / empty / data)
  *     are driven deterministically. The query options getter is invoked so the
