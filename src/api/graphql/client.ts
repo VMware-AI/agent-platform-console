@@ -47,20 +47,6 @@ export const apolloClient = new ApolloClient({
       RequestLog: { keyFields: ['id'] },
       AuditLog: { keyFields: ['id'] },
       AgentConfig: { keyFields: ['id'] },
-      Artifact: { keyFields: ['id'] },
-      Department: { keyFields: ['id'] },
-      Membership: { keyFields: ['id'] },
-      Skill: { keyFields: ['id'] },
-      Image: { keyFields: ['id'] },
-      AgentTemplate: { keyFields: ['id'] },
-      GatewayConnection: { keyFields: ['id'] },
-      Upstream: { keyFields: ['id'] },
-      RouterTier: { keyFields: ['id'] },
-      CustomRole: { keyFields: ['id'] },
-      Permission: { keyFields: ['id'] },
-      // AgentSnapshot has no global id (identity = name, always nested under
-      // agentSnapshots(agentId)); disable normalization so it embeds inline.
-      AgentSnapshot: { keyFields: false },
     },
   }),
   defaultOptions: {

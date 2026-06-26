@@ -23,11 +23,6 @@ const router = createRouter({
         // and deploys agents (deployAgent is @hasRole(any: [admin])). A non-admin
         // would otherwise reach the page only for its queries to error.
         { path: 'agents/marketplace', name: 'agents.marketplace', component: () => import('@/views/AgentMarketplaceView.vue'), meta: { admin: true } },
-        // 智能体模板: upsertAgentTemplate is @hasRole(any: [admin]) — admin-only CRUD.
-        { path: 'agents/templates',   name: 'agents.templates',   component: () => import('@/views/AgentTemplateView.vue'), meta: { admin: true } },
-        // 快照与生命周期: snapshot/revert/recycle/setStatus are owner-OR-admin enforced
-        // in-resolver (no directive), so any authenticated user may reach the page.
-        { path: 'agents/snapshots',   name: 'agents.snapshots',   component: () => import('@/views/AgentSnapshotView.vue') },
 
         // 模型网关配置
         // 模型路由 is admin-only: modelRoutes CRUD is @hasRole(any: [admin]),
@@ -37,11 +32,6 @@ const router = createRouter({
         { path: 'model-gateway/key',   name: 'mg.key',   component: () => import('@/views/VirtualKeyView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
         // 网关策略: rate-limit mutations are @hasPermission("route:manage") — admin + tenant_admin.
         { path: 'model-gateway/policy', name: 'mg.policy', component: () => import('@/views/RateLimitPolicyView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
-        // 网关连接: gatewayConnections CRUD is @hasRole(any: [admin]) — admin-only.
-        { path: 'model-gateway/connections', name: 'mg.connections', component: () => import('@/views/GatewayConnectionView.vue'), meta: { admin: true } },
-        // 上游与路由分层: upstreams/routerTiers are @hasPermission("route:manage"),
-        // held by admin + tenant_admin (rbac.go) — gate on the role allowlist.
-        { path: 'model-gateway/upstreams', name: 'mg.upstreams', component: () => import('@/views/UpstreamRouterView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
 
         // 可观测性
         // 计量中心: meteringOverview is @hasPermission("metering:view") — admin/observability/tenant_admin.
@@ -60,16 +50,6 @@ const router = createRouter({
         { path: 'platform/gateway', name: 'platform.gateway', component: () => import('@/views/ModelGatewayView.vue'), meta: { admin: true } },
         // 用户与权限: createUser/assignUserRole are @hasPermission("user:manage") — admin + tenant_admin.
         { path: 'platform/users',   name: 'platform.users',   component: () => import('@/views/UserRoleView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
-        // 部门与成员 / 制品库 / 自定义角色: ops are @hasRole(any: [admin, tenant_admin]).
-        { path: 'platform/departments', name: 'platform.departments', component: () => import('@/views/DepartmentView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
-        { path: 'platform/artifacts',   name: 'platform.artifacts',   component: () => import('@/views/ArtifactView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
-        { path: 'platform/roles',       name: 'platform.roles',       component: () => import('@/views/CustomRoleView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
-        // 技能 / 镜像: upsert/delete are @hasRole(any: [admin]) — admin-only.
-        { path: 'platform/skills', name: 'platform.skills', component: () => import('@/views/SkillView.vue'), meta: { admin: true } },
-        { path: 'platform/images', name: 'platform.images', component: () => import('@/views/ImageView.vue'), meta: { admin: true } },
-        // 平台设置: platformSettings query + updatePlatformSettings are admin-only
-        // (LLD-13 §3.2) — guard like the other @hasRole(any:[admin]) pages.
-        { path: 'platform/settings', name: 'platform.settings', component: () => import('@/views/PlatformSettingsView.vue'), meta: { admin: true } },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: { name: 'overview' } },
@@ -115,7 +95,7 @@ export function resolveGuard(
   // routed page now carries the guard matching its core op's backend directive:
   // meta.admin for @hasRole(any:[admin]) pages, meta.roles for @hasPermission /
   // @hasRole(any:[admin,...]) pages, and no guard for any-auth / owner-or-admin
-  // pages (agents.list/config/snapshots).
+  // pages (agents.list/config).
   if (meta.admin && auth.role !== 'admin') {
     return { name: 'overview' }
   }

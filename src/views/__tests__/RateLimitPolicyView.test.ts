@@ -9,7 +9,7 @@
  *   - setEnabled (row toggle + batch enable/disable) → SetRateLimitPolicyEnabled,
  *   - delete (single + batch) via ConfirmDialog (teleported → `.confirm-backdrop`).
  *
- * Mocking strategy (mirrors GatewayConnectionView.test.ts):
+ * Mocking strategy (mirrors ModelRouteView.test.ts):
  *   - `@vue/apollo-composable`'s `useQuery` is mocked to a single controllable
  *     slot (result/loading/refetch) so every state (loading / empty / data) is
  *     driven deterministically; `refetch` is a spy.

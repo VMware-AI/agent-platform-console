@@ -27,19 +27,12 @@ const ACTION_PREFIXES = [
   'model_gateway.',
   'gateway.',
   'model_route.',
-  'upstream.',
   'router.',
   'agent.',
   'agent_config.',
-  'agent_template.',
   'resource_pool.',
   'ova_template_family.',
   'ova_template_version.',
-  'department.',
-  'membership.',
-  'artifact.',
-  'skill.',
-  'image.',
 ] as const
 type ActionPrefix = (typeof ACTION_PREFIXES)[number]
 

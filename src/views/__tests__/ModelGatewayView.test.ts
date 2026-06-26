@@ -9,7 +9,7 @@
  *   - test/resync connection → TestModelGatewayConnection (row action), which maps
  *     the returned { success, message } onto a success / error toast and refetches.
  *
- * Mocking strategy (mirrors GatewayConnectionView.test.ts):
+ * Mocking strategy (mirrors ModelRouteView.test.ts):
  *   - `@vue/apollo-composable`'s `useQuery` is mocked to a single controllable slot
  *     so each state (loading / error / empty / data) is driven deterministically.
  *     `refetch` is a spy.
