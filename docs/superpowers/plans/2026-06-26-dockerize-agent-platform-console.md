@@ -210,13 +210,26 @@ chmod +x docker/entrypoint.sh
 
 - [ ] **Step 3: Shellcheck the script (static check)**
 
-The user is on macOS; if `shellcheck` is not installed, install it with `brew install shellcheck` and rerun.
+The user is on macOS; if `shellcheck` is not installed locally, run it via Docker:
 
 ```sh
-shellcheck docker/entrypoint.sh
+docker run --rm -v "$PWD/docker:/src:ro" koalaman/shellcheck:latest \
+  shellcheck /src/entrypoint.sh 2>&1 | grep -v 'openBinaryFile: does not exist' || true
 ```
 
-Expected: no diagnostics. Exit code 0.
+> The `openBinaryFile: does not exist` warning is a known bug in the `koalaman/shellcheck` Docker image (it tries to call a non-existent helper binary while reporting the result). It does NOT indicate a problem with our script. Suppress it with `grep -v` so the real diagnostic output is what you read. The script is also annotated with `# shellcheck disable=SC2016` to silence the intentional-info on the single-quoted `${BACKEND_BASE_URL}` argument to `envsubst`.
+
+Expected: no real diagnostics, exit code 0.
+
+If the Docker image is unavailable, fall back to a POSIX syntax check:
+
+```sh
+sh -n docker/entrypoint.sh
+```
+
+Expected: exit code 0, no output.
+
+> Either check is acceptable — the smoke test in Step 4 covers the actual behaviour.
 
 - [ ] **Step 4: Smoke-test the script directly**
 
