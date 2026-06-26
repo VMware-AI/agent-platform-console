@@ -353,6 +353,19 @@ export const STRINGS: Dict = {
   'resources.confirm.delete.title': { zh: '确认删除资源池',      en: '' },
   'resources.confirm.delete.body':  { zh: '确定要删除资源池 {name} 吗?此操作不可撤销。', en: '' },
 
+  // 平台设置 — agentUser (LLD-13 §3.2)
+  'settings.platform.title':        { zh: '平台设置',            en: '' },
+  'settings.platform.description':  { zh: '配置影响整个平台的全局参数。', en: '' },
+  'settings.platform.agentUser':    { zh: '运行用户 (agentUser)', en: '' },
+  'settings.platform.agentUserHint': { zh: '已安装的智能体在宿主机上以该操作系统用户身份运行（{{AGENT_USER}}）。', en: '' },
+  'settings.platform.agentUserPlaceholder': { zh: '例如 agent', en: '' },
+  'settings.platform.save':         { zh: '保存',                en: '' },
+  'settings.platform.saving':       { zh: '保存中…',              en: '' },
+  'settings.platform.loading':      { zh: '加载中…',              en: '' },
+  'settings.platform.loadError':    { zh: '加载平台设置失败',    en: '' },
+  'settings.platform.saveOk':       { zh: '平台设置已保存',      en: '' },
+  'settings.platform.saveFail':     { zh: '保存失败',            en: '' },
+
   'gateway.breadcrumb.label': { zh: '面包屑导航', en: 'Breadcrumb' },
   'gateway.breadcrumb.system': { zh: '系统配置', en: 'System Configuration' },
   'gateway.breadcrumb.current': { zh: '模型网关接入', en: 'Model Gateway Integration' },

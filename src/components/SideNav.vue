@@ -75,6 +75,7 @@ const groups: Group[] = [
       { name: 'platform.artifacts', label: '制品库', icon: 'details', to: '/platform/artifacts' },
       { name: 'platform.skills',  label: '技能管理', icon: 'wrench', to: '/platform/skills' },
       { name: 'platform.images',  label: '镜像管理', icon: 'storage', to: '/platform/images' },
+      { name: 'platform.settings', label: '平台设置', icon: 'cog', to: '/platform/settings' },
     ],
   },
 ]

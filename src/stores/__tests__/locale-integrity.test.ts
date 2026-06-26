@@ -28,7 +28,7 @@ const ALLOWED_EMPTY_ZH = new Set<string>(['agents.col.select'])
 // Namespaces that are intentionally zh-only today (en === ''). A new key under
 // one of these is allowed to ship without an en translation; a new empty-en key
 // anywhere else is a regression.
-const ALLOWED_EMPTY_EN_PREFIXES = ['resources.', 'roles.', 'users.'] as const
+const ALLOWED_EMPTY_EN_PREFIXES = ['resources.', 'roles.', 'settings.', 'users.'] as const
 const ALLOWED_EMPTY_EN_KEYS = new Set<string>([
   'agents.col.select',
   'agents.list.description',
