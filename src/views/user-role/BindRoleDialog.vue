@@ -17,7 +17,7 @@ import type {
   AccountUser,
   Role,
   AssignUsersToRolePayload,
-} from '@/api/graphql/types'
+} from '@/types/user-role'
 import '@/components/icons'
 
 const props = defineProps<{

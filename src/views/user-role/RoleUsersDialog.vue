@@ -5,8 +5,8 @@
  * status / last login — never the `user.id`.
  */
 import { useLocaleStore } from '@/stores/locale'
-import type { AccountUser, Role } from '@/api/graphql/types'
-import { CONNECTION_FROM_GQL } from '@/api/graphql/types'
+import type { AccountUser, Role } from '@/types/user-role'
+import { CONNECTION_FROM_GQL } from '@/types/user-role'
 import '@/components/icons'
 
 defineProps<{

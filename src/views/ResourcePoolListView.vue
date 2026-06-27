@@ -41,7 +41,7 @@ import type {
   SyncResourcePoolVars,
   UpdateResourcePoolPayload,
   UpdateResourcePoolVars,
-} from '@/api/graphql/types'
+} from '@/types/resource-pool'
 import '@/components/icons'
 
 import CreateOrEditResourcePoolDialog from './resource-list/CreateOrEditResourcePoolDialog.vue'

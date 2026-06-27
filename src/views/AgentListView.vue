@@ -15,8 +15,8 @@ import type {
   SortDirection,
   StatusKey,
   TypeKey,
-} from '@/api/graphql/types'
-import { STATUS_FROM_GQL, TYPE_FROM_GQL } from '@/api/graphql/types'
+} from '@/types/agents'
+import { STATUS_FROM_GQL, TYPE_FROM_GQL } from '@/types/agents'
 
 const locale = useLocaleStore()
 

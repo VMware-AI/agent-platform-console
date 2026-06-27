@@ -31,7 +31,7 @@ import type {
   UsersQueryResult,
   UserSort,
   UserSortField,
-} from '@/api/graphql/types'
+} from '@/types/user-role'
 import '@/components/icons'
 
 import UserFormDialog from './UserFormDialog.vue'

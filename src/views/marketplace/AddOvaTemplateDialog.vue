@@ -11,11 +11,11 @@
  */
 import { computed, ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
+import type { AgentType } from '@/types/agents'
 import type {
-  AgentType,
   CreateOvaTemplateFamilyInput,
   OvaTemplateColor,
-} from '@/api/graphql/types'
+} from '@/types/marketplace'
 import '@/components/icons'
 
 const props = defineProps<{ open: boolean; saving: boolean }>()
