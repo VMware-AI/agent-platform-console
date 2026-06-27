@@ -26,7 +26,7 @@ import type {
   TestModelGatewayConnectionVars,
   UpdateModelGatewayResult,
   UpdateModelGatewayVars,
-} from '@/api/graphql/model-gateway-types'
+} from '@/types/model-gateway'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 import AppDropdown from '@/components/AppDropdown.vue'

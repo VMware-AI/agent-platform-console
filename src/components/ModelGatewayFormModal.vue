@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
-import type { ModelGateway, ModelGatewayInput } from '@/api/graphql/model-gateway-types'
+import type { ModelGateway, ModelGatewayInput } from '@/types/model-gateway'
 
 const props = defineProps<{
   open: boolean

@@ -29,7 +29,7 @@ import { ref, type Ref } from 'vue'
 import type {
   ModelGateway,
   ModelGatewaysQueryResult,
-} from '@/api/graphql/model-gateway-types'
+} from '@/types/model-gateway'
 
 // --- mocks -----------------------------------------------------------------
 
