@@ -41,6 +41,8 @@ const form = reactive({
   endpoint: '',
   contentLibraryName: '',
   insecure: false,
+  username: '',
+  password: '',
 })
 
 const isEdit = computed(() => !!props.pool)
@@ -51,13 +53,29 @@ const titleKey = computed(() =>
 
 /** Track which input fields the alert was last computed against — if any
  *  of them change after the test, the alert is hidden (stale). */
-const testSnapshot = ref<{ name: string; endpoint: string; contentLibraryName: string } | null>(null)
-const testResult = ref<null | { ok: boolean; message: string; detail: { vSphereVersion: string; itemCount: number } | null }>(null)
+const testSnapshot = ref<{
+  name: string
+  endpoint: string
+  contentLibraryName: string
+  username: string
+  password: string
+  insecure: boolean
+} | null>(null)
+const testResult = ref<null | {
+  ok: boolean
+  message: string
+  detail: { vSphereVersion: string; itemCount: number; contentLibraryFound: boolean } | null
+}>(null)
 
 const canTest = computed(
   () => !!(form.name.trim() && form.endpoint.trim() && form.contentLibraryName.trim()),
 )
-const canSubmit = computed(() => canTest.value)
+// Creating a pool requires credentials — without them the backend stores no
+// secret reference and the pool can never sync/deploy. Editing can omit them
+// (leaving the stored credentials unchanged / rotating only when re-entered).
+const canSubmit = computed(
+  () => canTest.value && (isEdit.value || !!(form.username.trim() && form.password)),
+)
 
 watch(
   () => props.open,
@@ -67,22 +85,30 @@ watch(
       form.endpoint = props.pool?.endpoint ?? ''
       form.contentLibraryName = props.pool?.contentLibraryName ?? ''
       form.insecure = props.pool?.insecure ?? false
+      // Credentials are never returned by the API (write-only); always start blank.
+      // On edit, leaving them blank keeps the stored credentials unchanged.
+      form.username = ''
+      form.password = ''
       // Reset the test-connection alert every time the dialog re-opens.
       testResult.value = null
+      testSnapshot.value = null
     }
   },
   { immediate: true },
 )
 
 watch(
-  () => [form.name, form.endpoint, form.contentLibraryName],
+  () => [form.name, form.endpoint, form.contentLibraryName, form.username, form.password, form.insecure],
   () => {
-    if (testSnapshot.value) {
-      const cur = { name: form.name, endpoint: form.endpoint, contentLibraryName: form.contentLibraryName }
+    const snap = testSnapshot.value
+    if (snap) {
       if (
-        cur.name !== testSnapshot.value.name ||
-        cur.endpoint !== testSnapshot.value.endpoint ||
-        cur.contentLibraryName !== testSnapshot.value.contentLibraryName
+        form.name !== snap.name ||
+        form.endpoint !== snap.endpoint ||
+        form.contentLibraryName !== snap.contentLibraryName ||
+        form.username !== snap.username ||
+        form.password !== snap.password ||
+        form.insecure !== snap.insecure
       ) {
         testResult.value = null
         testSnapshot.value = null
@@ -104,6 +130,11 @@ async function onTestConnection() {
         name: form.name.trim(),
         endpoint: form.endpoint.trim(),
         contentLibraryName: form.contentLibraryName.trim(),
+        insecure: form.insecure,
+        // Send credentials when present → backend runs the authenticated probe
+        // (version + content-library verification). Omitted → reachability only.
+        ...(form.username.trim() ? { username: form.username.trim() } : {}),
+        ...(form.password ? { password: form.password } : {}),
       },
     })
     const res = r?.data?.testResourcePoolConnection
@@ -117,6 +148,9 @@ async function onTestConnection() {
         name: form.name,
         endpoint: form.endpoint,
         contentLibraryName: form.contentLibraryName,
+        username: form.username,
+        password: form.password,
+        insecure: form.insecure,
       }
     }
   } catch (err) {
@@ -139,6 +173,11 @@ function onSubmit() {
     contentLibraryName: form.contentLibraryName.trim(),
     insecure: form.insecure,
   }
+  // Credentials are write-only: send them when entered (always on create, and on
+  // edit only to rotate). The backend stores them in the secret store and never
+  // persists plaintext; omitting them on edit leaves the stored ones unchanged.
+  if (form.username.trim()) input.username = form.username.trim()
+  if (form.password) input.password = form.password
   emit('submit', { mode: isEdit.value ? 'update' : 'create', input })
 }
 
@@ -199,6 +238,32 @@ function onBackdropClick(e: MouseEvent) {
               />
             </label>
 
+            <label class="resource-field">
+              <span class="resource-label">{{ locale.t('resources.form.username') }}</span>
+              <input
+                type="text"
+                class="app-input"
+                autocomplete="off"
+                :value="form.username"
+                :placeholder="locale.t('resources.form.usernamePlaceholder')"
+                @input="(e: Event) => form.username = (e.target as HTMLInputElement).value"
+              />
+            </label>
+
+            <label class="resource-field">
+              <span class="resource-label">{{ locale.t('resources.form.password') }}</span>
+              <input
+                type="password"
+                class="app-input"
+                autocomplete="new-password"
+                :value="form.password"
+                @input="(e: Event) => form.password = (e.target as HTMLInputElement).value"
+              />
+              <span v-if="isEdit" class="resource-check-hint">
+                {{ locale.t('resources.form.passwordEditHint') }}
+              </span>
+            </label>
+
             <label class="resource-check">
               <input
                 type="checkbox"
@@ -234,10 +299,13 @@ function onBackdropClick(e: MouseEvent) {
               >
                 <div class="resource-test-message">{{ testResult.message }}</div>
                 <div
-                  v-if="testResult.ok && testResult.detail"
+                  v-if="testResult.detail && testResult.detail.vSphereVersion"
                   class="resource-test-detail"
                 >
-                  vSphere {{ testResult.detail.vSphereVersion }} · {{ testResult.detail.itemCount }} 个 OVF 模板
+                  vSphere {{ testResult.detail.vSphereVersion }}<template
+                    v-if="testResult.detail.contentLibraryFound"
+                  >
+                    · 内容库 {{ form.contentLibraryName.trim() }} · {{ testResult.detail.itemCount }} 个条目</template>
                 </div>
                 <cds-button-action
                   shape="times"

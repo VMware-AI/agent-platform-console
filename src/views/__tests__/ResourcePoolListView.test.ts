@@ -520,13 +520,13 @@ describe('CreateOrEditResourcePoolDialog — test connection {ok, message}', () 
         testResourcePoolConnection: {
           ok: true,
           message: '连接成功',
-          detail: { vSphereVersion: '8.0.2', itemCount: 7 },
+          detail: { vSphereVersion: '8.0.2', itemCount: 7, contentLibraryFound: true },
         },
       },
     })
     const dlg = mountDialog()
 
-    // Fill the three required fields so the test button is enabled.
+    // Fill name/endpoint/library + credentials so the authenticated probe runs.
     const inputs = document.body.querySelectorAll<HTMLInputElement>('.resource-form input')
     inputs[0].value = 'vc-oc1'
     inputs[0].dispatchEvent(new Event('input'))
@@ -534,6 +534,10 @@ describe('CreateOrEditResourcePoolDialog — test connection {ok, message}', () 
     inputs[1].dispatchEvent(new Event('input'))
     inputs[2].value = 'cl-vc-oc1'
     inputs[2].dispatchEvent(new Event('input'))
+    inputs[3].value = 'administrator@vsphere.local'
+    inputs[3].dispatchEvent(new Event('input'))
+    inputs[4].value = 'secret'
+    inputs[4].dispatchEvent(new Event('input'))
     await flushPromises()
 
     // Click the "测试连接" button (the first cds-button in the test block).
@@ -542,14 +546,20 @@ describe('CreateOrEditResourcePoolDialog — test connection {ok, message}', () 
     await flushPromises()
 
     expect(testConnMutate).toHaveBeenCalledWith({
-      input: { name: 'vc-oc1', endpoint: 'https://vc.example.local/sdk', contentLibraryName: 'cl-vc-oc1' },
+      input: expect.objectContaining({
+        name: 'vc-oc1',
+        endpoint: 'https://vc.example.local/sdk',
+        contentLibraryName: 'cl-vc-oc1',
+        username: 'administrator@vsphere.local',
+        password: 'secret',
+      }),
     })
 
     const alert = document.body.querySelector('cds-alert.resource-test-alert')
     expect(alert).not.toBeNull()
     expect(alert!.getAttribute('status')).toBe('success')
     expect(alert!.textContent).toContain('连接成功')
-    // Detail line renders only on ok && detail present.
+    // Detail line renders version + (when the library is found) its item count.
     expect(alert!.textContent).toContain('8.0.2')
     expect(alert!.textContent).toContain('7')
     dlg.unmount()
@@ -599,6 +609,11 @@ describe('CreateOrEditResourcePoolDialog — test connection {ok, message}', () 
     inputs[1].dispatchEvent(new Event('input'))
     inputs[2].value = '  cl-trim  '
     inputs[2].dispatchEvent(new Event('input'))
+    // Credentials are required to create a pool (else it has no secret reference).
+    inputs[3].value = '  administrator@vsphere.local  '
+    inputs[3].dispatchEvent(new Event('input'))
+    inputs[4].value = 'secret'
+    inputs[4].dispatchEvent(new Event('input'))
     await flushPromises()
 
     const form = document.body.querySelector('.resource-form') as HTMLFormElement
@@ -609,7 +624,13 @@ describe('CreateOrEditResourcePoolDialog — test connection {ok, message}', () 
     expect(emitted).toBeTruthy()
     expect(emitted![0][0]).toMatchObject({
       mode: 'create',
-      input: { name: 'Trimmed Name', endpoint: 'https://vc/sdk', contentLibraryName: 'cl-trim' },
+      input: {
+        name: 'Trimmed Name',
+        endpoint: 'https://vc/sdk',
+        contentLibraryName: 'cl-trim',
+        username: 'administrator@vsphere.local',
+        password: 'secret',
+      },
     })
     dlg.unmount()
   })
@@ -638,6 +659,14 @@ describe('CreateOrEditResourcePoolDialog — test connection {ok, message}', () 
     texts[1].dispatchEvent(new Event('input'))
     texts[2].value = 'cl-x'
     texts[2].dispatchEvent(new Event('input'))
+    // username is the 4th text input; password is a dedicated password field.
+    texts[3].value = 'administrator@vsphere.local'
+    texts[3].dispatchEvent(new Event('input'))
+    const pwd = document.body.querySelector(
+      '.resource-form input[type="password"]',
+    ) as HTMLInputElement
+    pwd.value = 'secret'
+    pwd.dispatchEvent(new Event('input'))
 
     const cb = document.body.querySelector(
       '.resource-check input[type="checkbox"]',
@@ -653,6 +682,29 @@ describe('CreateOrEditResourcePoolDialog — test connection {ok, message}', () 
     const emitted = dlg.emitted('submit')
     expect(emitted).toBeTruthy()
     expect(emitted![0][0]).toMatchObject({ mode: 'create', input: { insecure: true } })
+    dlg.unmount()
+  })
+
+  it('does NOT emit submit on create when credentials are missing (no orphan pool)', async () => {
+    const dlg = mountDialog()
+
+    // Fill name/endpoint/library but deliberately leave credentials blank.
+    const inputs = document.body.querySelectorAll<HTMLInputElement>('.resource-form input')
+    inputs[0].value = 'vc-nocreds'
+    inputs[0].dispatchEvent(new Event('input'))
+    inputs[1].value = 'https://vc/sdk'
+    inputs[1].dispatchEvent(new Event('input'))
+    inputs[2].value = 'cl-x'
+    inputs[2].dispatchEvent(new Event('input'))
+    await flushPromises()
+
+    const form = document.body.querySelector('.resource-form') as HTMLFormElement
+    form.dispatchEvent(new Event('submit'))
+    await flushPromises()
+
+    // Submit is blocked → no payload emitted → the parent never creates a pool
+    // that would have no secret reference (and thus could never sync/deploy).
+    expect(dlg.emitted('submit')).toBeUndefined()
     dlg.unmount()
   })
 })

@@ -100,6 +100,7 @@ export const TEST_RESOURCE_POOL_CONNECTION_MUTATION = gql`
       detail {
         vSphereVersion
         itemCount
+        contentLibraryFound
       }
     }
   }
