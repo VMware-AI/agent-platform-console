@@ -22,13 +22,13 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { ref, type Ref } from 'vue'
 
+import type { ResourcePool } from '@/api/graphql/types/resource-pool'
 import type {
   DeployAgentInput,
   OvaTemplateFamily,
   OvaTemplateVersion,
-  ResourcePool,
   VsphereResourcePool,
-} from '@/api/graphql/types'
+} from '@/api/graphql/types/marketplace'
 
 // --- mocks -----------------------------------------------------------------
 

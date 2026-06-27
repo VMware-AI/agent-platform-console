@@ -23,7 +23,7 @@ import type {
   Role,
   RolesQueryResult,
   UsersQueryResult,
-} from '@/api/graphql/types'
+} from '@/api/graphql/types/user-role'
 import '@/components/icons'
 
 import RoleUsersDialog from './RoleUsersDialog.vue'

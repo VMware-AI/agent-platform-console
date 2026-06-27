@@ -19,7 +19,7 @@ import type {
   ResourcePool,
   TestResourcePoolConnectionResult,
   TestResourcePoolConnectionVars,
-} from '@/api/graphql/types'
+} from '@/api/graphql/types/resource-pool'
 import '@/components/icons'
 
 const props = defineProps<{

@@ -31,7 +31,7 @@ import type {
   ResourcePool,
   ResourcePoolsQueryResult,
   ResourcePoolsQueryVars,
-} from '@/api/graphql/types'
+} from '@/api/graphql/types/resource-pool'
 import {
   CREATE_RESOURCE_POOL_MUTATION,
   UPDATE_RESOURCE_POOL_MUTATION,

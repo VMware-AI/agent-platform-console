@@ -32,7 +32,7 @@ import {
   CREATE_USER_MUTATION,
   USER_EXISTS_QUERY,
 } from '@/api/graphql/queries/users'
-import type { Role, CreateUserInput, CreateUserPayload } from '@/api/graphql/types'
+import type { Role, CreateUserInput, CreateUserPayload } from '@/api/graphql/types/user-role'
 import { passwordMeets } from '@/composables/usePasswordComplexity'
 import '@/components/icons'
 
