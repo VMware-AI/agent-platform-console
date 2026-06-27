@@ -1,11 +1,12 @@
 /**
  * GraphQL types — resource pools (vCenter / Vsphere pool inventory).
  * Mirrors the backend schema; replace with codegen output when available.
+ *
+ * Cross-domain references: ResourcePoolConnection / *QueryVars / *QueryResult
+ * use the shared PageInfo / SortDirection / Pagination from `@/types/agents`;
+ * consumers that need both should import from each domain file directly.
  */
-// Re-exports: ResourcePoolConnection / *QueryVars / *QueryResult use the
-// shared PageInfo, SortDirection, Pagination types from the agents domain.
 import type { PageInfo, SortDirection, Pagination } from './agents'
-export type { PageInfo, SortDirection, Pagination } from './agents'
 
 export type PoolConnectionStatus = 'CONNECTED' | 'DISCONNECTED'
 export type PoolConnectionStatusKey = 'connected' | 'disconnected'

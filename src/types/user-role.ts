@@ -2,12 +2,12 @@
  * GraphQL types — user & role management (AccountUser / Role / user-CRUD
  * inputs / payloads / vars). Mirrors the backend schema; replace with
  * codegen output when available.
+ *
+ * Cross-domain references: UserConnection / RoleConnection / *QueryVars use
+ * the shared PageInfo / SortDirection / Pagination from `@/types/agents`;
+ * consumers that need both should import from each domain file directly.
  */
-// Re-exports: UserConnection / RoleConnection / *QueryVars use the shared
-// PageInfo, SortDirection, Pagination, and UserSortField[number] etc. from
-// the agents domain.
 import type { PageInfo, SortDirection, Pagination } from './agents'
-export type { PageInfo, SortDirection, Pagination } from './agents'
 
 export type ConnectionStatus = 'ONLINE' | 'OFFLINE'
 export type ConnectionStatusKey = 'online' | 'offline'

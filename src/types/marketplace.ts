@@ -2,16 +2,14 @@
  * GraphQL types — agent marketplace (OVA template families / versions /
  * deploy-agent input / vsphere placement options). Mirrors the backend
  * schema; replace with codegen output when available.
+ *
+ * Cross-domain references: DeployAgentPayload / OvaTemplateFamily /
+ * query-vars types reference Agent / AgentType / PageInfo / SortDirection /
+ * Pagination (agents domain) and ResourcePool (resource-pool domain);
+ * consumers that need both should import from each domain file directly.
  */
-// Re-exports: DeployAgentPayload / OvaTemplateFamily / query-vars types
-// reference Agent (agents domain), ResourcePool (resource-pool domain), and
-// the shared PageInfo / SortDirection / Pagination / AgentType (agents).
-// Keep the symbols where they're defined and re-export here so this file
-// is self-contained for consumers.
 import type { Agent, AgentType, PageInfo, SortDirection, Pagination } from './agents'
 import type { ResourcePool } from './resource-pool'
-export type { Agent, AgentType, PageInfo, SortDirection, Pagination } from './agents'
-export type { ResourcePool } from './resource-pool'
 
 export type OvaTemplateColor = 'BLUE' | 'PURPLE' | 'ORANGE' | 'GREEN' | 'RED' | 'CYAN'
 
