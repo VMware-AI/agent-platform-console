@@ -98,9 +98,8 @@ export interface UpdateResourcePoolInput {
 export interface TestResourcePoolConnectionInput {
   name: string
   endpoint: string
-  contentLibraryName: string
-  /** When supplied, the backend runs a REAL authenticated probe (login + content
-   *  library verification); omitted = lightweight TCP reachability check. */
+  /** When supplied, the backend runs a REAL authenticated probe and returns available
+   *  content libraries; omitted = lightweight TCP reachability check. */
   username?: string
   password?: string
   insecure?: boolean
@@ -109,10 +108,8 @@ export interface TestResourcePoolConnectionInput {
 export interface ResourcePoolConnectionDetail {
   /** Real vSphere version (authenticated probe); empty for the reachability-only probe. */
   vSphereVersion: string
-  /** Content library item count (authenticated probe, when the library exists); else 0. */
-  itemCount: number
-  /** Whether the content library exists (authenticated probe); false for reachability-only. */
-  contentLibraryFound: boolean
+  /** Names of all content libraries on the vCenter (authenticated probe); empty for reachability-only. */
+  contentLibraries: string[]
 }
 
 export interface ResourcePoolConnectionTest {
