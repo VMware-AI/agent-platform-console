@@ -19,6 +19,7 @@ import { computed, ref } from 'vue'
 import { useMutation, useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
 import {
   RESOURCE_POOLS_QUERY,
   CREATE_RESOURCE_POOL_MUTATION,
@@ -270,7 +271,10 @@ async function onSubmit(payload: {
      
     console.error('[resources] submit failed', err)
     toast.error(
-      locale.t(payload.mode === 'create' ? 'resources.toast.createFail' : 'resources.toast.updateFail'),
+      graphqlErrorMessage(
+        err,
+        locale.t(payload.mode === 'create' ? 'resources.toast.createFail' : 'resources.toast.updateFail'),
+      ),
     )
   }
 }
@@ -293,7 +297,7 @@ async function onSync(p: ResourcePool) {
   } catch (err) {
      
     console.error('[resources] sync failed', err)
-    toast.error(locale.t('resources.toast.syncFail'))
+    toast.error(graphqlErrorMessage(err, locale.t('resources.toast.syncFail')))
   }
 }
 
@@ -313,7 +317,7 @@ async function doDelete() {
   } catch (err) {
      
     console.error('[resources] delete failed', err)
-    toast.error(locale.t('resources.toast.deleteFail'))
+    toast.error(graphqlErrorMessage(err, locale.t('resources.toast.deleteFail')))
   }
 }
 </script>

@@ -14,6 +14,7 @@ import { computed, ref } from 'vue'
 import { useMutation, useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
 import {
   USERS_QUERY,
   ROLES_QUERY,
@@ -162,7 +163,7 @@ async function doReset() {
   } catch (err) {
      
     console.error('[users] reset password failed', err)
-    toast.error(locale.t('users.toast.resetPwdFail'))
+    toast.error(graphqlErrorMessage(err, locale.t('users.toast.resetPwdFail')))
   }
 }
 
@@ -181,7 +182,7 @@ async function doToggle() {
   } catch (err) {
      
     console.error('[users] toggle enabled failed', err)
-    toast.error(locale.t('users.toast.toggleFail'))
+    toast.error(graphqlErrorMessage(err, locale.t('users.toast.toggleFail')))
   }
 }
 
@@ -196,7 +197,7 @@ async function doDelete() {
   } catch (err) {
      
     console.error('[users] delete user failed', err)
-    toast.error(locale.t('users.toast.deleteFail'))
+    toast.error(graphqlErrorMessage(err, locale.t('users.toast.deleteFail')))
   }
 }
 

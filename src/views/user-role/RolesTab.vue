@@ -13,6 +13,7 @@ import { computed, ref } from 'vue'
 import { useMutation, useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
 import {
   ROLES_QUERY,
   USERS_BY_ROLE_QUERY,
@@ -87,7 +88,7 @@ async function doDelete() {
   } catch (err) {
      
     console.error('[roles] delete role failed', err)
-    toast.error(locale.t('roles.toast.deleteFail'))
+    toast.error(graphqlErrorMessage(err, locale.t('roles.toast.deleteFail')))
   }
 }
 </script>
