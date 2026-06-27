@@ -30,7 +30,7 @@ import type {
   Agent,
   AgentsQueryResult,
   AgentsQueryVars,
-} from '@/api/graphql/types/agents'
+} from '@/types/agents'
 
 /* ---------- Mock @vue/apollo-composable ---------- */
 

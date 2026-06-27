@@ -20,8 +20,8 @@ import type {
   Agent,
   AgentsQueryResult,
   AgentsQueryVars,
-} from '@/api/graphql/types/agents'
-import { STATUS_FROM_GQL, TYPE_FROM_GQL } from '@/api/graphql/types/agents'
+} from '@/types/agents'
+import { STATUS_FROM_GQL, TYPE_FROM_GQL } from '@/types/agents'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 

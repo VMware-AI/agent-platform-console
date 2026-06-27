@@ -26,12 +26,12 @@ import { ref, type Ref } from 'vue'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-import type { ResourcePool } from '@/api/graphql/types/resource-pool'
+import type { ResourcePool } from '@/types/resource-pool'
 import type {
   OvaTemplateFamily,
   OvaTemplateVersion,
   VsphereResourcePool,
-} from '@/api/graphql/types/marketplace'
+} from '@/types/marketplace'
 
 /* ----------------------------- Apollo mock ----------------------------- */
 // Controllable query-state holders, keyed by GraphQL operation name. Each test

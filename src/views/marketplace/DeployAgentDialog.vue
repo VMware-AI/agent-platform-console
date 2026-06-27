@@ -13,7 +13,7 @@ import { computed, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import { VSPHERE_RESOURCE_POOLS_QUERY } from '@/api/graphql/queries/vsphere'
-import type { ResourcePool } from '@/api/graphql/types/resource-pool'
+import type { ResourcePool } from '@/types/resource-pool'
 import type {
   DeployAgentInput,
   OvaTemplateFamily,
@@ -21,7 +21,7 @@ import type {
   VsphereResourcePool,
   VsphereResourcePoolsQueryResult,
   VsphereResourcePoolsQueryVars,
-} from '@/api/graphql/types/marketplace'
+} from '@/types/marketplace'
 import '@/components/icons'
 
 const props = defineProps<{

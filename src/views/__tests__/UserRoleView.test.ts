@@ -33,7 +33,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { ref, type Ref } from 'vue'
 
-import type { AccountUser, Role } from '@/api/graphql/types/user-role'
+import type { AccountUser, Role } from '@/types/user-role'
 
 // --- apollo query / mutation slots -----------------------------------------
 

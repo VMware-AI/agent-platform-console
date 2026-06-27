@@ -20,12 +20,12 @@ import {
 } from '@/api/graphql/queries/ovaTemplates'
 import { RESOURCE_POOLS_QUERY } from '@/api/graphql/queries/resourcePools'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
-import type { AgentType } from '@/api/graphql/types/agents'
+import type { AgentType } from '@/types/agents'
 import type {
   ResourcePool,
   ResourcePoolsQueryResult,
   ResourcePoolsQueryVars,
-} from '@/api/graphql/types/resource-pool'
+} from '@/types/resource-pool'
 import type {
   OvaTemplateFamily,
   OvaTemplateFamilyFilter,
@@ -38,7 +38,7 @@ import type {
   DeployAgentPayload,
   DeployAgentVars,
   OvaTemplateColor,
-} from '@/api/graphql/types/marketplace'
+} from '@/types/marketplace'
 import '@/components/icons'
 import AddOvaTemplateDialog from './marketplace/AddOvaTemplateDialog.vue'
 import DeployAgentDialog from './marketplace/DeployAgentDialog.vue'
