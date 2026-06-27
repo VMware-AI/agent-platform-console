@@ -12,6 +12,7 @@ import { computed, ref, watch } from 'vue'
 import { useMutation } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
 import { ASSIGN_USERS_TO_ROLE_MUTATION } from '@/api/graphql/queries/users'
 import type {
   AccountUser,
@@ -88,7 +89,7 @@ async function onSubmit() {
   } catch (err) {
      
     console.error('[users] assignUsersToRole failed', err)
-    toast.error(locale.t('users.toast.bindFail'))
+    toast.error(graphqlErrorMessage(err, locale.t('users.toast.bindFail')))
   }
 }
 

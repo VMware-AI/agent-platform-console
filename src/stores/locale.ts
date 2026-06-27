@@ -231,6 +231,7 @@ export const STRINGS: Dict = {
   'users.toast.duplicateUsername': { zh: '用户名已存在',  en: '' },
   'users.toast.duplicateEmail':    { zh: '邮箱已被使用',  en: '' },
   'users.toast.passwordCopied':    { zh: '已复制到剪贴板', en: '' },
+  'users.toast.copyFailed':       { zh: '复制失败',         en: '' },
 
   // Confirm dialogs
   'users.confirm.delete.title':  { zh: '确认删除用户',    en: '' },

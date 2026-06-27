@@ -528,8 +528,8 @@ async function copyValue(value: string | null, successKey: string) {
       copyWithFallback(value)
     }
     toast.success(locale.t(successKey))
-  } catch {
-    toast.error(locale.t('virtualKey.toast.copyFailed'))
+  } catch (err) {
+    toast.error(graphqlErrorMessage(err, locale.t('virtualKey.toast.copyFailed')))
   }
 }
 

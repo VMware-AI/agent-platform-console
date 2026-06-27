@@ -239,8 +239,8 @@ async function copyRequestId(value: string) {
       copyWithFallback(value)
     }
     toast.success(locale.t('requestLog.toast.copied'))
-  } catch {
-    toast.error(locale.t('requestLog.toast.copyFailed'))
+  } catch (err) {
+    toast.error(graphqlErrorMessage(err, locale.t('requestLog.toast.copyFailed')))
   }
 }
 </script>

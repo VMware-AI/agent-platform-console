@@ -28,6 +28,7 @@ import { computed, ref, watch } from 'vue'
 import { useMutation } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
 import {
   CREATE_USER_MUTATION,
   USER_EXISTS_QUERY,
@@ -215,7 +216,7 @@ async function onSubmit() {
       emailTaken.value = true
       toast.error(locale.t('users.toast.duplicateEmail'))
     } else {
-      toast.error(locale.t('users.toast.createFail'))
+      toast.error(graphqlErrorMessage(err, locale.t('users.toast.createFail')))
     }
   }
 }

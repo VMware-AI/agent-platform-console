@@ -276,8 +276,8 @@ async function copyResourceId(value: string | null) {
       copyWithFallback(value)
     }
     toast.success(locale.t('auditLog.toast.copied'))
-  } catch {
-    toast.error(locale.t('auditLog.toast.copyFailed'))
+  } catch (err) {
+    toast.error(graphqlErrorMessage(err, locale.t('auditLog.toast.copyFailed')))
   }
 }
 </script>

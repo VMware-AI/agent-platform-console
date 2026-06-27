@@ -10,6 +10,7 @@
 import { ref } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
 import '@/components/icons'
 
 const props = defineProps<{
@@ -32,9 +33,8 @@ async function copy() {
     copied.value = true
     toast.success(locale.t('users.toast.passwordCopied'))
   } catch (err) {
-     
     console.error('[users] clipboard write failed', err)
-    toast.error('复制失败')
+    toast.error(graphqlErrorMessage(err, locale.t('users.toast.copyFailed')))
   }
 }
 

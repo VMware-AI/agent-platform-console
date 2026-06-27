@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { apolloClient } from '@/api/graphql/client'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
 import {
   CREATE_MODEL_GATEWAY,
   DELETE_MODEL_GATEWAY,
@@ -184,8 +185,8 @@ async function copyName(gateway: ModelGateway) {
       copyWithFallback(gateway.name)
     }
     toast.success(locale.t('gateway.toast.copied').replace('{name}', gateway.name))
-  } catch {
-    toast.error(locale.t('gateway.toast.copyFailed'))
+  } catch (err) {
+    toast.error(graphqlErrorMessage(err, locale.t('gateway.toast.copyFailed')))
   }
 }
 
@@ -222,8 +223,8 @@ async function testConnection(gateway: ModelGateway) {
       toast.error(test.message || locale.t('gateway.toast.testFailed'))
     }
     await refetch()
-  } catch {
-    toast.error(locale.t('gateway.toast.testFailed'))
+  } catch (err) {
+    toast.error(graphqlErrorMessage(err, locale.t('gateway.toast.testFailed')))
   } finally {
     const next = new Set(testingIDs.value)
     next.delete(gateway.id)
@@ -277,8 +278,8 @@ async function submitGateway(input: ModelGatewayInput) {
     editingGateway.value = null
     currentPage.value = 1
     await refetch()
-  } catch {
-    toast.error(locale.t('gateway.toast.saveFailed'))
+  } catch (err) {
+    toast.error(graphqlErrorMessage(err, locale.t('gateway.toast.saveFailed')))
   } finally {
     saving.value = false
   }
@@ -306,8 +307,8 @@ async function confirmDelete() {
     toast.success(locale.t('gateway.toast.deleted'))
     deleteTarget.value = null
     await refetch()
-  } catch {
-    toast.error(locale.t('gateway.toast.deleteFailed'))
+  } catch (err) {
+    toast.error(graphqlErrorMessage(err, locale.t('gateway.toast.deleteFailed')))
   } finally {
     deleting.value = false
   }

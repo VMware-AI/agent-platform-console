@@ -24,6 +24,7 @@ import type {
 import { STATUS_FROM_GQL, TYPE_FROM_GQL } from '@/types/agents'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
 
 /** Per-page chunk size when streaming all results. 500 is small enough to
  * stay snappy, large enough to keep round-trips low. */
@@ -142,7 +143,7 @@ export function useAgentExport(options: UseAgentExportOptions) {
       )
     } catch (err) {
       console.error('[agents] export failed', err)
-      toast.error(locale.t('agents.export.fail'))
+      toast.error(graphqlErrorMessage(err, locale.t('agents.export.fail')))
     } finally {
       exporting.value = false
     }

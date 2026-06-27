@@ -17,6 +17,7 @@ import type {
   TypeKey,
 } from '@/types/agents'
 import { STATUS_FROM_GQL, TYPE_FROM_GQL } from '@/types/agents'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
 
 const locale = useLocaleStore()
 
@@ -351,7 +352,7 @@ async function onCopyKey(agent: Agent) {
     toast.success(locale.t('agents.action.copyKeyOk').replace('{name}', text))
   } catch (err) {
     console.warn('[agents] copy-key failed', { id: agent.id, err })
-    toast.error(locale.t('agents.action.copyKeyFail'))
+    toast.error(graphqlErrorMessage(err, locale.t('agents.action.copyKeyFail')))
   }
 }
 

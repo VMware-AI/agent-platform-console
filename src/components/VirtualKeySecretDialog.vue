@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
+import { graphqlErrorMessage } from '@/api/graphql/errors'
 
 // Shown ONCE after a key is issued or regenerated — the backend never returns the
 // secret again. Lets the operator copy it before dismissing.
@@ -41,8 +42,8 @@ async function copy() {
     }
     copied.value = true
     toast.success(locale.t('virtualKey.secret.copied'))
-  } catch {
-    toast.error(locale.t('virtualKey.toast.copyFailed'))
+  } catch (err) {
+    toast.error(graphqlErrorMessage(err, locale.t('virtualKey.toast.copyFailed')))
   }
 }
 </script>
