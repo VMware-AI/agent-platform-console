@@ -22,7 +22,7 @@ import AgentConfigKnowledgeDialog from '@/views/AgentConfigKnowledgeDialog.vue'
 import type {
   AgentConfigNode,
   KnowledgeArtifactNode,
-} from '@/api/graphql/queries/agent-config'
+} from '@/types/agent-config'
 
 const mountConfig = {
   global: {

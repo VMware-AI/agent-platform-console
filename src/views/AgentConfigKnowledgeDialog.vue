@@ -12,7 +12,7 @@ import { useLocaleStore } from '@/stores/locale'
 import type {
   AgentConfigNode,
   KnowledgeArtifactNode,
-} from '@/api/graphql/queries/agent-config'
+} from '@/types/agent-config'
 import '@/components/icons'
 
 const props = defineProps<{

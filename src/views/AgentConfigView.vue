@@ -19,13 +19,15 @@ import {
   AGENT_CONFIGS_QUERY,
   KNOWLEDGE_ARTIFACTS_QUERY,
   SET_AGENT_CONFIG_KNOWLEDGE,
-  type AgentConfigNode,
-  type AgentConfigsResult,
-  type AgentConfigsVars,
-  type KnowledgeArtifactsResult,
-  type SetAgentConfigKnowledgeResult,
-  type SetAgentConfigKnowledgeVars,
 } from '@/api/graphql/queries/agent-config'
+import type {
+  AgentConfigNode,
+  AgentConfigsResult,
+  AgentConfigsVars,
+  KnowledgeArtifactsResult,
+  SetAgentConfigKnowledgeResult,
+  SetAgentConfigKnowledgeVars,
+} from '@/types/agent-config'
 import '@/components/icons'
 
 const locale = useLocaleStore()
