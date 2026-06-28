@@ -79,6 +79,9 @@ export interface CreateResourcePoolInput {
   contentLibraryName: string
   /** Skip vCenter TLS verification (self-signed/internal CA); omit = false. LLD-13. */
   insecure?: boolean
+  /** vCenter credentials — stored in the secret store on the backend, never persisted in plaintext. */
+  username?: string
+  password?: string
 }
 
 export interface UpdateResourcePoolInput {
@@ -87,17 +90,26 @@ export interface UpdateResourcePoolInput {
   contentLibraryName?: string | null
   /** Skip vCenter TLS verification (self-signed/internal CA); omit = unchanged. LLD-13. */
   insecure?: boolean | null
+  /** Re-submit credentials to rotate them; omit = unchanged. */
+  username?: string | null
+  password?: string | null
 }
 
 export interface TestResourcePoolConnectionInput {
   name: string
   endpoint: string
-  contentLibraryName: string
+  /** When supplied, the backend runs a REAL authenticated probe and returns available
+   *  content libraries; omitted = lightweight TCP reachability check. */
+  username?: string
+  password?: string
+  insecure?: boolean
 }
 
 export interface ResourcePoolConnectionDetail {
+  /** Real vSphere version (authenticated probe); empty for the reachability-only probe. */
   vSphereVersion: string
-  itemCount: number
+  /** Names of all content libraries on the vCenter (authenticated probe); empty for reachability-only. */
+  contentLibraries: string[]
 }
 
 export interface ResourcePoolConnectionTest {

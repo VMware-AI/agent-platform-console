@@ -77,7 +77,7 @@ const variables = computed<ResourcePoolsQueryVars>(() => ({
 const { result, loading, error, refetch } = useQuery<ResourcePoolsQueryResult, ResourcePoolsQueryVars>(
   RESOURCE_POOLS_QUERY,
   variables,
-  () => ({ fetchPolicy: 'cache-and-network' }),
+  () => ({ fetchPolicy: 'cache-and-network', pollInterval: 30_000 }),
 )
 
 const pools = computed<ResourcePool[]>(() => result.value?.resourcePools.nodes ?? [])
@@ -265,7 +265,7 @@ async function onSubmit(payload: {
         toast.success(locale.t('resources.toast.updateOk').replace('{name}', pool.name))
       }
     }
-    editingPool.value = null
+    closeCreateDialog()
     refetch()
   } catch (err) {
      

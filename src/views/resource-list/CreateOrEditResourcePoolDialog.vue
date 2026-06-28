@@ -39,8 +39,9 @@ const locale = useLocaleStore()
 const form = reactive({
   name: '',
   endpoint: '',
-  contentLibraryName: '',
   insecure: false,
+  username: '',
+  password: '',
 })
 
 const isEdit = computed(() => !!props.pool)
@@ -49,15 +50,36 @@ const titleKey = computed(() =>
   isEdit.value ? 'resources.form.title.edit' : 'resources.form.title.create',
 )
 
-/** Track which input fields the alert was last computed against — if any
- *  of them change after the test, the alert is hidden (stale). */
-const testSnapshot = ref<{ name: string; endpoint: string; contentLibraryName: string } | null>(null)
-const testResult = ref<null | { ok: boolean; message: string; detail: { vSphereVersion: string; itemCount: number } | null }>(null)
+/** Available content libraries fetched after a successful authenticated test. */
+const contentLibraries = ref<string[]>([])
+/** The library the user selected from the dropdown. */
+const selectedLibrary = ref('')
+
+/** Track which fields the test was computed against — changes after the test
+ *  hide the result (stale) and clear the library list. */
+const testSnapshot = ref<{
+  name: string
+  endpoint: string
+  username: string
+  password: string
+  insecure: boolean
+} | null>(null)
+const testResult = ref<null | {
+  ok: boolean
+  message: string
+  detail: { vSphereVersion: string; contentLibraries: string[] } | null
+}>(null)
 
 const canTest = computed(
-  () => !!(form.name.trim() && form.endpoint.trim() && form.contentLibraryName.trim()),
+  () => !!(form.name.trim() && form.endpoint.trim() && form.username.trim() && form.password),
 )
-const canSubmit = computed(() => canTest.value)
+// Creating a pool requires credentials AND a library selection; editing can
+// omit credentials (keeping the stored ones) but must always have a library.
+const canSubmit = computed(
+  () =>
+    !!(form.name.trim() && form.endpoint.trim() && selectedLibrary.value) &&
+    (isEdit.value || !!(form.username.trim() && form.password)),
+)
 
 watch(
   () => props.open,
@@ -65,27 +87,37 @@ watch(
     if (o) {
       form.name = props.pool?.name ?? ''
       form.endpoint = props.pool?.endpoint ?? ''
-      form.contentLibraryName = props.pool?.contentLibraryName ?? ''
       form.insecure = props.pool?.insecure ?? false
-      // Reset the test-connection alert every time the dialog re-opens.
+      // Credentials are never returned by the API (write-only); always start blank.
+      form.username = ''
+      form.password = ''
+      // On edit, pre-select the stored library name so the form is immediately valid.
+      selectedLibrary.value = props.pool?.contentLibraryName ?? ''
+      // Keep the pre-selected library in the list so it renders even before a fresh test.
+      contentLibraries.value = props.pool?.contentLibraryName ? [props.pool.contentLibraryName] : []
       testResult.value = null
+      testSnapshot.value = null
     }
   },
   { immediate: true },
 )
 
 watch(
-  () => [form.name, form.endpoint, form.contentLibraryName],
+  () => [form.name, form.endpoint, form.username, form.password, form.insecure],
   () => {
-    if (testSnapshot.value) {
-      const cur = { name: form.name, endpoint: form.endpoint, contentLibraryName: form.contentLibraryName }
+    const snap = testSnapshot.value
+    if (snap) {
       if (
-        cur.name !== testSnapshot.value.name ||
-        cur.endpoint !== testSnapshot.value.endpoint ||
-        cur.contentLibraryName !== testSnapshot.value.contentLibraryName
+        form.name !== snap.name ||
+        form.endpoint !== snap.endpoint ||
+        form.username !== snap.username ||
+        form.password !== snap.password ||
+        form.insecure !== snap.insecure
       ) {
         testResult.value = null
         testSnapshot.value = null
+        contentLibraries.value = []
+        selectedLibrary.value = ''
       }
     }
   },
@@ -103,7 +135,9 @@ async function onTestConnection() {
       input: {
         name: form.name.trim(),
         endpoint: form.endpoint.trim(),
-        contentLibraryName: form.contentLibraryName.trim(),
+        insecure: form.insecure,
+        username: form.username.trim(),
+        password: form.password,
       },
     })
     const res = r?.data?.testResourcePoolConnection
@@ -111,18 +145,30 @@ async function onTestConnection() {
       testResult.value = {
         ok: res.ok,
         message: res.message,
-        detail: res.detail,
+        detail: res.detail ?? null,
       }
       testSnapshot.value = {
         name: form.name,
         endpoint: form.endpoint,
-        contentLibraryName: form.contentLibraryName,
+        username: form.username,
+        password: form.password,
+        insecure: form.insecure,
+      }
+      if (res.ok && res.detail?.contentLibraries?.length) {
+        contentLibraries.value = res.detail.contentLibraries
+        // Auto-select when only one library exists, or keep previous selection
+        // if it's still in the list.
+        if (!selectedLibrary.value || !contentLibraries.value.includes(selectedLibrary.value)) {
+          selectedLibrary.value = contentLibraries.value.length === 1 ? contentLibraries.value[0] : ''
+        }
+      } else if (res.ok) {
+        contentLibraries.value = []
+        selectedLibrary.value = ''
       }
     }
   } catch (err) {
-     
     console.error('[resources] test connection failed', err)
-    testResult.value = { ok: false, message: '请求失败,请重试', detail: null }
+    testResult.value = { ok: false, message: '请求失败，请重试', detail: null }
   }
 }
 
@@ -136,9 +182,12 @@ function onSubmit() {
   const input: CreateResourcePoolInput = {
     name: form.name.trim(),
     endpoint: form.endpoint.trim(),
-    contentLibraryName: form.contentLibraryName.trim(),
+    contentLibraryName: selectedLibrary.value,
     insecure: form.insecure,
   }
+  // Credentials are write-only: always on create, on edit only to rotate.
+  if (form.username.trim()) input.username = form.username.trim()
+  if (form.password) input.password = form.password
   emit('submit', { mode: isEdit.value ? 'update' : 'create', input })
 }
 
@@ -189,14 +238,29 @@ function onBackdropClick(e: MouseEvent) {
             </label>
 
             <label class="resource-field">
-              <span class="resource-label">{{ locale.t('resources.form.contentLibrary') }}</span>
+              <span class="resource-label">{{ locale.t('resources.form.username') }}</span>
               <input
                 type="text"
                 class="app-input"
-                :value="form.contentLibraryName"
-                :placeholder="locale.t('resources.form.contentLibraryPlaceholder')"
-                @input="(e: Event) => form.contentLibraryName = (e.target as HTMLInputElement).value"
+                autocomplete="off"
+                :value="form.username"
+                :placeholder="locale.t('resources.form.usernamePlaceholder')"
+                @input="(e: Event) => form.username = (e.target as HTMLInputElement).value"
               />
+            </label>
+
+            <label class="resource-field">
+              <span class="resource-label">{{ locale.t('resources.form.password') }}</span>
+              <input
+                type="password"
+                class="app-input"
+                autocomplete="new-password"
+                :value="form.password"
+                @input="(e: Event) => form.password = (e.target as HTMLInputElement).value"
+              />
+              <span v-if="isEdit" class="resource-check-hint">
+                {{ locale.t('resources.form.passwordEditHint') }}
+              </span>
             </label>
 
             <label class="resource-check">
@@ -234,10 +298,10 @@ function onBackdropClick(e: MouseEvent) {
               >
                 <div class="resource-test-message">{{ testResult.message }}</div>
                 <div
-                  v-if="testResult.ok && testResult.detail"
+                  v-if="testResult.detail && testResult.detail.vSphereVersion"
                   class="resource-test-detail"
                 >
-                  vSphere {{ testResult.detail.vSphereVersion }} · {{ testResult.detail.itemCount }} 个 OVF 模板
+                  vSphere {{ testResult.detail.vSphereVersion }} · {{ testResult.detail.contentLibraries.length }} 个内容库
                 </div>
                 <cds-button-action
                   shape="times"
@@ -247,6 +311,19 @@ function onBackdropClick(e: MouseEvent) {
                 ></cds-button-action>
               </cds-alert>
             </div>
+
+            <!-- Content library dropdown: appears after a successful test -->
+            <label v-if="contentLibraries.length > 0 || selectedLibrary" class="resource-field">
+              <span class="resource-label">{{ locale.t('resources.form.contentLibrary') }}</span>
+              <select
+                class="app-input app-select"
+                :value="selectedLibrary"
+                @change="(e: Event) => selectedLibrary = (e.target as HTMLSelectElement).value"
+              >
+                <option value="" disabled>{{ locale.t('resources.form.contentLibrarySelect') }}</option>
+                <option v-for="lib in contentLibraries" :key="lib" :value="lib">{{ lib }}</option>
+              </select>
+            </label>
 
             <div class="resource-actions">
               <cds-button type="button" action="outline" @click="close">
@@ -383,6 +460,10 @@ function onBackdropClick(e: MouseEvent) {
 .app-input:focus {
   border-color: var(--cds-alias-status-info, #0079ad);
   box-shadow: 0 0 0 2px var(--cds-alias-object-interaction-background-hover, #e0f6ff);
+}
+.app-select {
+  appearance: auto;
+  cursor: pointer;
 }
 
 .resource-actions {
