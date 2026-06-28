@@ -34,6 +34,10 @@ export const ME_QUERY = gql`
       email
       role
       mustChangePassword
+      lastLoginAt
+      connectionStatus
+      createdAt
+      enabled
     }
   }
 `
@@ -67,7 +71,13 @@ export interface LoginMutationResult {
 }
 
 export interface MeQueryResult {
-  me: AuthUser & { mustChangePassword: boolean }
+  me: AuthUser & {
+    mustChangePassword: boolean
+    lastLoginAt: string | null
+    connectionStatus: 'ONLINE' | 'OFFLINE'
+    createdAt: string
+    enabled: boolean
+  }
 }
 
 // changePassword is the self-service password-change mutation. The backend
