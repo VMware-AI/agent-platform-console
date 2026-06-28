@@ -68,6 +68,13 @@ export interface GuardRouteMeta {
 export interface GuardAuthState {
   readonly isAuthenticated: boolean
   readonly role: string | null
+  /**
+   * Server-driven flag indicating the user must change their password before
+   * doing anything else. When true, the user is funneled into AppShell so the
+   * ChangePasswordModal can render on top of the page. Reading this from the
+   * store keeps the guard free of any view/Apollo dependency.
+   */
+  readonly mustChangePassword: boolean
 }
 
 /**
@@ -88,6 +95,12 @@ export function resolveGuard(
   }
   if (!auth.isAuthenticated) {
     return { name: 'login' }
+  }
+  // Forced password-change: funnel the user into AppShell so the modal can
+  // render. Only public routes need a redirect — every authenticated route
+  // passes through and the modal overlays it. Skipped when the flag is false.
+  if (auth.mustChangePassword && meta.public) {
+    return { name: 'overview' }
   }
   // Admin-only routes (meta.admin): the backend role enum serializes admins as
   // 'admin' (see auth store `role`). Non-admins are bounced to the overview so
@@ -114,7 +127,11 @@ router.beforeEach((to) => {
   return resolveGuard(
     to.meta as GuardRouteMeta,
     typeof to.name === 'string' ? to.name : null,
-    { isAuthenticated: auth.isAuthenticated, role: auth.role },
+    {
+      isAuthenticated: auth.isAuthenticated,
+      role: auth.role,
+      mustChangePassword: auth.mustChangePassword,
+    },
   )
 })
 

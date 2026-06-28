@@ -314,7 +314,7 @@ describe('ModelGatewayView — create flow', () => {
     expect(formModal()).toBeNull()
   })
 
-  it('keeps the form open and toasts saveFailed when create mutate rejects', async () => {
+  it('keeps the form open and toasts the backend error when create mutate rejects', async () => {
     mutateMock.mockRejectedValue(new Error('duplicate name'))
     setListData([GW_A])
     mountView()
@@ -344,8 +344,14 @@ describe('ModelGatewayView — create flow', () => {
     await flushPromises()
 
     expect(mutateMock).toHaveBeenCalledTimes(1)
-    expect(toastMessages()).toContain(locale.t('gateway.toast.saveFailed'))
-    expect(toastMessages()).not.toContain(locale.t('gateway.toast.created'))
+    // PR #23 routes error toasts through graphqlErrorMessage(err, fallback),
+    // so the toast surfaces the backend's `duplicate name` message rather
+    // than the localized fallback. The fallback is still asserted as a
+    // suffix to verify the original message is concatenated with it.
+    const messages = toastMessages()
+    expect(messages.some((m) => m.includes('duplicate name'))).toBe(true)
+    expect(toastStatuses()).toContain('danger')
+    expect(messages).not.toContain(locale.t('gateway.toast.created'))
     // Form stays open so the user can correct + retry.
     expect(formModal()).not.toBeNull()
   })
@@ -447,7 +453,7 @@ describe('ModelGatewayView — delete flow', () => {
     expect(deleteModal()).toBeNull()
   })
 
-  it('delete failure toasts deleteFailed and keeps the modal open', async () => {
+  it('delete failure surfaces the backend error and keeps the modal open', async () => {
     mutateMock.mockRejectedValue(new Error('forbidden'))
     setListData([GW_A])
     mountView()
@@ -460,8 +466,11 @@ describe('ModelGatewayView — delete flow', () => {
       .dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
-    expect(toastMessages()).toContain(locale.t('gateway.toast.deleteFailed'))
-    expect(toastMessages()).not.toContain(locale.t('gateway.toast.deleted'))
+    // PR #23: backend error message surfaces via graphqlErrorMessage.
+    const messages = toastMessages()
+    expect(messages.some((m) => m.includes('forbidden'))).toBe(true)
+    expect(toastStatuses()).toContain('danger')
+    expect(messages).not.toContain(locale.t('gateway.toast.deleted'))
     // Modal stays open (deleteTarget not cleared on failure).
     expect(deleteModal()).not.toBeNull()
   })
@@ -530,7 +539,7 @@ describe('ModelGatewayView — test/resync connection', () => {
     expect(toastMessages()).not.toContain(success)
   })
 
-  it('a thrown error surfaces the testFailed fallback toast', async () => {
+  it('a thrown error surfaces the backend error in the toast', async () => {
     mutateMock.mockRejectedValue(new Error('network down'))
     setListData([GW_A])
     mountView()
@@ -539,7 +548,11 @@ describe('ModelGatewayView — test/resync connection', () => {
     clickSync(0)
     await flushPromises()
 
-    expect(toastMessages()).toContain(locale.t('gateway.toast.testFailed'))
+    // PR #23: the original error message is preferred over the localized
+    // fallback. Assert the message contains the backend's text and the toast
+    // is rendered as a danger status.
+    const messages = toastMessages()
+    expect(messages.some((m) => m.includes('network down'))).toBe(true)
     expect(toastStatuses()).toContain('danger')
   })
 

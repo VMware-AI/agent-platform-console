@@ -69,3 +69,24 @@ export interface LoginMutationResult {
 export interface MeQueryResult {
   me: AuthUser & { mustChangePassword: boolean }
 }
+
+// changePassword is the self-service password-change mutation. The backend
+// signature is `changePassword(oldPassword: String!, newPassword: String!): Boolean!`
+// — there is no ChangePasswordInput wrapper and the return is a bare Boolean
+// (true on success). On success the backend rotates the session via Set-Cookie
+// (LLD-12); the next ME_QUERY will then observe mustChangePassword: false.
+// Throws GraphQL errors for wrong old password, weak new password, etc.
+export const CHANGE_PASSWORD_MUTATION = gql`
+  mutation ChangePassword($oldPassword: String!, $newPassword: String!) {
+    changePassword(oldPassword: $oldPassword, newPassword: $newPassword)
+  }
+`
+
+export interface ChangePasswordVars {
+  oldPassword: string
+  newPassword: string
+}
+
+export interface ChangePasswordResult {
+  changePassword: boolean
+}
