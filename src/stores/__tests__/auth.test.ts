@@ -113,4 +113,74 @@ describe('auth store — cookie session (LLD-12)', () => {
     expect(sessionStorage.getItem(USER_KEY)).toBeNull()
     expect(clearStore).toHaveBeenCalled()
   })
+
+  it('login sets mustChangePassword from the payload', async () => {
+    mutate.mockResolvedValue({ data: { login: { mustChangePassword: true, user: fakeUser } } })
+    const store = useAuthStore()
+
+    await store.login('admin@x.io', 'pw', true)
+
+    expect(store.mustChangePassword).toBe(true)
+  })
+
+  it('changePassword clears mustChangePassword after a successful mutation + me re-fetch', async () => {
+    // First mutation = LOGIN (sets the flag).
+    mutate.mockResolvedValueOnce({ data: { login: { mustChangePassword: true, user: fakeUser } } })
+    const store = useAuthStore()
+    await store.login('admin@x.io', 'pw', true)
+    expect(store.mustChangePassword).toBe(true)
+
+    // Second mutation = changePassword (returns Boolean true).
+    mutate.mockResolvedValueOnce({ data: { changePassword: true } })
+    // Re-fetched me reflects the cleared flag.
+    query.mockResolvedValueOnce({ data: { me: { ...fakeUser, mustChangePassword: false } } })
+
+    const ok = await store.changePassword('pw', 'NewPassw0rd!')
+
+    expect(ok).toBe(true)
+    expect(store.mustChangePassword).toBe(false)
+    expect(store.error).toBeNull()
+  })
+
+  it('changePassword surfaces Boolean: false without re-fetching me', async () => {
+    mutate.mockResolvedValueOnce({ data: { login: { mustChangePassword: true, user: fakeUser } } })
+    const store = useAuthStore()
+    await store.login('admin@x.io', 'pw', true)
+
+    mutate.mockResolvedValueOnce({ data: { changePassword: false } })
+
+    const ok = await store.changePassword('pw', 'NewPassw0rd!')
+
+    expect(ok).toBe(false)
+    expect(store.mustChangePassword).toBe(true) // flag unchanged
+    expect(store.error).toBeTruthy()
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it('changePassword surfaces thrown GraphQL errors and keeps the flag', async () => {
+    mutate.mockResolvedValueOnce({ data: { login: { mustChangePassword: true, user: fakeUser } } })
+    const store = useAuthStore()
+    await store.login('admin@x.io', 'pw', true)
+
+    mutate.mockRejectedValueOnce(new Error('旧密码错误'))
+
+    const ok = await store.changePassword('wrong', 'NewPassw0rd!')
+
+    expect(ok).toBe(false)
+    expect(store.mustChangePassword).toBe(true)
+    expect(store.error).toBe('旧密码错误')
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it('logout clears mustChangePassword', async () => {
+    mutate.mockResolvedValue({ data: { logout: true } })
+    mutate.mockResolvedValueOnce({ data: { login: { mustChangePassword: true, user: fakeUser } } })
+    const store = useAuthStore()
+    await store.login('admin@x.io', 'pw', true)
+    expect(store.mustChangePassword).toBe(true)
+
+    await store.logout()
+
+    expect(store.mustChangePassword).toBe(false)
+  })
 })

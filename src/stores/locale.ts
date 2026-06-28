@@ -201,7 +201,7 @@ export const STRINGS: Dict = {
   'users.form.customPassword':      { zh: '密码',          en: '' },
   'users.form.confirmPassword':    { zh: '确认密码',      en: '' },
   'users.form.passwordMismatch':    { zh: '两次输入的密码不一致', en: '' },
-  'users.form.passwordHint':        { zh: '密码须包含大小写字母、数字、特殊符号,长度 ≥ 10', en: '' },
+  'users.form.passwordHint':        { zh: '密码须包含大小写字母、数字,长度 ≥ 12', en: '' },
   'users.form.submit':              { zh: '创建',          en: '' },
   'users.form.cancel':              { zh: '取消',          en: '' },
   'users.form.username.required':   { zh: '请输入用户名',  en: '' },
@@ -1108,6 +1108,27 @@ export const STRINGS: Dict = {
     zh: '当前后端尚未提供删除智能体配置接口：{name}',
     en: 'The backend does not expose a delete operation for this config yet: {name}',
   },
+
+  /* ============================================================
+   * Change Password (forced modal — see plan/spec)
+   * Renders while `auth.mustChangePassword === true`.
+   * ============================================================ */
+  'changePassword.title':         { zh: '修改密码',                     en: 'Change Password' },
+  'changePassword.intro':         {
+    zh: '为了您的账户安全，请设置一个新的登录密码。',
+    en: 'For your account security, please set a new password.',
+  },
+  'changePassword.current':       { zh: '当前密码',                     en: 'Current Password' },
+  'changePassword.new':           { zh: '新密码',                       en: 'New Password' },
+  'changePassword.confirm':       { zh: '确认新密码',                   en: 'Confirm New Password' },
+  'changePassword.submit':        { zh: '提交',                         en: 'Submit' },
+  'changePassword.mismatch':      {
+    zh: '两次输入的新密码不一致',
+    en: 'New passwords do not match.',
+  },
+  'changePassword.toast.ok':      { zh: '密码已更新',                   en: 'Password updated' },
+  'changePassword.toast.fail':    { zh: '修改失败',                     en: 'Failed to update password' },
+  'changePassword.error.required':{ zh: '请填写所有字段',               en: 'All fields are required.' },
 }
 
 export const useLocaleStore = defineStore('locale', () => {

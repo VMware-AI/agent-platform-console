@@ -20,8 +20,13 @@ function closeAbout() {
   aboutOpen.value = false
 }
 
-function onLogout() {
-  auth.logout()
+async function onLogout() {
+  // Await the store action so user/role/mustChangePassword are cleared and
+  // `isAuthenticated` flips to false BEFORE we navigate. Without the await,
+  // router.push fires while the auth state still shows the user as signed in,
+  // the guard's "authenticated user visiting /login → redirect to overview"
+  // branch bounces them back, and the user has to click Logout twice.
+  await auth.logout()
   router.push({ name: 'login' })
 }
 </script>

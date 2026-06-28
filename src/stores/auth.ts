@@ -3,10 +3,13 @@ import { defineStore } from 'pinia'
 import type { User } from '@/types/auth'
 import { apolloClient } from '@/api/graphql/client'
 import {
+  CHANGE_PASSWORD_MUTATION,
   LOGIN_MUTATION,
   LOGOUT_MUTATION,
   ME_QUERY,
   type AuthUser,
+  type ChangePasswordResult,
+  type ChangePasswordVars,
   type LoginMutationResult,
   type LoginMutationVars,
   type MeQueryResult,
@@ -108,6 +111,49 @@ export const useAuthStore = defineStore('auth', () => {
     await apolloClient.clearStore()
   }
 
+  /**
+   * Self-service password change for users with `mustChangePassword: true`.
+   *
+   * The backend rotates the session via Set-Cookie on success (LLD-12). The
+   * mutation returns a bare Boolean — true on success, no payload echo — so
+   * the client re-validates via ME_QUERY: that round-trip rides the rotated
+   * cookie and reads the fresh `mustChangePassword: false`. Trusting the
+   * mutation response alone would leave the modal stuck if the backend
+   * silently failed to flip the flag.
+   */
+  async function changePassword(oldPassword: string, newPassword: string): Promise<boolean> {
+    error.value = null
+    try {
+      const { data } = await apolloClient.mutate<ChangePasswordResult, ChangePasswordVars>({
+        mutation: CHANGE_PASSWORD_MUTATION,
+        variables: { oldPassword, newPassword },
+      })
+      if (data?.changePassword !== true) {
+        error.value = 'Password change failed.'
+        return false
+      }
+      // Re-fetch me so the rotated session cookie is observed and the fresh
+      // flag is read. If me fails we surface the error and keep the flag —
+      // the user can retry; better than un-gating the app while we still
+      // don't know the server's verdict.
+      const me = await apolloClient.query<MeQueryResult>({
+        query: ME_QUERY,
+        fetchPolicy: 'network-only',
+      })
+      if (me.data?.me) {
+        user.value = toUser(me.data.me)
+        role.value = me.data.me.role
+        mustChangePassword.value = Boolean(me.data.me.mustChangePassword)
+        return true
+      }
+      error.value = 'Password change failed.'
+      return false
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Password change failed.'
+      return false
+    }
+  }
+
   function clearError(): void {
     error.value = null
   }
@@ -151,6 +197,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     login,
     logout,
+    changePassword,
     clearError,
     restore,
   }

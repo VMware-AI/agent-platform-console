@@ -16,12 +16,12 @@ import { resolveGuard, type GuardAuthState } from '@/router/index'
 //      navigations and asserting redirect-vs-allow. Components are inert stubs,
 //      so the test stays independent of volatile view markup.
 
-const ADMIN: GuardAuthState = { isAuthenticated: true, role: 'admin' }
-const TENANT_ADMIN: GuardAuthState = { isAuthenticated: true, role: 'tenant_admin' }
-const OBSERVABILITY: GuardAuthState = { isAuthenticated: true, role: 'observability' }
-const PLAIN_USER: GuardAuthState = { isAuthenticated: true, role: 'user' }
-const ROLELESS: GuardAuthState = { isAuthenticated: true, role: null }
-const ANON: GuardAuthState = { isAuthenticated: false, role: null }
+const ADMIN: GuardAuthState = { isAuthenticated: true, role: 'admin', mustChangePassword: false }
+const TENANT_ADMIN: GuardAuthState = { isAuthenticated: true, role: 'tenant_admin', mustChangePassword: false }
+const OBSERVABILITY: GuardAuthState = { isAuthenticated: true, role: 'observability', mustChangePassword: false }
+const PLAIN_USER: GuardAuthState = { isAuthenticated: true, role: 'user', mustChangePassword: false }
+const ROLELESS: GuardAuthState = { isAuthenticated: true, role: null, mustChangePassword: false }
+const ANON: GuardAuthState = { isAuthenticated: false, role: null, mustChangePassword: false }
 
 describe('resolveGuard (pure predicate)', () => {
   describe('public routes', () => {
@@ -167,5 +167,38 @@ describe('router beforeEach integration', () => {
     const router = makeRouter(PLAIN_USER)
     await router.push('/agents/list')
     expect(router.currentRoute.value.name).toBe('agents.list')
+  })
+})
+
+describe('mustChangePassword safety net', () => {
+  const FLAGGED_ADMIN: GuardAuthState = {
+    isAuthenticated: true,
+    role: 'admin',
+    mustChangePassword: true,
+  }
+  const UNFLAGGED_ADMIN: GuardAuthState = {
+    isAuthenticated: true,
+    role: 'admin',
+    mustChangePassword: false,
+  }
+
+  it('bounces a flagged user away from /login so the AppShell modal can render', () => {
+    expect(resolveGuard({ public: true }, 'login', FLAGGED_ADMIN)).toEqual({
+      name: 'overview',
+    })
+  })
+
+  it('lets a flagged user reach /overview (modal mounts there)', () => {
+    expect(resolveGuard({}, 'overview', FLAGGED_ADMIN)).toBe(true)
+  })
+
+  it('lets a flagged user reach nested routes (modal renders on top)', () => {
+    expect(resolveGuard({ admin: true }, 'platform.resources', FLAGGED_ADMIN)).toBe(true)
+  })
+
+  it('does not interfere when the flag is false', () => {
+    expect(resolveGuard({ public: true }, 'login', UNFLAGGED_ADMIN)).toEqual({
+      name: 'overview',
+    })
   })
 })

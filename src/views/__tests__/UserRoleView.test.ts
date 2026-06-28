@@ -388,7 +388,7 @@ describe('UserRoleView — Users tab interactions (real ops mocked)', () => {
     expect(querySlots.Users.refetch).toHaveBeenCalled()
   })
 
-  it('reset password failure surfaces the failure toast and reveals nothing', async () => {
+  it('reset password failure surfaces the backend error and reveals nothing', async () => {
     mutateFns.ResetUserPassword = vi.fn().mockRejectedValue(new Error('nope'))
     vi.spyOn(console, 'error').mockImplementation(() => {})
     setUsers([makeUser({ username: 'alice' })])
@@ -401,8 +401,11 @@ describe('UserRoleView — Users tab interactions (real ops mocked)', () => {
     click(confirmButton(confirmDialog()!))
     await flushPromises()
 
-    expect(toastMessages()).toContain(locale.t('users.toast.resetPwdFail'))
-    expect(toastMessages()).not.toContain(locale.t('users.toast.resetPwdOk'))
+    // PR #23: error toasts route through graphqlErrorMessage, so the toast
+    // surfaces the backend message ("nope") rather than the localized fallback.
+    const messages = toastMessages()
+    expect(messages.some((m) => m.includes('nope'))).toBe(true)
+    expect(messages).not.toContain(locale.t('users.toast.resetPwdOk'))
     expect(querySlots.Users.refetch).not.toHaveBeenCalled()
   })
 

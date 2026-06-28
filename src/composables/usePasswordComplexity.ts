@@ -4,11 +4,14 @@
  * GraphQL resolvers (authoritative second check).
  *
  * Rules (mirrored on both sides so the UX and the backend agree):
- *   - length >= 10
+ *   - length >= 12
  *   - contains at least one uppercase letter
  *   - contains at least one lowercase letter
  *   - contains at least one digit
- *   - contains at least one symbol from `!@#$%^&*()_+\-=[]{};':"\\|,.<>/?`
+ *
+ * Special symbols (!@#$%^&* etc.) are allowed but NOT required — the backend
+ * hashes via bcrypt (cost 12) and bcrypt truncates input at 72 bytes
+ * internally, so we don't enforce a max length.
  */
 
 export interface ComplexityResult {
@@ -17,23 +20,19 @@ export interface ComplexityResult {
   reasons: string[]
 }
 
-const SYMBOL_REGEX = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/
-
 export function passwordMeets(pwd: string): ComplexityResult {
   const reasons: string[] = []
-  if (!pwd || pwd.length < 10) reasons.push('长度至少 10 位')
+  if (!pwd || pwd.length < 12) reasons.push('长度至少 12 位')
   if (!/[A-Z]/.test(pwd)) reasons.push('需含大写字母')
   if (!/[a-z]/.test(pwd)) reasons.push('需含小写字母')
   if (!/\d/.test(pwd)) reasons.push('需含数字')
-  if (!SYMBOL_REGEX.test(pwd)) reasons.push('需含特殊符号')
   return { ok: reasons.length === 0, reasons }
 }
 
 const UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
 const LOWER = 'abcdefghijkmnopqrstuvwxyz'
 const DIGIT = '23456789'
-const SYMBOL = '!@#$%^&*'
-const ALL = UPPER + LOWER + DIGIT + SYMBOL
+const ALL = UPPER + LOWER + DIGIT
 
 /** Returns a float in [0, 1) using `crypto.getRandomValues` — browser-native
  *  CSPRNG, no dependency on `Math.random`. */
@@ -53,9 +52,9 @@ function pick(s: string): string {
  * while still being paste-able.
  */
 export function generatePassword(length = 16): string {
-  // Seed one of each category so the result always passes the complexity
-  // rules; then fill the rest with mixed characters.
-  const chars = [pick(UPPER), pick(LOWER), pick(DIGIT), pick(SYMBOL)]
+  // Seed one of each required category so the result always passes the
+  // complexity rules; then fill the rest with mixed characters.
+  const chars = [pick(UPPER), pick(LOWER), pick(DIGIT)]
   while (chars.length < length) chars.push(pick(ALL))
 
   // Fisher–Yates shuffle so the category seeds aren't always at the front.

@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import { useLocaleStore } from '@/stores/locale'
 import SideNav from './SideNav.vue'
 import BrandLogo from './BrandLogo.vue'
 import ThemeToggle from './ThemeToggle.vue'
 import LangSwitcher from './LangSwitcher.vue'
 import UserMenu from './UserMenu.vue'
+import ChangePasswordModal from './ChangePasswordModal.vue'
 import './icons'
 
+const auth = useAuthStore()
 const locale = useLocaleStore()
 
 const sidebarCollapsed = ref(false)
@@ -44,9 +47,11 @@ watch(() => locale.locale, syncTitle)
       :collapsed="sidebarCollapsed"
       @toggle="sidebarCollapsed = !sidebarCollapsed"
     />
-    <main class="content">
-      <RouterView />
+    <main class="content" :class="{ 'content-empty': auth.mustChangePassword }">
+      <RouterView v-if="!auth.mustChangePassword" />
     </main>
+
+    <ChangePasswordModal v-if="auth.mustChangePassword" />
   </div>
 </template>
 
@@ -148,5 +153,12 @@ watch(() => locale.locale, syncTitle)
      only when the user opts in (e.g. via `cds-grid` `height="..."`). */
   min-width: 0;
   overflow: hidden;
+}
+/* When the user must change their password, the content area renders as a
+   calm empty surface so the modal reads as the only "real" content. The
+   RouterView is hidden, so children don't fetch or display data behind the
+   modal. */
+.content-empty {
+  background: var(--cds-alias-object-app-background, #fafafa);
 }
 </style>
