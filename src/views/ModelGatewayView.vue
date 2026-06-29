@@ -7,32 +7,30 @@ import {
   CREATE_MODEL_GATEWAY,
   DELETE_MODEL_GATEWAY,
   MODEL_GATEWAYS_QUERY,
-  TEST_MODEL_GATEWAY_CONNECTION,
-  UPDATE_MODEL_GATEWAY,
+  SYNC_MODEL_GATEWAY_CONNECTION,
 } from '@/api/graphql/queries/model-gateways'
 import type {
   CreateModelGatewayResult,
   CreateModelGatewayVars,
   DeleteModelGatewayResult,
   DeleteModelGatewayVars,
+  LoadBalancingStrategy,
   ModelGateway,
   ModelGatewayFilterInput,
   ModelGatewayInput,
   ModelGatewaySort,
   ModelGatewaySortField,
+  ModelGatewaySyncState,
   ModelGatewaysQueryResult,
   ModelGatewaysQueryVars,
   PageInput,
-  TestModelGatewayConnectionResult,
-  TestModelGatewayConnectionVars,
-  UpdateModelGatewayResult,
-  UpdateModelGatewayVars,
+  SyncModelGatewayConnectionPayload,
+  SyncModelGatewayConnectionVars,
 } from '@/types/model-gateway'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
-import AppDropdown from '@/components/AppDropdown.vue'
 import ModelGatewayFormModal from '@/components/ModelGatewayFormModal.vue'
-import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import '@/components/icons'
 
 const locale = useLocaleStore()
@@ -160,71 +158,90 @@ function fmtSyncAgo(iso: string | null | undefined, nowMs: number = Date.now()):
   return formatGatewayTime(iso)
 }
 
-function syncBadgeFor(gateway: ModelGateway): 'success' | 'neutral' {
-  return gateway.lastSyncStatus === 'NEVER' ? 'neutral' : 'success'
+function syncBadgeFor(gateway: ModelGateway): 'success' | 'warning' | 'danger' | 'neutral' {
+  switch (gateway.lastSyncStatus) {
+    case 'SYNCED':
+      return 'success'
+    case 'SYNCING':
+      return 'neutral'
+    case 'PARTIAL':
+      return 'warning'
+    case 'FAILED':
+      return 'danger'
+    case 'NEVER':
+    default:
+      return 'neutral'
+  }
 }
 
 function syncBadgeText(gateway: ModelGateway): string {
   if (gateway.lastSyncStatus === 'NEVER') {
     return locale.t('gateway.status.neverSynced')
   }
-  return locale
-    .t('gateway.status.syncedAgo')
-    .replace('{ago}', fmtSyncAgo(gateway.lastSyncAt))
-}
-
-async function copyName(gateway: ModelGateway) {
-  try {
-    if (navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(gateway.name)
-      } catch {
-        copyWithFallback(gateway.name)
-      }
-    } else {
-      copyWithFallback(gateway.name)
-    }
-    toast.success(locale.t('gateway.toast.copied').replace('{name}', gateway.name))
-  } catch (err) {
-    toast.error(graphqlErrorMessage(err, locale.t('gateway.toast.copyFailed')))
+  if (gateway.lastSyncStatus === 'SYNCED' && gateway.lastSyncAt) {
+    return locale
+      .t('gateway.status.syncedAgo')
+      .replace('{ago}', fmtSyncAgo(gateway.lastSyncAt))
   }
+  return locale.t(`gateway.status.${gateway.lastSyncStatus.toLowerCase()}`)
 }
 
-function copyWithFallback(value: string) {
-  const textarea = document.createElement('textarea')
-  textarea.value = value
-  textarea.style.position = 'fixed'
-  textarea.style.opacity = '0'
-  document.body.appendChild(textarea)
-  textarea.select()
-  const copied = document.execCommand('copy')
-  document.body.removeChild(textarea)
-  if (!copied) throw new Error('Copy command was rejected')
+/* Maps the backend's loadBalancingStrategy enum to a localized label for
+   the table cell. Today only ROUND_ROBIN exists, but the helper is keyed
+   on the enum so adding a new strategy only needs a new locale string +
+   a new case here. */
+function strategyLabel(strategy: LoadBalancingStrategy): string {
+  switch (strategy) {
+    case 'ROUND_ROBIN':
+      return locale.t('gateway.strategy.roundRobin')
+    default:
+      return strategy
+  }
 }
 
 const testingIDs = ref<Set<string>>(new Set())
 
-async function testConnection(gateway: ModelGateway) {
+/** Backend returns null until the first sync completes; show an em-dash
+ * so the cell still has a visible placeholder. */
+function backendModelCountText(gateway: ModelGateway): string {
+  return gateway.backendModelCount === null ? '—' : String(gateway.backendModelCount)
+}
+
+/** Trigger `syncModelGatewayConnection` for a saved gateway. The backend
+ * updates `lastSyncStatus` / `lastSyncAt` / `backendModelCount` /
+ * `loadBalancingStrategy` on success; on failure those values are
+ * preserved. Toast feedback keys off `result.success` and
+ * `result.gateway.lastSyncStatus`. */
+async function manualSync(gateway: ModelGateway) {
   if (testingIDs.value.has(gateway.id)) return
   testingIDs.value = new Set([...testingIDs.value, gateway.id])
   try {
     const response = await apolloClient.mutate<
-      TestModelGatewayConnectionResult,
-      TestModelGatewayConnectionVars
+      SyncModelGatewayConnectionPayload,
+      SyncModelGatewayConnectionVars
     >({
-      mutation: TEST_MODEL_GATEWAY_CONNECTION,
+      mutation: SYNC_MODEL_GATEWAY_CONNECTION,
       variables: { id: gateway.id },
     })
-    const test = response.data?.testModelGatewayConnection
-    if (!test) throw new Error('Missing test result')
-    if (test.success) {
-      toast.success(locale.t('gateway.toast.testSuccess').replace('{name}', gateway.name))
+    const result = response.data?.syncModelGatewayConnection
+    if (!result) throw new Error('Missing sync result')
+    const syncState: ModelGatewaySyncState = result.gateway.lastSyncStatus
+    if (result.success && syncState === 'SYNCED') {
+      toast.success(locale.t('gateway.toast.syncSuccess').replace('{name}', gateway.name))
+    } else if (result.success && syncState === 'PARTIAL') {
+      toast.warning(
+        locale
+          .t('gateway.toast.syncPartial')
+          .replace('{name}', gateway.name)
+          .replace('{success}', '?')
+          .replace('{failed}', '?'),
+      )
     } else {
-      toast.error(test.message || locale.t('gateway.toast.testFailed'))
+      toast.error(result.message || locale.t('gateway.toast.syncFailed'))
     }
     await refetch()
   } catch (err) {
-    toast.error(graphqlErrorMessage(err, locale.t('gateway.toast.testFailed')))
+    toast.error(graphqlErrorMessage(err, locale.t('gateway.toast.syncFailed')))
   } finally {
     const next = new Set(testingIDs.value)
     next.delete(gateway.id)
@@ -233,49 +250,29 @@ async function testConnection(gateway: ModelGateway) {
 }
 
 const formOpen = ref(false)
-const editingGateway = ref<ModelGateway | null>(null)
 const saving = ref(false)
 
 function openCreate() {
-  editingGateway.value = null
-  formOpen.value = true
-}
-
-function chooseLiteLLM(close: () => void) {
-  openCreate()
-  close()
-}
-
-function openEdit(gateway: ModelGateway) {
-  editingGateway.value = gateway
   formOpen.value = true
 }
 
 function closeForm() {
   if (saving.value) return
   formOpen.value = false
-  editingGateway.value = null
 }
 
 async function submitGateway(input: ModelGatewayInput) {
   if (saving.value) return
   saving.value = true
   try {
-    if (editingGateway.value) {
-      await apolloClient.mutate<UpdateModelGatewayResult, UpdateModelGatewayVars>({
-        mutation: UPDATE_MODEL_GATEWAY,
-        variables: { id: editingGateway.value.id, input },
-      })
-      toast.success(locale.t('gateway.toast.updated'))
-    } else {
-      await apolloClient.mutate<CreateModelGatewayResult, CreateModelGatewayVars>({
-        mutation: CREATE_MODEL_GATEWAY,
-        variables: { input },
-      })
-      toast.success(locale.t('gateway.toast.created'))
-    }
+    // Edit was removed — the only entry point is the top toolbar's "接入
+    // 模型网关" button, which always creates a new gateway.
+    await apolloClient.mutate<CreateModelGatewayResult, CreateModelGatewayVars>({
+      mutation: CREATE_MODEL_GATEWAY,
+      variables: { input },
+    })
+    toast.success(locale.t('gateway.toast.created'))
     formOpen.value = false
-    editingGateway.value = null
     currentPage.value = 1
     await refetch()
   } catch (err) {
@@ -285,34 +282,57 @@ async function submitGateway(input: ModelGatewayInput) {
   }
 }
 
-const deleteTarget = ref<ModelGateway | null>(null)
-const deleting = ref(false)
+/* Two-step delete: the first ConfirmDialog asks for intent; the second
+   requires the operator to type the target gateway's `name` verbatim
+   before the mutation fires. Mirrors the same flow in UsersTab.vue. */
+const showDeleteConfirm = ref<ModelGateway | null>(null)
+const showDeleteFinalConfirm = ref<ModelGateway | null>(null)
 
 function requestDelete(gateway: ModelGateway) {
-  deleteTarget.value = gateway
+  showDeleteConfirm.value = gateway
 }
 
-function closeDelete() {
-  if (!deleting.value) deleteTarget.value = null
+/* Step 1 confirm → swap into the type-to-confirm dialog. */
+function onDeleteConfirmed() {
+  const target = showDeleteConfirm.value
+  if (!target) return
+  showDeleteConfirm.value = null
+  showDeleteFinalConfirm.value = target
 }
 
-async function confirmDelete() {
-  if (!deleteTarget.value || deleting.value) return
-  deleting.value = true
+/* Step 2 confirm (gated by ConfirmDialog's input match) → run mutation. */
+async function doDelete() {
+  const target = showDeleteFinalConfirm.value
+  if (!target) return
+  showDeleteFinalConfirm.value = null
   try {
     await apolloClient.mutate<DeleteModelGatewayResult, DeleteModelGatewayVars>({
       mutation: DELETE_MODEL_GATEWAY,
-      variables: { id: deleteTarget.value.id },
+      variables: { id: target.id },
     })
     toast.success(locale.t('gateway.toast.deleted'))
-    deleteTarget.value = null
     await refetch()
   } catch (err) {
     toast.error(graphqlErrorMessage(err, locale.t('gateway.toast.deleteFailed')))
-  } finally {
-    deleting.value = false
   }
 }
+
+/* Splits the locale body template at {{name}} so the typed-input name
+   can be rendered with <strong> emphasis — same approach as the
+   UsersTab delete-final dialog. */
+const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() => {
+  const template = locale.t('gateway.delete.confirm.body')
+  const name = showDeleteFinalConfirm.value?.name ?? ''
+  const idx = template.indexOf('{{name}}')
+  if (idx < 0) {
+    return [{ text: template }]
+  }
+  return [
+    { text: template.slice(0, idx) },
+    { text: name, bold: true },
+    { text: template.slice(idx + '{{name}}'.length) },
+  ]
+})
 </script>
 
 <template>
@@ -323,25 +343,15 @@ async function confirmDelete() {
     </header>
 
     <div class="toolbar">
-      <AppDropdown align="start">
-        <template #trigger>
-          <cds-button
-            class="connect-button"
-            action="outline"
-            status="primary"
-          >
-            <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
-            {{ locale.t('gateway.connectButton') }}
-            <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
-          </cds-button>
-        </template>
-        <template #default="{ close }">
-          <button type="button" class="menu-option" @click="chooseLiteLLM(close)">
-            <cds-icon shape="router" size="sm" aria-hidden="true"></cds-icon>
-            <span>LiteLLM</span>
-          </button>
-        </template>
-      </AppDropdown>
+      <cds-button
+        class="connect-button"
+        action="outline"
+        status="primary"
+        @click="openCreate"
+      >
+        <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
+        {{ locale.t('gateway.connectButton') }}
+      </cds-button>
     </div>
 
     <div class="grid-card">
@@ -355,7 +365,7 @@ async function confirmDelete() {
         role="grid"
         :aria-label="locale.t('gateway.table.label')"
       >
-        <cds-grid-column width="20%">
+        <cds-grid-column width="14%">
           <div class="col-head">
             <span>{{ locale.t('gateway.col.name') }}</span>
             <span class="col-head-actions">
@@ -384,20 +394,16 @@ async function confirmDelete() {
         </cds-grid-column>
         <cds-grid-column width="22%">{{ locale.t('gateway.col.endpoint') }}</cds-grid-column>
         <cds-grid-column width="12%">{{ locale.t('gateway.col.sync') }}</cds-grid-column>
-        <cds-grid-column width="14%">{{ locale.t('gateway.col.createdAt') }}</cds-grid-column>
-        <cds-grid-column width="14%">{{ locale.t('gateway.col.updatedAt') }}</cds-grid-column>
-        <cds-grid-column width="18%">{{ locale.t('gateway.col.actions') }}</cds-grid-column>
+        <cds-grid-column width="10%">{{ locale.t('gateway.col.backendModelCount') }}</cds-grid-column>
+        <cds-grid-column width="10%">{{ locale.t('gateway.col.strategy') }}</cds-grid-column>
+        <cds-grid-column width="10%">{{ locale.t('gateway.col.createdAt') }}</cds-grid-column>
+        <cds-grid-column width="10%">{{ locale.t('gateway.col.updatedAt') }}</cds-grid-column>
+        <cds-grid-column width="12%">{{ locale.t('gateway.col.actions') }}</cds-grid-column>
 
         <cds-grid-row v-for="gateway in gateways" :key="gateway.id">
           <cds-grid-cell>
             <span class="name-cell">
               <strong>{{ gateway.name }}</strong>
-              <cds-button-action
-                shape="copy"
-                :aria-label="locale.t('gateway.action.copy')"
-                :title="locale.t('gateway.action.copy')"
-                @click="copyName(gateway)"
-              ></cds-button-action>
             </span>
           </cds-grid-cell>
           <cds-grid-cell>
@@ -416,6 +422,11 @@ async function confirmDelete() {
               {{ syncBadgeText(gateway) }}
             </cds-badge>
           </cds-grid-cell>
+          <cds-grid-cell class="num-cell">{{ backendModelCountText(gateway) }}</cds-grid-cell>
+          <cds-grid-cell class="strategy-cell">
+            <span v-if="gateway.loadBalancingStrategy">{{ strategyLabel(gateway.loadBalancingStrategy) }}</span>
+            <span v-else>—</span>
+          </cds-grid-cell>
           <cds-grid-cell class="time-cell">{{ formatGatewayTime(gateway.createdAt) }}</cds-grid-cell>
           <cds-grid-cell class="time-cell">{{ formatGatewayTime(gateway.updatedAt) }}</cds-grid-cell>
           <cds-grid-cell>
@@ -425,7 +436,7 @@ async function confirmDelete() {
                 class="row-action"
                 :disabled="testingIDs.has(gateway.id)"
                 :title="locale.t('gateway.action.sync')"
-                @click="testConnection(gateway)"
+                @click="manualSync(gateway)"
               >
                 <cds-icon
                   shape="sync"
@@ -434,15 +445,6 @@ async function confirmDelete() {
                   aria-hidden="true"
                 ></cds-icon>
                 <span>{{ locale.t('gateway.action.sync') }}</span>
-              </button>
-              <button
-                type="button"
-                class="row-action"
-                :title="locale.t('gateway.action.edit')"
-                @click="openEdit(gateway)"
-              >
-                <cds-icon shape="pencil" size="sm" aria-hidden="true"></cds-icon>
-                <span>{{ locale.t('gateway.action.edit') }}</span>
               </button>
               <button
                 type="button"
@@ -465,9 +467,6 @@ async function confirmDelete() {
         <cds-grid-placeholder v-else-if="!error && gateways.length === 0">
           <cds-icon shape="router" size="xl"></cds-icon>
           <p cds-text="subsection">{{ locale.t('gateway.empty') }}</p>
-          <cds-button action="outline" size="sm" @click="openCreate">
-            {{ locale.t('gateway.connectButton') }}
-          </cds-button>
         </cds-grid-placeholder>
 
         <cds-grid-footer v-if="!error && totalCount > 0">
@@ -562,18 +561,30 @@ async function confirmDelete() {
     <ModelGatewayFormModal
       v-if="formOpen"
       :open="formOpen"
-      :gateway="editingGateway"
       :saving="saving"
       @close="closeForm"
       @submit="submitGateway"
     />
-    <ConfirmDeleteModal
-      v-if="deleteTarget"
-      :open="Boolean(deleteTarget)"
-      :name="deleteTarget?.name ?? ''"
-      :deleting="deleting"
-      @close="closeDelete"
-      @confirm="confirmDelete"
+    <ConfirmDialog
+      :open="!!showDeleteConfirm"
+      :title="locale.t('gateway.delete.title')"
+      :body="locale
+        .t('gateway.delete.message')
+        .replace('{name}', showDeleteConfirm?.name ?? '')"
+      danger
+      @close="showDeleteConfirm = null"
+      @confirm="onDeleteConfirmed"
+    />
+
+    <ConfirmDialog
+      :open="!!showDeleteFinalConfirm"
+      :title="locale.t('gateway.delete.confirm.title')"
+      :body-segments="deleteFinalBodySegments"
+      :input-placeholder="locale.t('gateway.delete.confirm.inputPlaceholder')"
+      :expected-input="showDeleteFinalConfirm?.name ?? ''"
+      danger
+      @close="showDeleteFinalConfirm = null"
+      @confirm="doDelete"
     />
   </section>
 </template>
@@ -662,12 +673,6 @@ async function confirmDelete() {
   max-width: 100%;
   min-width: 0;
 }
-.name-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  min-width: 0;
-}
 .name-cell strong {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -692,10 +697,19 @@ async function confirmDelete() {
   display: inline-flex;
   white-space: nowrap;
 }
+.strategy-cell {
+  color: var(--cds-alias-typography-color-300, #565656);
+  white-space: nowrap;
+}
 .time-cell {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: var(--cds-alias-typography-color-300, #565656);
+}
+.num-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
 .row-actions {
   display: flex;
@@ -722,9 +736,6 @@ async function confirmDelete() {
   font-size: 10px;
   line-height: 1.15;
   white-space: nowrap;
-}
-.row-action:hover:not(:disabled) {
-  background: var(--cds-alias-object-app-background, #f4f4f4);
 }
 .row-action:focus-visible {
   outline: 2px solid var(--cds-alias-status-info, #0079ad);
@@ -758,14 +769,6 @@ async function confirmDelete() {
 @keyframes gateway-spin {
   to {
     transform: rotate(360deg);
-  }
-}
-@media (max-width: 980px) {
-  .grid-card {
-    overflow-x: auto;
-  }
-  .gateway-page cds-grid {
-    min-width: 980px;
   }
 }
 @media (max-width: 640px) {
