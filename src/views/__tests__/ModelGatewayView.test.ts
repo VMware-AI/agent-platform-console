@@ -552,13 +552,79 @@ describe('ModelGatewayView — ModelGatewayFormModal test connection', () => {
   })
 })
 
-describe('ModelGatewayView — delete flow', () => {
+describe('ModelGatewayView — delete flow (two-step)', () => {
+  /* `ConfirmDialog` teleports its markup to <body>. The two dialogs share
+     the same `.confirm-backdrop` selector and use a Vue `<Transition>`,
+     so at any moment only one backdrop is in the DOM — the one whose
+     `open` prop is true. Helpers below grab whichever backdrop is
+     currently visible. The two dialogs are distinguished by their title:
+       step 1 — `gateway.delete.title` ("删除模型网关接入")
+       step 2 — `gateway.delete.confirm.title` ("再次确认删除") */
   function openDelete(index: number) {
     const deleteBtn = rows()[index].querySelector<HTMLElement>('.row-action.danger')!
     deleteBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   }
 
-  it('requesting delete opens a confirm modal naming the target', async () => {
+  function currentDialog(): HTMLElement | null {
+    return document.body.querySelector<HTMLElement>('.confirm-backdrop')
+  }
+
+  function confirmButton(): HTMLElement {
+    const dialog = currentDialog()
+    if (!dialog) throw new Error('no confirm dialog open')
+    const btns = dialog.querySelectorAll<HTMLElement>('.confirm-actions cds-button')
+    return btns[1]!
+  }
+
+  function cancelButton(): HTMLElement {
+    const dialog = currentDialog()
+    if (!dialog) throw new Error('no confirm dialog open')
+    return dialog.querySelector<HTMLElement>('.confirm-actions cds-button')!
+  }
+
+  function typeToConfirmInput(): HTMLInputElement {
+    const dialog = currentDialog()
+    if (!dialog) throw new Error('no confirm dialog open')
+    const input = dialog.querySelector<HTMLInputElement>('input[type="text"]')
+    if (!input) throw new Error('type-to-confirm input missing — step-2 dialog not open')
+    return input
+  }
+
+  function isStep2Open(): boolean {
+    const dialog = currentDialog()
+    if (!dialog) return false
+    return dialog.querySelector('input[type="text"]') !== null
+  }
+
+  async function setTypeToConfirm(value: string) {
+    const input = typeToConfirmInput()
+    // Vue's controlled-input binding (`:value="typedInput"`) re-applies the
+    // reactive value back to the DOM on every render. Writing the DOM value
+    // directly and dispatching `input` would race with that and get reset
+    // on the next flush. Using the native setter bypasses Vue's tracking
+    // so the input event handler sees the value the test meant to type.
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+    setter.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    // Vue updates `typedInput` synchronously, but the re-render that
+    // re-applies `:value` to the DOM and recomputes `confirmDisabled`
+    // runs on the next microtask. Wait one tick before assertions.
+    await flushPromises()
+  }
+
+  function isConfirmDisabled(): boolean {
+    return confirmButton().getAttribute('disabled') === 'true'
+  }
+
+  function clickConfirm() {
+    confirmButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  }
+
+  function clickCancel() {
+    cancelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  }
+
+  it('row delete click opens the intent dialog naming the target', async () => {
     setListData([GW_A, GW_B])
     mountView()
     await flushPromises()
@@ -566,36 +632,100 @@ describe('ModelGatewayView — delete flow', () => {
     openDelete(1)
     await flushPromises()
 
-    const modal = deleteModal()
-    expect(modal).not.toBeNull()
-    // Message interpolates the gateway name.
+    const dialog = currentDialog()
+    expect(dialog).not.toBeNull()
     const expected = locale.t('gateway.delete.message').replace('{name}', 'Beta Router')
-    expect(modal?.textContent).toContain(expected)
+    expect(dialog?.textContent).toContain(expected)
+    expect(dialog?.querySelector('.confirm-title')?.textContent).toBe(
+      locale.t('gateway.delete.title'),
+    )
+    expect(isStep2Open()).toBe(false)
   })
 
-  it('confirming delete calls mutate with the target id, toasts deleted, refetches', async () => {
-    mutateMock.mockResolvedValue({ data: { deleteModelGateway: { deletedID: 'b' } } })
-    setListData([GW_A, GW_B])
+  it('cancel on the intent dialog closes it without calling the mutation', async () => {
+    setListData([GW_A])
     mountView()
     await flushPromises()
 
-    openDelete(1)
+    openDelete(0)
+    await flushPromises()
+    expect(currentDialog()).not.toBeNull()
+
+    clickCancel()
     await flushPromises()
 
-    // The danger button inside the confirm modal is the confirm action.
-    const confirmBtn = deleteModal()!.querySelector<HTMLElement>('cds-button[status="danger"]')!
-    confirmBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(currentDialog()).toBeNull()
+    expect(mutateMock).not.toHaveBeenCalled()
+    expect(toastMessages()).toEqual([])
+  })
+
+  it('confirming the intent dialog opens the type-to-confirm dialog', async () => {
+    setListData([GW_A])
+    mountView()
+    await flushPromises()
+
+    openDelete(0)
+    await flushPromises()
+    clickConfirm()
+    await flushPromises()
+
+    const dialog = currentDialog()
+    expect(dialog).not.toBeNull()
+    expect(dialog?.querySelector('.confirm-title')?.textContent).toBe(
+      locale.t('gateway.delete.confirm.title'),
+    )
+    expect(dialog?.querySelector('.confirm-body')?.textContent).toContain('Alpha Router')
+    expect(isStep2Open()).toBe(true)
+    // Confirm button is disabled until the typed name matches.
+    expect(isConfirmDisabled()).toBe(true)
+  })
+
+  it('step-2 confirm is disabled until the typed name matches the gateway', async () => {
+    setListData([GW_A])
+    mountView()
+    await flushPromises()
+
+    openDelete(0)
+    await flushPromises()
+    clickConfirm()
+    await flushPromises()
+
+    expect(isConfirmDisabled()).toBe(true)
+
+    // Wrong value → still disabled.
+    await setTypeToConfirm('alpha-router')   // case-sensitive, target is 'Alpha Router'
+    expect(isConfirmDisabled()).toBe(true)
+
+    // Trailing whitespace must be trimmed before matching.
+    await setTypeToConfirm('  Alpha Router  ')
+    expect(isConfirmDisabled()).toBe(false)
+  })
+
+  it('matching the type-to-confirm input fires the delete mutation, toasts success, refetches', async () => {
+    mutateMock.mockResolvedValue({ data: { deleteModelGateway: { deletedID: 'a' } } })
+    setListData([GW_A])
+    mountView()
+    await flushPromises()
+
+    openDelete(0)
+    await flushPromises()
+    clickConfirm()
+    await flushPromises()
+
+    await setTypeToConfirm('Alpha Router')
+    clickConfirm()
     await flushPromises()
 
     expect(mutateMock).toHaveBeenCalledTimes(1)
     const arg = mutateMock.mock.calls[0][0] as { variables: { id: string } }
-    expect(arg.variables.id).toBe('b')
+    expect(arg.variables.id).toBe('a')
     expect(toastMessages()).toContain(locale.t('gateway.toast.deleted'))
+    expect(toastStatuses()).toContain('success')
     expect(listSlot.refetch).toHaveBeenCalled()
-    expect(deleteModal()).toBeNull()
+    expect(currentDialog()).toBeNull()
   })
 
-  it('delete failure surfaces the backend error and keeps the modal open', async () => {
+  it('mutation failure surfaces the backend error and clears the dialog', async () => {
     mutateMock.mockRejectedValue(new Error('forbidden'))
     setListData([GW_A])
     mountView()
@@ -603,18 +733,37 @@ describe('ModelGatewayView — delete flow', () => {
 
     openDelete(0)
     await flushPromises()
-    deleteModal()!
-      .querySelector<HTMLElement>('cds-button[status="danger"]')!
-      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    clickConfirm()
+    await flushPromises()
+    await setTypeToConfirm('Alpha Router')
+    clickConfirm()
     await flushPromises()
 
-    // PR #23: backend error message surfaces via graphqlErrorMessage.
     const messages = toastMessages()
     expect(messages.some((m) => m.includes('forbidden'))).toBe(true)
     expect(toastStatuses()).toContain('danger')
     expect(messages).not.toContain(locale.t('gateway.toast.deleted'))
-    // Modal stays open (deleteTarget not cleared on failure).
-    expect(deleteModal()).not.toBeNull()
+    // The dialog was cleared before the mutation ran.
+    expect(currentDialog()).toBeNull()
+  })
+
+  it('cancel on the type-to-confirm dialog closes it without calling the mutation', async () => {
+    setListData([GW_A])
+    mountView()
+    await flushPromises()
+
+    openDelete(0)
+    await flushPromises()
+    clickConfirm()
+    await flushPromises()
+    expect(currentDialog()).not.toBeNull()
+
+    clickCancel()
+    await flushPromises()
+
+    expect(currentDialog()).toBeNull()
+    expect(mutateMock).not.toHaveBeenCalled()
+    expect(toastMessages()).toEqual([])
   })
 })
 
