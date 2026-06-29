@@ -97,7 +97,7 @@ function makeGateway(over: Partial<ModelGateway> = {}): ModelGateway {
     provider: 'LITELLM',
     endpoint: 'https://litellm.example.com',
     backendModelCount: 12,
-    loadBalancingStrategy: 'ROUND_ROBIN',
+    loadBalancingStrategy: 'SIMPLE_SHUFFLE',
     lastSyncAt: '2026-02-01T08:30:00Z',
     lastSyncStatus: 'SYNCED',
     lastSyncMessage: null,
@@ -244,10 +244,13 @@ describe('ModelGatewayView — list states', () => {
     expect(headerTextsResult).not.toContain(locale.t('gateway.col.status'))
   })
 
-  it('renders the backendModelCount cell as a number, em-dash for null', async () => {
+  it('renders the backendModelCount cell as a number, zero for never-synced', async () => {
     setListData([
       GW_A, // backendModelCount: 12
-      makeGateway({ id: 'b', name: 'Not Synced', backendModelCount: null, lastSyncStatus: 'NEVER' }),
+      // Before the first sync the DB column is NULL; the backend's
+      // `toModelGateway` projects it as `0` so the frontend never sees
+      // a nullable value here.
+      makeGateway({ id: 'b', name: 'Not Synced', backendModelCount: 0, lastSyncStatus: 'NEVER' }),
     ])
     mountView()
     await flushPromises()
@@ -258,8 +261,8 @@ describe('ModelGatewayView — list states', () => {
     expect(modelCountCell.textContent?.trim()).toBe('12')
     expect(modelCountCell.classList.contains('num-cell')).toBe(true)
 
-    const nullCells = rows()[1].querySelectorAll<HTMLElement>('cds-grid-cell')
-    expect(nullCells[3].textContent?.trim()).toBe('—')
+    const neverSyncedCells = rows()[1].querySelectorAll<HTMLElement>('cds-grid-cell')
+    expect(neverSyncedCells[3].textContent?.trim()).toBe('0')
   })
 
   it('renders the sync badge with the per-state label for SYNCING / FAILED / PARTIAL', async () => {
@@ -281,7 +284,9 @@ describe('ModelGatewayView — list states', () => {
   })
 
   it('renders an em-dash in the strategy column when the gateway has no strategy yet', async () => {
-    setListData([makeGateway({ loadBalancingStrategy: undefined as never })])
+    // Backend `loadBalancingStrategy` is nullable until the first sync
+    // populates the column from /config/router.
+    setListData([makeGateway({ loadBalancingStrategy: null })])
     mountView()
     await flushPromises()
     const row = rows()[0]
@@ -290,6 +295,26 @@ describe('ModelGatewayView — list states', () => {
     const strategyCell = row.querySelector<HTMLElement>('cds-grid-cell.strategy-cell')
     expect(strategyCell).not.toBeNull()
     expect(strategyCell?.textContent?.trim()).toBe('—')
+  })
+
+  it('maps each LoadBalancingStrategy enum value to its localized label', async () => {
+    const cases: { strategy: 'SIMPLE_SHUFFLE' | 'LEAST_BUSY' | 'LATENCY_BASED_ROUTING' | 'USAGE_BASED_ROUTING_V2' | 'COST_BASED_ROUTING'; key: string }[] = [
+      { strategy: 'SIMPLE_SHUFFLE',         key: 'gateway.strategy.simpleShuffle' },
+      { strategy: 'LEAST_BUSY',             key: 'gateway.strategy.leastBusy' },
+      { strategy: 'LATENCY_BASED_ROUTING',  key: 'gateway.strategy.latencyBasedRouting' },
+      { strategy: 'USAGE_BASED_ROUTING_V2', key: 'gateway.strategy.usageBasedRoutingV2' },
+      { strategy: 'COST_BASED_ROUTING',     key: 'gateway.strategy.costBasedRouting' },
+    ]
+    setListData(cases.map((c, i) =>
+      makeGateway({ id: `g-${i}`, name: `gw-${c.strategy}`, loadBalancingStrategy: c.strategy }),
+    ))
+    mountView()
+    await flushPromises()
+    const renderedRows = rows()
+    cases.forEach((c, i) => {
+      expect(renderedRows[i].querySelector<HTMLElement>('cds-grid-cell.strategy-cell')?.textContent?.trim())
+        .toBe(locale.t(c.key))
+    })
   })
 
   it('renders an http endpoint as a link but a non-http endpoint as plain text', async () => {

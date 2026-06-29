@@ -186,25 +186,33 @@ function syncBadgeText(gateway: ModelGateway): string {
   return locale.t(`gateway.status.${gateway.lastSyncStatus.toLowerCase()}`)
 }
 
-/* Maps the backend's loadBalancingStrategy enum to a localized label for
-   the table cell. Today only ROUND_ROBIN exists, but the helper is keyed
-   on the enum so adding a new strategy only needs a new locale string +
-   a new case here. */
+/* Maps the backend's loadBalancingStrategy enum to a localized label
+   for the table cell. The five enum values mirror the litellm
+   `routing_strategy` set on the wire (simple-shuffle → SIMPLE_SHUFFLE,
+   etc.) — see backend internal/graph/gateway_facade.go's
+   `mapRoutingStrategy`. Exhaustive over the union so adding a new
+   strategy forces a locale key + a switch case at the same time. */
 function strategyLabel(strategy: LoadBalancingStrategy): string {
   switch (strategy) {
-    case 'ROUND_ROBIN':
-      return locale.t('gateway.strategy.roundRobin')
-    default:
-      return strategy
+    case 'SIMPLE_SHUFFLE':
+      return locale.t('gateway.strategy.simpleShuffle')
+    case 'LEAST_BUSY':
+      return locale.t('gateway.strategy.leastBusy')
+    case 'LATENCY_BASED_ROUTING':
+      return locale.t('gateway.strategy.latencyBasedRouting')
+    case 'USAGE_BASED_ROUTING_V2':
+      return locale.t('gateway.strategy.usageBasedRoutingV2')
+    case 'COST_BASED_ROUTING':
+      return locale.t('gateway.strategy.costBasedRouting')
   }
 }
 
 const testingIDs = ref<Set<string>>(new Set())
 
-/** Backend returns null until the first sync completes; show an em-dash
- * so the cell still has a visible placeholder. */
+/** Backend's `toModelGateway` projects a NULL DB column as `0`, so this
+ * cell is always a non-negative integer (no em-dash needed). */
 function backendModelCountText(gateway: ModelGateway): string {
-  return gateway.backendModelCount === null ? '—' : String(gateway.backendModelCount)
+  return String(gateway.backendModelCount)
 }
 
 /** Trigger `syncModelGatewayConnection` for a saved gateway. The backend
