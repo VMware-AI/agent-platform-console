@@ -5,7 +5,7 @@
  * UX: a multi-select of every available kind=knowledge Artifact. The currently
  * mounted set is pre-checked. Submit emits the full chosen id set; the parent
  * calls `setAgentConfigKnowledge(configId, ids)` which replaces the mounted set
- * wholesale (LLD-11 K2). Mirrors the BindRoleDialog backdrop/card pattern.
+ * wholesale (LLD-11 K2).
  */
 import { computed, ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'

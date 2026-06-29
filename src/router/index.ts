@@ -50,6 +50,12 @@ const router = createRouter({
         { path: 'platform/gateway', name: 'platform.gateway', component: () => import('@/views/ModelGatewayView.vue'), meta: { admin: true } },
         // 用户与权限: createUser/assignUserRole are @hasPermission("user:manage") — admin + tenant_admin.
         { path: 'platform/users',   name: 'platform.users',   component: () => import('@/views/UserRoleView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
+
+        // 个人资料: any authenticated user; reads `me` (which all roles have).
+        // Rendered as a modal overlay (see ProfileView / AppShell) rather than
+        // a content page — the route name is the on/off switch, the URL lives
+        // in the history so back/close restores the previous page.
+        { path: 'profile', name: 'profile', component: () => import('@/views/ProfileView.vue') },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: { name: 'overview' } },

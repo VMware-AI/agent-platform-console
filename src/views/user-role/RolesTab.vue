@@ -2,94 +2,74 @@
 /**
  * Roles tab — the "角色与权限" half of `/platform/users`.
  *
- * Per spec: no permission matrix, no create / edit role. Just the 3
- * predefined roles with their `userCount` (which becomes a clickable
- * link that opens `<RoleUsersDialog />`).
- *
- * The 删除角色 button is permanently disabled for `builtIn: true` roles
- * (which is all 3 of them).
+ * Read-only by design:
+ *  - The backend has no `deleteRole` mutation; built-in roles are always
+ *    present and custom roles are managed elsewhere (RBAC matrix UI, out of
+ *    scope for this page).
+ *  - `userCount` is clickable and opens `<RoleUsersDialog />` to inspect the
+ *    users currently bound to a role.
  */
 import { computed, ref } from 'vue'
-import { useMutation, useQuery } from '@vue/apollo-composable'
+import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
-import { useToast } from '@/composables/useToast'
+import { ROLES_QUERY, ROLE_USERS_MIN_QUERY } from '@/api/graphql/queries/users'
+import { apolloClient } from '@/api/graphql/client'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
-import {
-  ROLES_QUERY,
-  USERS_BY_ROLE_QUERY,
-  DELETE_USER_MUTATION,
-} from '@/api/graphql/queries/users'
+import { useToast } from '@/composables/useToast'
 import type {
-  AccountUser,
   Role,
+  RoleUserMin,
   RolesQueryResult,
-  UsersQueryResult,
+  UsersMinQueryResult,
 } from '@/types/user-role'
 import '@/components/icons'
 
 import RoleUsersDialog from './RoleUsersDialog.vue'
-import ConfirmDialog from './ConfirmDialog.vue'
 
 const locale = useLocaleStore()
 const toast = useToast()
 
-const { result: rolesResult, loading, error, refetch: refetchRoles } =
-  useQuery<RolesQueryResult>(ROLES_QUERY, null, () => ({ fetchPolicy: 'cache-and-network' }))
+const { result: rolesResult, loading, error } = useQuery<RolesQueryResult>(
+  ROLES_QUERY,
+  null,
+  () => ({ fetchPolicy: 'cache-and-network' }),
+)
 
 const roles = computed<Role[]>(() => rolesResult.value?.roles.nodes ?? [])
 
 /* ---------- Dialog state ---------- */
 const showUsersFor = ref<Role | null>(null)
-const usersUnderRole = ref<AccountUser[]>([])
-const showDeleteConfirm = ref<Role | null>(null)
+const usersUnderRole = ref<RoleUserMin[]>([])
+const usersLoading = ref(false)
 
-/** Pull the user list under a given role directly — `users(filter:{roleId})`
- *  is a one-shot query, not the global users query (which is paginated). */
-const usersByRoleQuery = useQuery<UsersQueryResult, { roleId: string }>(
-  USERS_BY_ROLE_QUERY,
-  () => ({ roleId: showUsersFor.value?.id ?? '' }),
-  () => ({ enabled: false, fetchPolicy: 'network-only' }),
-)
-
+/** One-shot `apolloClient.query` (not the reactive `useQuery`) so the visible
+ *  Roles tab is undisturbed. The query is fired only when the user explicitly
+ *  opens the dialog; `loading` is mirrored into a local ref the dialog
+ *  consumes so the empty state doesn't flash before the round-trip resolves. */
 async function openRoleUsers(role: Role) {
   showUsersFor.value = role
   usersUnderRole.value = []
+  usersLoading.value = true
   try {
-    const r = await usersByRoleQuery.refetch({ roleId: role.id })
-    usersUnderRole.value = r?.data?.users.nodes ?? []
+    const { data } = await apolloClient.query<UsersMinQueryResult, { roleId: string }>({
+      query: ROLE_USERS_MIN_QUERY,
+      variables: { roleId: role.id },
+      fetchPolicy: 'network-only',
+    })
+    usersUnderRole.value = data.users.nodes
   } catch (err) {
-     
     console.error('[roles] load users under role failed', err)
+    toast.error(graphqlErrorMessage(err, locale.t('users.toast.loadRoleUsersFail')))
     usersUnderRole.value = []
+  } finally {
+    usersLoading.value = false
   }
 }
 
 function closeRoleUsers() {
   showUsersFor.value = null
   usersUnderRole.value = []
-}
-
-const { mutate: deleteMutate } = useMutation<{ deleteUser: { id: string } }>(
-  DELETE_USER_MUTATION,
-)
-
-function openDelete(role: Role) {
-  showDeleteConfirm.value = role
-}
-
-async function doDelete() {
-  const target = showDeleteConfirm.value
-  if (!target) return
-  showDeleteConfirm.value = null
-  try {
-    await deleteMutate({ id: target.id })
-    toast.success(locale.t('roles.toast.deleteOk').replace('{name}', target.name))
-    refetchRoles()
-  } catch (err) {
-     
-    console.error('[roles] delete role failed', err)
-    toast.error(graphqlErrorMessage(err, locale.t('roles.toast.deleteFail')))
-  }
+  usersLoading.value = false
 }
 </script>
 
@@ -105,19 +85,14 @@ async function doDelete() {
       role="grid"
       aria-label="roles"
     >
-      <cds-grid-column :width="'24%'">
+      <cds-grid-column :width="'30%'">
         <div class="col-head"><span>{{ locale.t('roles.col.name') }}</span></div>
       </cds-grid-column>
-      <cds-grid-column :width="'52%'">
+      <cds-grid-column :width="'55%'">
         <div class="col-head"><span>{{ locale.t('roles.col.description') }}</span></div>
       </cds-grid-column>
-      <cds-grid-column :width="'12%'">
+      <cds-grid-column :width="'15%'">
         <div class="col-head"><span>{{ locale.t('roles.col.userCount') }}</span></div>
-      </cds-grid-column>
-      <cds-grid-column :width="'12%'">
-        <div class="col-head col-actions">
-          <span>{{ locale.t('roles.col.actions') }}</span>
-        </div>
       </cds-grid-column>
 
       <cds-grid-row v-for="r in roles" :key="r.id">
@@ -132,15 +107,6 @@ async function doDelete() {
           >
             {{ r.userCount }}
           </button>
-        </cds-grid-cell>
-        <cds-grid-cell>
-          <cds-button-action
-            shape="trash"
-            :disabled="r.builtIn"
-            :title="r.builtIn ? locale.t('roles.action.deleteDisabledHint') : locale.t('roles.action.delete')"
-            :aria-label="r.builtIn ? locale.t('roles.action.deleteDisabledHint') : locale.t('roles.action.delete')"
-            @click="openDelete(r)"
-          ></cds-button-action>
         </cds-grid-cell>
       </cds-grid-row>
 
@@ -159,16 +125,8 @@ async function doDelete() {
       :open="!!showUsersFor"
       :role="showUsersFor"
       :users="usersUnderRole"
+      :loading="usersLoading"
       @close="closeRoleUsers"
-    />
-
-    <ConfirmDialog
-      :open="!!showDeleteConfirm"
-      :title="locale.t('roles.confirm.delete.title')"
-      :body="locale.t('roles.confirm.delete.body').replace('{name}', showDeleteConfirm?.name ?? '')"
-      danger
-      @close="showDeleteConfirm = null"
-      @confirm="doDelete"
     />
   </section>
 </template>
@@ -194,10 +152,6 @@ async function doDelete() {
   justify-content: space-between;
   gap: 6px;
   width: 100%;
-}
-
-.col-head.col-actions {
-  justify-content: flex-end;
 }
 
 .muted {

@@ -170,4 +170,87 @@ describe('ConfirmDialog', () => {
     expect(wrapper.element.querySelector?.('.confirm-backdrop') ?? null).toBeNull()
     wrapper.unmount()
   })
+
+  it('disables the confirm button while the typed input does not match expectedInput', async () => {
+    const wrapper = mountDialog({
+      inputLabel: 'Type the name',
+      expectedInput: 'alice',
+    })
+    await wrapper.vm.$nextTick()
+
+    // Sanity: when `inputLabel` IS supplied, the label is rendered.
+    expect(document.body.querySelector('.confirm-input-label')?.textContent).toBe(
+      'Type the name',
+    )
+
+    // cds-button reflects the boolean `disabled` prop as the literal string
+    // "true" / "false" in the DOM attribute. We assert the string, not
+    // `hasAttribute` (which is true for any value, including "false").
+    const isDisabled = () => confirmButton().getAttribute('disabled') === 'true'
+
+    const input = document.body.querySelector<HTMLInputElement>('input[type="text"]')!
+    expect(input).not.toBeNull()
+    expect(isDisabled()).toBe(true)
+
+    input.value = 'bob'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await wrapper.vm.$nextTick()
+    expect(isDisabled()).toBe(true)
+
+    input.value = 'alice'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await wrapper.vm.$nextTick()
+    expect(isDisabled()).toBe(false)
+
+    wrapper.unmount()
+  })
+
+  it('omits the input label when `inputLabel` is not supplied', () => {
+    const wrapper = mountDialog({ expectedInput: 'alice' })
+    expect(document.body.querySelector('.confirm-input-label')).toBeNull()
+    // The input itself is still rendered so the user can type.
+    expect(document.body.querySelector<HTMLInputElement>('input[type="text"]')).not.toBeNull()
+    wrapper.unmount()
+  })
+
+  it('renders `bodySegments` with bold segments wrapped in <strong>', () => {
+    const wrapper = mountDialog({
+      bodySegments: [
+        { text: 'Type ' },
+        { text: 'alice', bold: true },
+        { text: ' to confirm.' },
+      ],
+    })
+    const body = document.body.querySelector('.confirm-body')!
+    // Two text nodes plus one <strong>.
+    expect(body.querySelector('strong')?.textContent).toBe('alice')
+    expect(body.textContent).toBe('Type alice to confirm.')
+    // Plain `body` prop should NOT be rendered when segments win.
+    expect(body.textContent).not.toContain('This action cannot be undone.')
+    wrapper.unmount()
+  })
+
+  it('resets the typed input on every open transition (false → true)', async () => {
+    const wrapper = mountDialog({ expectedInput: 'alice' })
+
+    const isDisabled = () => confirmButton().getAttribute('disabled') === 'true'
+
+    const input = document.body.querySelector<HTMLInputElement>('input[type="text"]')!
+    input.value = 'alice'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await wrapper.vm.$nextTick()
+    expect(isDisabled()).toBe(false)
+
+    await wrapper.setProps({ open: false })
+    await wrapper.vm.$nextTick()
+    await wrapper.setProps({ open: true })
+    await wrapper.vm.$nextTick()
+
+    // The fresh DOM input is a different element, and starts empty.
+    expect(
+      document.body.querySelector<HTMLInputElement>('input[type="text"]')!.value,
+    ).toBe('')
+
+    wrapper.unmount()
+  })
 })

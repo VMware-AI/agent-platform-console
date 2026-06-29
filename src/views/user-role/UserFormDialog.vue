@@ -1,28 +1,30 @@
 <script setup lang="ts">
 /**
- * Create-only user form dialog. Per spec the row-level "编辑" button is
- * removed, so this dialog only handles the create flow.
+ * Create-only user form dialog. Mirrors the backend `CreateUser` mutation:
+ *  - Required: username, displayName, email, roleId, passwordMode
+ *  - passwordMode is a radio (auto | custom); when auto, the backend generates
+ *    a temp password which is surfaced via the <PasswordRevealDialog> opened
+ *    by the parent on success.
  *
- * Implementation note: this dialog now uses Clarity's native components
- * directly — `cds-modal` for the panel chrome, `cds-input` for text fields,
- * and `cds-select` for the role dropdown — following the official
- * https://core.clarity.design/core-components/modal / input / select
- * examples. The earlier "native <input class='app-input'>" fallback was
- * a workaround that the user has now asked us to retire.
+ * Implementation notes:
+ *  - Uses Clarity's native components directly — `cds-modal` for the panel
+ *    chrome, `cds-input` for text fields, `cds-select` for the role dropdown,
+ *    `cds-radio` for the password mode toggle — following the official
+ *    https://core.clarity.design/core-components/* examples.
  *
- * Dedupe is double-checked:
- *  1. While typing, debounce 300 ms and query `userExists(username/email)` —
- *     a small inline hint appears under the field.
- *  2. On submit, the resolver does the same check authoritatively and
- *     throws `GraphQLError('USERNAME_TAKEN' | 'EMAIL_TAKEN')` if a race
- *     condition slipped past the front-end.
+ *  - Dedupe is double-checked:
+ *     1. While typing, debounce 300 ms and query `userExists(username/email)`
+ *        — a small inline hint appears under the field.
+ *     2. On submit, the resolver does the same check authoritatively and
+ *        throws `GraphQLError('USERNAME_TAKEN' | 'EMAIL_TAKEN')` if a race
+ *        condition slipped past the front-end.
  *
- * Password section:
- *  - `radio auto | custom` (default auto)
- *  - in `auto` mode the password is server-generated and surfaced via the
- *    `<PasswordRevealDialog>` opened by the parent
- *  - in `custom` mode a cds-password input is shown with live complexity
- *    feedback; submit is disabled until the rules pass.
+ *  - Password section:
+ *     - `radio auto | custom` (default custom)
+ *     - in `auto` mode the password is server-generated and surfaced via
+ *       `<PasswordRevealDialog>` opened by the parent
+ *     - in `custom` mode a cds-password input is shown with live complexity
+ *       feedback; submit is disabled until the rules pass.
  */
 import { computed, ref, watch } from 'vue'
 import { useMutation } from '@vue/apollo-composable'
@@ -33,7 +35,7 @@ import {
   CREATE_USER_MUTATION,
   USER_EXISTS_QUERY,
 } from '@/api/graphql/queries/users'
-import type { Role, CreateUserInput, CreateUserPayload } from '@/types/user-role'
+import type { Role, CreateUserInput, CreateUserPayload, PasswordMode } from '@/types/user-role'
 import { passwordMeets } from '@/composables/usePasswordComplexity'
 import '@/components/icons'
 
@@ -55,18 +57,13 @@ const toast = useToast()
 
 /* ---------- form state ---------- */
 const username = ref('')
+const displayName = ref('')
 const email = ref('')
 const roleId = ref<string>('')
 const enabled = ref(true)
-/* Per spec the user must always supply their own password — there is no
-   "auto-generate" path on the create form. */
+const passwordMode = ref<PasswordMode>('CUSTOM')
 const customPassword = ref('')
 const confirmPassword = ref('')
-
-/* The parent (`UsersTab.vue`) now gates this dialog with `v-if="showCreate"`,
-   so the component only mounts when it should be visible. cds-modal
-   initializes its inherited `hidden` to `false` on first connect and the
-   close button emits `closeChange`, so we just forward it. */
 
 /* dedupe + validation flags */
 const usernameTaken = ref(false)
@@ -76,22 +73,17 @@ const checkingEmail = ref(false)
 let usernameTimer: number | null = null
 let emailTimer: number | null = null
 
-/* ---------- reset on open ----------
-   The parent mounts this component only when `open` is already true
-   (see UsersTab.vue `v-if="showCreate"`), so the reset block fires once
-   on mount via `immediate: true`. We do not need to imperatively set
-   any JS property on cds-modal — its internal `hidden` state initializes
-   to `false` on first connect, and the close button emits `closeChange`
-   which we forward to the parent. */
-
+/* ---------- reset on open ---------- */
 watch(
   () => props.open,
   (o) => {
     if (!o) return
     username.value = ''
+    displayName.value = ''
     email.value = ''
     roleId.value = props.roles[0]?.id ?? ''
     enabled.value = true
+    passwordMode.value = 'CUSTOM'
     customPassword.value = ''
     confirmPassword.value = ''
     usernameTaken.value = false
@@ -121,7 +113,6 @@ function scheduleUsernameCheck() {
       })
       usernameTaken.value = !!r.data?.userExists
     } catch (err) {
-       
       console.warn('[users] username dedupe check failed', err)
     } finally {
       checkingUsername.value = false
@@ -147,7 +138,6 @@ function scheduleEmailCheck() {
       })
       emailTaken.value = !!r.data?.userExists
     } catch (err) {
-       
       console.warn('[users] email dedupe check failed', err)
     } finally {
       checkingEmail.value = false
@@ -155,7 +145,8 @@ function scheduleEmailCheck() {
   }, 300)
 }
 
-/* ---------- complexity + match ---------- */
+/* ---------- complexity + match ----------
+   Only computed / consulted in CUSTOM mode. */
 const complexity = computed(() => passwordMeets(customPassword.value))
 const passwordsMatch = computed(
   () => customPassword.value === confirmPassword.value,
@@ -165,11 +156,14 @@ const passwordsMatch = computed(
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const formValid = computed(() => {
   if (!username.value.trim()) return false
+  if (!displayName.value.trim()) return false
   if (!emailRegex.test(email.value.trim())) return false
   if (!roleId.value) return false
   if (usernameTaken.value || emailTaken.value) return false
-  if (!complexity.value.ok) return false
-  if (!passwordsMatch.value) return false
+  if (passwordMode.value === 'CUSTOM') {
+    if (!complexity.value.ok) return false
+    if (!passwordsMatch.value) return false
+  }
   return true
 })
 
@@ -182,17 +176,12 @@ async function onSubmit() {
   if (!formValid.value) return
   const input: CreateUserInput = {
     username: username.value.trim(),
-    // displayName is no longer collected in the UI; the backend schema
-    // still requires the field, so we send an empty string. Once the
-    // server-side field is removed (and the type in
-    // `api/graphql/types.ts` updated to make it optional), drop this
-    // line.
-    displayName: '',
+    displayName: displayName.value.trim(),
     email: email.value.trim(),
     roleId: roleId.value,
-    passwordMode: 'CUSTOM',
+    passwordMode: passwordMode.value,
+    customPassword: passwordMode.value === 'CUSTOM' ? customPassword.value : null,
     enabled: enabled.value,
-    customPassword: customPassword.value,
   }
   try {
     const res = await createUser({ input })
@@ -227,9 +216,6 @@ function close() {
 </script>
 
 <template>
-  <!-- cds-modal is a Lit web component; we let it manage its own visibility
-       since this component is mounted only while open (see `v-if` in the
-       parent and the `watch(immediate: true)` reset block). -->
   <cds-modal
     closable
     size="md"
@@ -260,6 +246,19 @@ function close() {
               v-else-if="usernameTaken"
               status="error"
             >{{ locale.t('users.form.username.taken') }}</cds-control-message>
+          </cds-input>
+        </cds-control>
+
+        <!-- displayName (required by the backend CreateUser schema) -->
+        <cds-control>
+          <cds-input>
+            <label>{{ locale.t('users.form.displayName') }}</label>
+            <input
+              slot="input"
+              type="text"
+              :value="displayName"
+              @input="(e: Event) => displayName = (e.target as HTMLInputElement).value"
+            />
           </cds-input>
         </cds-control>
 
@@ -300,64 +299,86 @@ function close() {
           </cds-select>
         </cds-control>
 
-        <!-- password: always custom — no toggle, no auto-generate path.
-
-             IMPORTANT: cds-password is a Lit web component. Anything placed
-             inside it (other than the slotted <input slot="input">) is
-             re-projected into cds-password's shadow DOM, which only honors
-             the `input` slot — the rest is silently dropped, so neither
-             cds-control-message nor our <ul> would ever reach the page.
-             Live complexity feedback therefore lives OUTSIDE the
-             cds-password host, in two siblings:
-               - .user-form-hint  (always-on static rule, muted gray)
-               - .user-form-error (only when complexity.reasons is non-empty,
-                 red list of failing rules)
-             Both are aligned with the password input's left edge and
-             sized to the same width as the input. -->
-        <cds-control>
-          <cds-password>
-            <label>{{ locale.t('users.form.customPassword') }}</label>
-            <input
-              slot="input"
-              type="password"
-              :value="customPassword"
-              @input="(e: Event) => customPassword = (e.target as HTMLInputElement).value"
-            />
-          </cds-password>
-        </cds-control>
-
-        <div class="user-form-hint muted">
-          {{ locale.t('users.form.passwordHint') }}
+        <!-- password mode: auto | custom.
+             Native <input type="radio"> instead of <cds-radio-group>/<cds-radio>:
+             the Clarity web-component radios render an empty shell inside
+             <cds-modal>'s slot because their internal design tokens don't
+             reach the modal's teleport target. Native radios keep the same
+             behavior and styling via Clarity's design-token CSS variables.
+             Layout: the label is slotted into cds-input's own label slot so it
+             shares the same horizontal start position as the other field
+             labels ("密码", "确认密码"). The two options sit inline to the
+             right of the label, separated by a vertical divider. -->
+        <div class="pwd-mode">
+          <div class="pwd-mode-label">{{ locale.t('users.form.passwordMode.label') }}</div>
+          <div class="pwd-mode-options">
+            <label class="pwd-mode-option">
+              <input
+                type="radio"
+                name="password-mode"
+                value="CUSTOM"
+                :checked="passwordMode === 'CUSTOM'"
+                @change="passwordMode = 'CUSTOM'"
+              />
+              <span>{{ locale.t('users.form.passwordMode.custom') }}</span>
+            </label>
+            <span class="pwd-mode-divider" aria-hidden="true"></span>
+            <label class="pwd-mode-option">
+              <input
+                type="radio"
+                name="password-mode"
+                value="AUTO"
+                :checked="passwordMode === 'AUTO'"
+                @change="passwordMode = 'AUTO'"
+              />
+              <span>{{ locale.t('users.form.passwordMode.auto') }}</span>
+            </label>
+          </div>
+          <p v-if="passwordMode === 'AUTO'" class="user-form-hint muted pwd-mode-hint">
+            {{ locale.t('users.form.passwordMode.autoHint') }}
+          </p>
         </div>
-        <!-- Live complexity feedback. Only rendered once the user has typed
-             at least one character, so the form doesn't open with a red
-             error block already visible. The error line collapses all
-             failed rules into a single comma-separated sentence so the
-             message stays compact and reads as one statement instead of a
-             list (see screenshot — 5 stacked <li>s were visually noisy
-             and made the modal feel "already broken" on open). -->
-        <div
-          v-if="customPassword.length > 0 && complexity.reasons.length > 0"
-          class="user-form-error"
-          data-testid="password-complexity-errors"
-        >{{ complexity.reasons.join('，') }}</div>
 
-        <cds-control>
-          <cds-password>
-            <label>{{ locale.t('users.form.confirmPassword') }}</label>
-            <input
-              slot="input"
-              type="password"
-              :value="confirmPassword"
-              @input="(e: Event) => confirmPassword = (e.target as HTMLInputElement).value"
-            />
-          </cds-password>
-        </cds-control>
-        <div
-          v-if="confirmPassword.length > 0 && !passwordsMatch"
-          class="user-form-error"
-          data-testid="password-mismatch-error"
-        >{{ locale.t('users.form.passwordMismatch') }}</div>
+        <!-- password fields (CUSTOM only) -->
+        <template v-if="passwordMode === 'CUSTOM'">
+          <cds-control>
+            <cds-password>
+              <label>{{ locale.t('users.form.customPassword') }}</label>
+              <input
+                slot="input"
+                type="password"
+                :value="customPassword"
+                @input="(e: Event) => customPassword = (e.target as HTMLInputElement).value"
+              />
+            </cds-password>
+          </cds-control>
+
+          <div class="user-form-hint muted">
+            {{ locale.t('users.form.passwordHint') }}
+          </div>
+          <div
+            v-if="customPassword.length > 0 && complexity.reasons.length > 0"
+            class="user-form-error"
+            data-testid="password-complexity-errors"
+          >{{ complexity.reasons.join('，') }}</div>
+
+          <cds-control>
+            <cds-password>
+              <label>{{ locale.t('users.form.confirmPassword') }}</label>
+              <input
+                slot="input"
+                type="password"
+                :value="confirmPassword"
+                @input="(e: Event) => confirmPassword = (e.target as HTMLInputElement).value"
+              />
+            </cds-password>
+          </cds-control>
+          <div
+            v-if="confirmPassword.length > 0 && !passwordsMatch"
+            class="user-form-error"
+            data-testid="password-mismatch-error"
+          >{{ locale.t('users.form.passwordMismatch') }}</div>
+        </template>
 
         <!-- enabled toggle at the bottom of the form, defaults to on -->
         <cds-control>
@@ -394,31 +415,11 @@ function close() {
 
 <style scoped>
 .user-form {
-  /* Layout, gap and horizontal stretching are applied via the Clarity
-     `cds-layout="vertical align:stretch gap:md"` utility on the form
-     element — see template. This class is kept so the form remains
-     targetable in tests/devtools, and so any future form-level
-     overrides (e.g. max-width) have an obvious hook.
-
-     `max-width: 70%` shrinks the form to ~70% of the modal content
-     area so the inputs read as more compact. The form is left-aligned
-     (no auto margins) so the inputs line up flush with the modal's
-     left padding rather than floating in the middle. */
   max-width: 70%;
   margin-left: 0;
   margin-right: auto;
 }
 
-/* Password complexity rule hint, displayed under the password input.
-   `padding-left` matches the measured width of cds-internal-control-label
-   in this modal's horizontal layout (74px at default Clarity scale) so
-   the hint's left edge aligns with the password input's left edge. If
-   the form's layout or Clarity's label sizing changes, re-measure and
-   update this value.
-
-   Both classes share padding-left so they line up under the input. The
-   hint is always-on (gray) — the error block is only shown after the
-   user has typed and a rule is failing. */
 .user-form-hint,
 .user-form-error {
   padding-left: 74px;
@@ -427,22 +428,108 @@ function close() {
 .user-form-hint {
   font-size: 12px;
   color: var(--cds-alias-typography-color-300, #565656);
-  /* Pull the hint up so it sits just under the input's bottom border
-     instead of one full `gap:md` row away. */
   margin-top: -8px;
 }
 
 .user-form-error {
-  /* Single-line comma-joined complexity feedback. See template. */
   font-size: 12px;
   color: var(--cds-alias-status-danger, #c21d00);
   margin: 2px 0 0;
 }
 
-/* The cds-modal renders into a top-level overlay (Teleport-like). Pull the
-   host out of the scoped tree by targeting it via :deep — the cds-modal
-   internals (backdrop + card) live in light DOM but the host is
-   teleported to <body> so deep selectors are required. */
+/* Password-mode row: a custom <div> grid that emulates the layout Clarity
+   uses inside cds-input (label column on the left, control on the right).
+   The label is a plain <div> with the same font-size / weight / muted color
+   as cds-input's internal label, padded to the same left offset so the
+   label's start position aligns with "密码" / "确认密码". Replaces
+   <cds-radio-group>/<cds-radio>, which renders an invisible shell inside
+   <cds-modal>. */
+.pwd-mode {
+  display: grid;
+  /* cds-input's label sits at --padding's left edge (12px by default), and
+     the field rows beneath use the same offset. Match it. */
+  grid-template-columns: 74px 1fr;
+  column-gap: 0;
+  row-gap: 4px;
+  align-items: center;
+  /* Reset the form's default cds-control margins — we manage our own. */
+  margin: 0 0 0 8px;
+  padding: 0;
+}
+.pwd-mode-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cds-alias-typography-color-300, #565656);
+  line-height: 1.4;
+  /* Same left padding as cds-input's label container (cds-input applies
+     --padding around its input control, and the label is left-aligned at
+     the same x as the input's text). */
+  padding-left: 12px;
+  padding-right: 8px;
+  align-self: center;
+}
+.pwd-mode-options {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  /* Sit on the same baseline as the label. */
+  align-self: center;
+}
+.pwd-mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 400;
+  /* Match the "密码" / "确认密码" label text — same font-size, no extra
+     weight, default text color. */
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.pwd-mode-divider {
+  width: 1px;
+  height: 14px;
+  background: var(--cds-alias-object-border-color, #d0d0d0);
+}
+.pwd-mode-option input[type='radio'] {
+  /* Native radio is the only reliable control in this slot context; let the
+     browser draw it. Accent color follows the platform primary so it matches
+     Clarity's checked state. */
+  accent-color: var(--cds-alias-status-info, #0079ad);
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+.pwd-mode-option input[type='radio']:disabled {
+  cursor: not-allowed;
+}
+.pwd-mode-option:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+/* The auto-hint is a third row spanning both columns. We force `display:
+   block` + `min-width: 0` + `width: 100%` so the grid item respects the
+   1fr track and lets text wrap normally (without it, CSS Grid's default
+   `min-width: auto` collapsed the cell to one character wide, turning
+   "由后端生成,创建后通过一次性弹窗显示" into a vertical stack). */
+.pwd-mode-hint {
+  grid-column: 1 / -1;
+  display: block;
+  min-width: 0;
+  width: 100%;
+  white-space: normal;
+  word-break: break-word;
+  /* Extra breathing room above the auto-hint so it doesn't sit flush against
+     the radio row above. Overrides .user-form-hint's -8px top margin. */
+  margin-top: 8px;
+  /* No extra padding-left — .user-form-hint already adds 74px (matches
+     the "密码须包含大小写字母..." line below the password input). */
+}
+
 :deep(cds-modal) {
   --width: 560px;
 }

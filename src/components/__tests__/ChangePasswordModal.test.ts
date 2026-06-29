@@ -74,15 +74,19 @@ function fillForm(old: string, next: string, confirm: string) {
 }
 
 function submitButton() {
-  // The submit button is the only cds-button in cds-modal-actions.
-  return wrapper!.find('cds-modal-actions cds-button')
+  // The submit button is the only <button> inside cds-modal-actions. We use
+  // a native <button> rather than <cds-button> so the themed shell is
+  // reliably visible inside the modal-actions slot (Clarity web-component
+  // styles don't reach the button's shadow root from there).
+  return wrapper!.find('cds-modal-actions .submit-btn')
 }
 
-// Clarity cds-button is a custom element: when bound via :disabled, the
-// attribute renders as the string "true" or "false" rather than being
-// present/absent. The semantic check is therefore the string value.
+// Native <button>: when bound via :disabled, the disabled property is set
+// on the element and the attribute is rendered as the empty string when
+// truthy or absent when falsy. We check the element's `disabled` property
+// rather than the attribute string for a cleaner semantic assertion.
 function buttonDisabled(): boolean {
-  return submitButton().attributes('disabled') === 'true'
+  return (submitButton().element as HTMLButtonElement).disabled === true
 }
 
 describe('ChangePasswordModal — rendering', () => {
@@ -105,6 +109,16 @@ describe('ChangePasswordModal — rendering', () => {
     const hint = wrapper!.find('[data-testid="password-hint"]')
     expect(hint.exists()).toBe(true)
     expect(hint.text()).toBe('密码须包含大小写字母、数字,长度 ≥ 12')
+  })
+
+  it('renders the submit button as a native button styled to match Clarity solid+primary', () => {
+    mountModal()
+    const btn = submitButton()
+    // The native button is what users see and click; it carries the disabled
+    // state and the .submit-btn class which provides the solid+primary look
+    // via scoped styles (Clarity design tokens).
+    expect(btn.element.tagName).toBe('BUTTON')
+    expect(btn.classes()).toContain('submit-btn')
   })
 
   it('does not show the live complexity error list until the user types', () => {

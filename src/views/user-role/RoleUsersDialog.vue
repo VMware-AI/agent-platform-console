@@ -1,18 +1,18 @@
 <script setup lang="ts">
 /**
  * Read-only "users in this role" dialog. Triggered from the Roles tab when
- * the user clicks the `userCount` cell. Shows username / email / connection
- * status / last login — never the `user.id`.
+ * the user clicks the `userCount` cell. Shows username / email / enabled
+ * status — never the `user.id`.
  */
 import { useLocaleStore } from '@/stores/locale'
-import type { AccountUser, Role } from '@/types/user-role'
-import { CONNECTION_FROM_GQL } from '@/types/user-role'
+import type { Role, RoleUserMin } from '@/types/user-role'
 import '@/components/icons'
 
 defineProps<{
   open: boolean
   role: Role | null
-  users: AccountUser[]
+  users: RoleUserMin[]
+  loading: boolean
 }>()
 
 const emit = defineEmits<{
@@ -21,20 +21,14 @@ const emit = defineEmits<{
 
 const locale = useLocaleStore()
 
-function fmtDateTime(iso: string | null): string {
-  if (!iso) return '—'
-  try {
-    return new Intl.DateTimeFormat('zh-CN', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    }).format(new Date(iso))
-  } catch {
-    return iso
-  }
+function enabledLabel(enabled: boolean): string {
+  return locale.t(
+    enabled ? 'users.roleUsers.status.enabled' : 'users.roleUsers.status.disabled',
+  )
 }
 
-function badgeStatusFor(c: AccountUser['connectionStatus']): 'success' | 'neutral' {
-  return c === 'ONLINE' ? 'success' : 'neutral'
+function enabledStatusFor(enabled: boolean): 'success' | 'neutral' {
+  return enabled ? 'success' : 'neutral'
 }
 
 function close() {
@@ -71,7 +65,12 @@ function onBackdropClick(e: MouseEvent) {
             {{ locale.t('users.roleUsers.title').replace('{name}', role.name) }}
           </h2>
 
-          <div v-if="users.length === 0" class="role-users-empty">
+          <div v-if="loading" class="role-users-loading">
+            <cds-progress-circle size="xl" status="info"></cds-progress-circle>
+            <p cds-text="subsection">{{ locale.t('users.roleUsers.loading') }}</p>
+          </div>
+
+          <div v-else-if="users.length === 0" class="role-users-empty">
             <cds-icon shape="history" size="xl"></cds-icon>
             <p cds-text="subsection">{{ locale.t('users.roleUsers.empty') }}</p>
           </div>
@@ -79,22 +78,20 @@ function onBackdropClick(e: MouseEvent) {
           <table v-else class="role-users-table" role="table">
             <thead>
               <tr>
-                <th>{{ locale.t('users.roleUsers.col.username') }}</th>
+                <th>{{ locale.t('users.roleUsers.col.name') }}</th>
                 <th>{{ locale.t('users.roleUsers.col.email') }}</th>
-                <th>{{ locale.t('users.roleUsers.col.connection') }}</th>
-                <th>{{ locale.t('users.roleUsers.col.lastLogin') }}</th>
+                <th>{{ locale.t('users.roleUsers.col.enabled') }}</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="u in users" :key="u.username">
+              <tr v-for="u in users" :key="u.id">
                 <td>{{ u.username }}</td>
                 <td>{{ u.email }}</td>
                 <td>
-                  <cds-badge :status="badgeStatusFor(u.connectionStatus)">
-                    {{ locale.t(`users.status.${CONNECTION_FROM_GQL[u.connectionStatus]}`) }}
+                  <cds-badge :status="enabledStatusFor(u.enabled)">
+                    {{ enabledLabel(u.enabled) }}
                   </cds-badge>
                 </td>
-                <td>{{ fmtDateTime(u.lastLoginAt) }}</td>
               </tr>
             </tbody>
           </table>
@@ -166,6 +163,7 @@ function onBackdropClick(e: MouseEvent) {
   font-size: 18px;
 }
 
+.role-users-loading,
 .role-users-empty {
   display: flex;
   flex-direction: column;
