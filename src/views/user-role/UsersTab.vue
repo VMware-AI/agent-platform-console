@@ -37,7 +37,7 @@ import '@/components/icons'
 
 import UserFormDialog from './UserFormDialog.vue'
 import UserEditDialog from './UserEditDialog.vue'
-import ConfirmDialog from './ConfirmDialog.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import PasswordRevealDialog from './PasswordRevealDialog.vue'
 
 const locale = useLocaleStore()
