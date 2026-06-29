@@ -94,6 +94,24 @@ export const USERS_BY_ROLE_QUERY = gql`
   }
 `
 
+/** Slim variant used by `RoleUsersDialog` — only the three columns the dialog
+ *  renders (name / email / enabled). Kept as its own operation (different op
+ *  name + selection set) so the Apollo cache doesn't accidentally satisfy the
+ *  request from a cached `UsersByRole` result that carries extra fields. */
+export const ROLE_USERS_MIN_QUERY = gql`
+  query RoleUsersMin($roleId: ID!) {
+    users(filter: { roleId: $roleId }) {
+      nodes {
+        id
+        username
+        email
+        enabled
+      }
+      totalCount
+    }
+  }
+`
+
 /** Existence check used by `UserFormDialog` for the debounced dedupe. */
 export const USER_EXISTS_QUERY = gql`
   query UserExists($username: String, $email: String) {
@@ -151,18 +169,6 @@ export const TOGGLE_USER_ENABLED_MUTATION = gql`
       user {
         ...AccountUserFields
       }
-    }
-  }
-`
-
-export const ASSIGN_USERS_TO_ROLE_MUTATION = gql`
-  ${ROLE_FIELDS}
-  mutation AssignUsersToRole($input: AssignUsersToRoleInput!) {
-    assignUsersToRole(input: $input) {
-      role {
-        ...RoleFields
-      }
-      assignedCount
     }
   }
 `

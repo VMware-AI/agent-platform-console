@@ -76,6 +76,19 @@ export interface UsersQueryResult {
   users: UserConnection
 }
 
+/* ---------- RoleUsersDialog (3-column read-only view) ---------- */
+
+export interface RoleUserMin {
+  id: string
+  username: string
+  email: string
+  enabled: boolean
+}
+
+export interface UsersMinQueryResult {
+  users: { nodes: RoleUserMin[]; totalCount: number }
+}
+
 /* ---------- Roles ---------- */
 
 export interface Role {
@@ -107,14 +120,6 @@ export type PasswordMode = 'AUTO' | 'CUSTOM'
 
 export interface CreateUserInput {
   username: string
-  /**
-   * The create-user UI no longer collects a display name. The backend
-   * schema (in `mock-server.ts` / the GraphQL SDL) still requires this
-   * field as `String!`, so the front-end sends an empty string. Once
-   * the server-side field is removed from the SDL, change this back to
-   * `displayName?: string | null` and drop the `displayName: ''` line
-   * in `UserFormDialog.vue`'s submit handler.
-   */
   displayName: string
   email: string
   roleId: string
@@ -128,11 +133,6 @@ export interface UpdateUserInput {
   email?: string | null
   roleId?: string | null
   enabled?: boolean | null
-}
-
-export interface AssignUsersToRoleInput {
-  roleId: string
-  userIds: string[]
 }
 
 export interface CreateUserPayload {
@@ -154,11 +154,6 @@ export interface ToggleUserEnabledPayload {
   user: AccountUser
 }
 
-export interface AssignUsersToRolePayload {
-  role: Role
-  assignedCount: number
-}
-
 /* ---------- Mutation input shapes (consumed by @vue/apollo-composable) ---------- */
 
 export interface CreateUserVars {
@@ -176,7 +171,4 @@ export interface ResetUserPasswordVars {
 }
 export interface ToggleUserEnabledVars {
   id: string
-}
-export interface AssignUsersToRoleVars {
-  input: AssignUsersToRoleInput
 }

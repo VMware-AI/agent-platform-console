@@ -60,7 +60,8 @@
 | | 审计日志 | 🚧 Coming Soon |
 | **系统配置** | 资源池接入 | ✅ 已完成（部分显示问题待修复） |
 | | 模型网关接入 | ✅ 已完成（待验证） |
-| | 用户与权限 | ✅ 已完成（用户 CRUD、角色管理、密码重置、批量绑定） |
+| | 用户与权限 | ✅ 已完成（用户 CRUD、角色管理、密码重置、当前用户个人资料） |
+| **个人** | 个人资料 | ✅ 已完成（账户身份、最近登录、连接状态、创建时间、启用状态；通过用户菜单进入） |
 ### 快速开始
 
 **环境要求**: Node.js **>= 20**
@@ -186,7 +187,8 @@ Frontend console for the **Agent Management Platform** — a unified interface f
 | | Audit Logs | 🚧 Coming Soon |
 | **System Settings** | Resource Pools | ✅ Done (minor display issues pending) |
 | | Model Gateway Integration | ✅ Done (pending verification) |
-| | Users & Permissions | ✅ Done (CRUD, role mgmt, password reset, batch bind) |
+| | Users & Permissions | ✅ Done (user CRUD, role mgmt, password reset, current-user profile) |
+| **Personal** | Profile | ✅ Done (identity, last login, connection status, created at, enabled; opened from user menu) |
 
 
 ### Quick Start

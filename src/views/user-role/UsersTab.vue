@@ -6,7 +6,7 @@
  * header sort + per-column keyword filter dropdowns, hand-assembled pager,
  * footer summary). The differences vs AgentListView:
  *  - No row-selection checkbox column (no batch toolbar).
- *  - No row-level "编辑" button — only 重置密码 / 绑定角色 / 启禁用 / 删除.
+ *  - No row-level "编辑" button — only 重置密码 / 启禁用 / 删除.
  *  - `user.id` is fetched and held in memory but never rendered in the UI.
  *  - Dedupe lives inside `UserFormDialog`, not in this tab.
  */
@@ -36,7 +36,7 @@ import type {
 import '@/components/icons'
 
 import UserFormDialog from './UserFormDialog.vue'
-import BindRoleDialog from './BindRoleDialog.vue'
+import UserEditDialog from './UserEditDialog.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 import PasswordRevealDialog from './PasswordRevealDialog.vue'
 
@@ -116,17 +116,21 @@ function closeFilter() {
 
 /* ---------- Row action dialogs ---------- */
 const showCreate = ref(false)
-const showBindFor = ref<AccountUser | null>(null)
+const showEditFor = ref<AccountUser | null>(null)
 const showResetConfirm = ref<AccountUser | null>(null)
 const showToggleConfirm = ref<AccountUser | null>(null)
+/* Two-step delete: the first ConfirmDialog asks for general intent; the
+   second requires the user to type the target's username before the
+   mutation fires. */
 const showDeleteConfirm = ref<AccountUser | null>(null)
+const showDeleteFinalConfirm = ref<AccountUser | null>(null)
 const revealPayload = ref<{ username: string; password: string } | null>(null)
 
 function openCreate() {
   showCreate.value = true
 }
-function openBind(user: AccountUser) {
-  showBindFor.value = user
+function openEdit(user: AccountUser) {
+  showEditFor.value = user
 }
 function openReset(user: AccountUser) {
   showResetConfirm.value = user
@@ -138,7 +142,11 @@ function openDelete(user: AccountUser) {
   showDeleteConfirm.value = user
 }
 
-/* ---------- Mutations ---------- */
+/* ---------- Mutations ----------
+ * The edit dialog runs the updateUser mutation itself (so it can toast and
+ * close in lockstep with the backend response). The parent only refetches
+ * the list. Reset / toggle / delete still live here because they require
+ * the ConfirmDialog round-trip and the row stays mounted during it. */
 const { mutate: resetPwdMutate } = useMutation<{ resetUserPassword: ResetPasswordPayload }>(
   RESET_USER_PASSWORD_MUTATION,
 )
@@ -186,19 +194,38 @@ async function doToggle() {
   }
 }
 
-async function doDelete() {
+/* Step 1: the row's first confirm dialog → open the type-to-confirm dialog.
+   The actual mutation is gated behind the second confirm. */
+function onDeleteConfirmed() {
   const target = showDeleteConfirm.value
   if (!target) return
   showDeleteConfirm.value = null
+  showDeleteFinalConfirm.value = target
+}
+
+/* Step 2: the type-to-confirm dialog → run the mutation. The dialog already
+   disabled its confirm button until the username matches, so reaching here
+   is the user's explicit double-acknowledgement. */
+async function doDelete() {
+  const target = showDeleteFinalConfirm.value
+  if (!target) return
+  showDeleteFinalConfirm.value = null
   try {
     await deleteMutate({ id: target.id })
     toast.success(locale.t('users.toast.deleteOk').replace('{name}', target.username))
     refetchUsers()
   } catch (err) {
-     
+
     console.error('[users] delete user failed', err)
     toast.error(graphqlErrorMessage(err, locale.t('users.toast.deleteFail')))
   }
+}
+
+async function doEdit() {
+  // The dialog emits `submitted` after the mutation succeeds and has already
+  // toasted; here we just close the dialog and refresh the list.
+  showEditFor.value = null
+  await refetchUsers()
 }
 
 /* ---------- Pagination handlers ---------- */
@@ -259,11 +286,7 @@ function fmtDateTime(iso: string | null): string {
   }
 }
 
-/* ---------- Hand-off for BindRoleDialog "assigned" callback ---------- */
-function onAssigned() {
-  showBindFor.value = null
-  refetchUsers()
-}
+/* ---------- UserEditDialog "submitted" hand-off ---------- */
 function onCreateSubmitted(payload: {
   user: AccountUser
   generatedPassword: string | null
@@ -280,6 +303,25 @@ function onCreateSubmitted(payload: {
 function onRevealClose() {
   revealPayload.value = null
 }
+
+/* Splits the locale string at the `{{name}}` placeholder into three
+   segments — before, the (bold) username, after — so the dialog can
+   render the username with <strong> emphasis. */
+const deleteFinalBodySegments = computed<
+  { text: string; bold?: boolean }[]
+>(() => {
+  const template = locale.t('users.confirm.delete.final.body')
+  const name = showDeleteFinalConfirm.value?.username ?? ''
+  const idx = template.indexOf('{{name}}')
+  if (idx < 0) {
+    return [{ text: template }]
+  }
+  return [
+    { text: template.slice(0, idx) },
+    { text: name, bold: true },
+    { text: template.slice(idx + '{{name}}'.length) },
+  ]
+})
 </script>
 
 <template>
@@ -303,7 +345,7 @@ function onRevealClose() {
       aria-label="users"
     >
       <!-- Column: username -->
-      <cds-grid-column :width="'14%'">
+      <cds-grid-column :width="'12%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.username') }}</span>
           <span class="col-head-actions">
@@ -336,7 +378,7 @@ function onRevealClose() {
       </cds-grid-column>
 
       <!-- Column: role -->
-      <cds-grid-column :width="'10%'">
+      <cds-grid-column :width="'8%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.role') }}</span>
           <span class="col-head-actions">
@@ -401,8 +443,15 @@ function onRevealClose() {
         </div>
       </cds-grid-column>
 
+      <!-- Column: enabled (status badge) -->
+      <cds-grid-column :width="'8%'">
+        <div class="col-head">
+          <span>{{ locale.t('users.col.enabled') }}</span>
+        </div>
+      </cds-grid-column>
+
       <!-- Column: last login -->
-      <cds-grid-column :width="'16%'">
+      <cds-grid-column :width="'15%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.lastLogin') }}</span>
           <span class="col-head-actions">
@@ -428,7 +477,7 @@ function onRevealClose() {
       </cds-grid-column>
 
       <!-- Column: createdAt -->
-      <cds-grid-column :width="'16%'">
+      <cds-grid-column :width="'15%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.createdAt') }}</span>
           <span class="col-head-actions">
@@ -454,7 +503,7 @@ function onRevealClose() {
       </cds-grid-column>
 
       <!-- Column: updatedAt -->
-      <cds-grid-column :width="'16%'">
+      <cds-grid-column :width="'14%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.updatedAt') }}</span>
           <span class="col-head-actions">
@@ -491,22 +540,31 @@ function onRevealClose() {
         <cds-grid-cell>{{ u.username }}</cds-grid-cell>
         <cds-grid-cell>{{ u.role.name }}</cds-grid-cell>
         <cds-grid-cell class="muted">{{ u.email }}</cds-grid-cell>
+        <cds-grid-cell>
+          <cds-badge
+            :status="u.enabled ? 'success' : 'neutral'"
+            class="status-badge"
+          >
+            <cds-icon :shape="u.enabled ? 'check-circle' : 'ban'" size="sm"></cds-icon>
+            {{ locale.t(u.enabled ? 'users.status.enabled' : 'users.status.disabled') }}
+          </cds-badge>
+        </cds-grid-cell>
         <cds-grid-cell>{{ fmtDateTime(u.lastLoginAt) }}</cds-grid-cell>
         <cds-grid-cell>{{ fmtDateTime(u.createdAt) }}</cds-grid-cell>
         <cds-grid-cell>{{ fmtDateTime(u.updatedAt) }}</cds-grid-cell>
         <cds-grid-cell>
           <span class="actions-cell">
             <cds-button-action
+              shape="users"
+              :title="locale.t('users.action.changeRole')"
+              :aria-label="locale.t('users.action.changeRole')"
+              @click="openEdit(u)"
+            ></cds-button-action>
+            <cds-button-action
               shape="lock"
               :title="locale.t('users.action.resetPwd')"
               :aria-label="locale.t('users.action.resetPwd')"
               @click="openReset(u)"
-            ></cds-button-action>
-            <cds-button-action
-              shape="users"
-              :title="locale.t('users.action.bindRole')"
-              :aria-label="locale.t('users.action.bindRole')"
-              @click="openBind(u)"
             ></cds-button-action>
             <cds-button-action
               shape="ban"
@@ -653,14 +711,13 @@ function onRevealClose() {
       @submitted="onCreateSubmitted"
     />
 
-    <BindRoleDialog
-      v-if="showBindFor"
-      :open="!!showBindFor"
-      :user="showBindFor"
+    <UserEditDialog
+      v-if="showEditFor"
+      :open="!!showEditFor"
+      :user="showEditFor"
       :roles="roles"
-      :all-users="users"
-      @close="showBindFor = null"
-      @assigned="onAssigned"
+      @close="showEditFor = null"
+      @submitted="doEdit"
     />
 
     <ConfirmDialog
@@ -685,6 +742,17 @@ function onRevealClose() {
       :body="locale.t('users.confirm.delete.body').replace('{name}', showDeleteConfirm?.username ?? '')"
       danger
       @close="showDeleteConfirm = null"
+      @confirm="onDeleteConfirmed"
+    />
+
+    <ConfirmDialog
+      :open="!!showDeleteFinalConfirm"
+      :title="locale.t('users.confirm.delete.final.title')"
+      :body-segments="deleteFinalBodySegments"
+      :input-placeholder="showDeleteFinalConfirm?.username ?? ''"
+      :expected-input="showDeleteFinalConfirm?.username ?? ''"
+      danger
+      @close="showDeleteFinalConfirm = null"
       @confirm="doDelete"
     />
 
@@ -750,15 +818,26 @@ function onRevealClose() {
   justify-content: flex-start;
 }
 
+/* Row action icons live in a tight 操作 column; the four buttons (更换角色 /
+   重置密码 / 启禁用 / 删除) at the default 4-6px gap are easy to mis-click
+   on because neighbouring targets almost touch each other. Bumping to 12px
+   puts each icon in its own hit zone. flex-wrap: wrap is kept so the row
+   gracefully drops to a second line on narrow viewports rather than
+   clipping. */
 .actions-cell {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
+/* Pill-shaped badge inside a grid cell so the enabled column reads at a
+   glance without inflating row height. cds-badge defaults to a 16px
+   min-width, which is too narrow for "已启用" / "已禁用". */
 .status-badge {
-  min-width: 48px;
+  min-width: 56px;
+  text-align: center;
+  justify-content: center;
 }
 
 .pager {

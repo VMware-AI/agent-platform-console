@@ -14,9 +14,9 @@
  *         PasswordRevealDialog reveals the generated password + refetch.
  *       * toggle enabled   → ConfirmDialog → toggleUserEnabled mutation +
  *         success toast keyed off enabled state, + refetch.
- *       * delete user      → ConfirmDialog → deleteUser mutation + toast.
+ *       * delete user      → ConfirmDialog (intent) → ConfirmDialog
+ *                            (type username) → deleteUser mutation + toast.
  *       * create user      → opens UserFormDialog.
- *       * bind role        → opens BindRoleDialog; submit → assignUsersToRole.
  *   - Roles tab: a row per role + delete disabled for builtIn roles.
  *
  * Mocking strategy (matches the codebase's view-test convention):
@@ -81,6 +81,16 @@ vi.mock('@vue/apollo-composable', () => ({
     const name = opNameOf(doc)
     const mutate = (mutateFns[name] ??= vi.fn())
     return { mutate, loading: ref(false) }
+  },
+}))
+
+// `RoleUsersDialog` is driven by an explicit `apolloClient.query(...)` call
+// (not a `useQuery` observer) so we can mirror its loading state into a local
+// ref and avoid the empty-state flash. Spy on the method for assertions.
+const apolloQueryMock = vi.fn()
+vi.mock('@/api/graphql/client', () => ({
+  apolloClient: {
+    query: (...args: unknown[]) => apolloQueryMock(...args),
   },
 }))
 
@@ -187,13 +197,6 @@ function placeholderText(grid: Element | null): string {
   return grid?.querySelector('cds-grid-placeholder')?.textContent?.trim() ?? ''
 }
 
-// Find an open dialog (Teleported to body) by its aria-label.
-function dialogByLabel(label: string): HTMLElement | null {
-  return Array.from(document.body.querySelectorAll<HTMLElement>('[aria-label]')).find(
-    (el) => el.getAttribute('aria-label') === label && el.getAttribute('role')?.includes('dialog'),
-  ) ?? null
-}
-
 // The confirm dialog body element (role=alertdialog) currently mounted.
 function confirmDialog(): HTMLElement | null {
   const dialogs = Array.from(document.body.querySelectorAll<HTMLElement>('[role="alertdialog"]'))
@@ -222,9 +225,9 @@ beforeEach(() => {
   querySlots = {
     Users: makeSlot(),
     Roles: makeSlot(),
-    UsersByRole: makeSlot(),
   }
   mutateFns = {}
+  apolloQueryMock.mockReset()
   useToast().clear()
   // jsdom has no real clipboard; stub it so PasswordRevealDialog.copy doesn't throw.
   Object.assign(navigator, {
@@ -452,19 +455,43 @@ describe('UserRoleView — Users tab interactions (real ops mocked)', () => {
     )
   })
 
-  it('delete user → confirm → deleteUser with the id + success toast + refetch', async () => {
+  it('delete user → first confirm → type-username confirm → deleteUser + success toast + refetch', async () => {
     mutateFns.DeleteUser = vi.fn().mockResolvedValue({ data: { deleteUser: { id: 'u1' } } })
     setUsers([makeUser({ id: 'u1', username: 'alice' })])
     setRoles(ROLES)
     mountView()
     await flushPromises()
 
+    // Row action → first (intent) confirm dialog.
     click(actionButton(0, locale.t('users.action.delete')))
     await flushPromises()
-    const dlg = confirmDialog()!
-    expect(dlg.textContent).toContain('alice')
+    const firstDlg = confirmDialog()!
+    expect(firstDlg.textContent).toContain('alice')
+    click(confirmButton(firstDlg))
+    await flushPromises()
 
-    click(confirmButton(dlg))
+    // Second (type-username) confirm dialog is now the latest alertdialog.
+    // Its confirm button is disabled until the input matches the username.
+    // cds-button reflects the boolean `disabled` prop as the literal string
+    // "true" / "false" in the attribute, so we compare the string, not
+    // `hasAttribute` (which is true for any value, including "false").
+    const finalDlg = confirmDialog()!
+    const isFinalDisabled = () =>
+      confirmButton(finalDlg).getAttribute('disabled') === 'true'
+    expect(isFinalDisabled()).toBe(true)
+
+    // Typing a wrong value still keeps it disabled.
+    const input = finalDlg.querySelector<HTMLInputElement>('input[type="text"]')!
+    input.value = 'bob'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushPromises()
+    expect(isFinalDisabled()).toBe(true)
+
+    // Typing the correct username enables the confirm button.
+    input.value = 'alice'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushPromises()
+    click(confirmButton(confirmDialog()!))
     await flushPromises()
 
     expect(mutateFns.DeleteUser).toHaveBeenCalledTimes(1)
@@ -474,43 +501,10 @@ describe('UserRoleView — Users tab interactions (real ops mocked)', () => {
     )
     expect(querySlots.Users.refetch).toHaveBeenCalled()
   })
-
-  it('bind role → opens BindRoleDialog → submit calls assignUsersToRole with the role + user ids', async () => {
-    mutateFns.AssignUsersToRole = vi.fn().mockResolvedValue({
-      data: { assignUsersToRole: { role: makeRole(), assignedCount: 1 } },
-    })
-    setUsers([makeUser({ id: 'u1', username: 'alice', role: { id: 'r-admin', name: 'Administrator' } })])
-    setRoles(ROLES)
-    mountView()
-    await flushPromises()
-
-    click(actionButton(0, locale.t('users.action.bindRole')))
-    await flushPromises()
-
-    const bindDlg = dialogByLabel(locale.t('users.bind.title'))
-    expect(bindDlg).not.toBeNull()
-
-    // The row's user is pre-checked, so submit is enabled. Click the submit
-    // button (last cds-button in the bind dialog actions).
-    const buttons = Array.from(bindDlg!.querySelectorAll<HTMLElement>('cds-button'))
-    click(buttons[buttons.length - 1])
-    await flushPromises()
-
-    expect(mutateFns.AssignUsersToRole).toHaveBeenCalledTimes(1)
-    const vars = mutateFns.AssignUsersToRole.mock.calls[0][0] as {
-      input: { roleId: string; userIds: string[] }
-    }
-    expect(vars.input.roleId).toBe('r-admin')
-    expect(vars.input.userIds).toContain('u1')
-    expect(toastMessages()).toContain(
-      locale.t('users.toast.bindOk').replace('{count}', '1'),
-    )
-    expect(querySlots.Users.refetch).toHaveBeenCalled()
-  })
 })
 
 describe('UserRoleView — Roles tab', () => {
-  it('renders a row per role with name + userCount, and disables delete for builtIn roles', async () => {
+  it('renders a row per role with name + userCount (no delete button — backend has no deleteRole)', async () => {
     setUsers([makeUser()])
     setRoles([
       makeRole({ id: 'r-admin', name: 'Administrator', userCount: 3, builtIn: true }),
@@ -526,13 +520,12 @@ describe('UserRoleView — Roles tab', () => {
     expect(rows[0].textContent).toContain('Administrator')
     expect(rows[0].querySelector('.user-count-link')?.textContent?.trim()).toBe('3')
 
-    // builtIn role's delete button is disabled; the custom role's is not.
-    // cds-button-action is a custom element, so the boolean `:disabled` binding
-    // reflects as the literal string "true"/"false".
-    const builtInDelete = rows[0].querySelector('cds-button-action[shape="trash"]')
-    const customDelete = rows[1].querySelector('cds-button-action[shape="trash"]')
-    expect(builtInDelete?.getAttribute('disabled')).toBe('true')
-    expect(customDelete?.getAttribute('disabled')).toBe('false')
+    // Read-only by design — no delete buttons in the rows. The custom role's
+    // delete affordance was previously present but routed to the wrong
+    // mutation (DELETE_USER_MUTATION on a role id); since the backend has
+    // no deleteRole mutation, the buttons have been removed entirely.
+    const anyDelete = roleGrid()!.querySelector('cds-button-action[shape="trash"]')
+    expect(anyDelete).toBeNull()
   })
 
   it('shows the empty placeholder when there are no roles', async () => {
@@ -546,9 +539,9 @@ describe('UserRoleView — Roles tab', () => {
     expect(placeholderText(roleGrid())).toContain(locale.t('roles.empty'))
   })
 
-  it('clicking the userCount link loads the role users via UsersByRole', async () => {
-    const underRole = [makeUser({ id: 'u1', username: 'alice' })]
-    querySlots.UsersByRole.refetch.mockResolvedValue({
+  it('clicking the userCount link loads the role users via RoleUsersMin', async () => {
+    const underRole = [{ id: 'u1', username: 'alice', email: 'a@e.com', enabled: true }]
+    apolloQueryMock.mockResolvedValue({
       data: { users: { nodes: underRole, totalCount: underRole.length } },
     })
     setUsers([makeUser()])
@@ -561,6 +554,90 @@ describe('UserRoleView — Roles tab', () => {
     click(roleGrid()!.querySelector('.user-count-link'))
     await flushPromises()
 
-    expect(querySlots.UsersByRole.refetch).toHaveBeenCalledWith({ roleId: 'r-admin' })
+    expect(apolloQueryMock).toHaveBeenCalledTimes(1)
+    expect(apolloQueryMock.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ variables: { roleId: 'r-admin' }, fetchPolicy: 'network-only' }),
+    )
+  })
+
+  it('renders the dialog with three columns (name / email / enabled) when data arrives', async () => {
+    apolloQueryMock.mockResolvedValue({
+      data: {
+        users: {
+          nodes: [
+            { id: 'u1', username: 'alice', email: 'alice@example.com', enabled: true },
+            { id: 'u2', username: 'bob', email: 'bob@example.com', enabled: false },
+          ],
+          totalCount: 2,
+        },
+      },
+    })
+    setUsers([makeUser()])
+    setRoles([makeRole({ id: 'r-admin', name: 'Administrator', userCount: 2, builtIn: true })])
+    mountView()
+    await flushPromises()
+    await switchTab(1)
+
+    click(roleGrid()!.querySelector('.user-count-link'))
+    await flushPromises()
+
+    const dialogs = Array.from(document.body.querySelectorAll<HTMLElement>('[role="dialog"]'))
+    const tableDialog = dialogs.find((d) => d.querySelector('table.role-users-table'))!
+    const headers = Array.from(tableDialog.querySelectorAll('thead th')).map(
+      (th) => th.textContent?.trim(),
+    )
+    expect(headers).toEqual([
+      locale.t('users.roleUsers.col.name'),
+      locale.t('users.roleUsers.col.email'),
+      locale.t('users.roleUsers.col.enabled'),
+    ])
+
+    const rows = Array.from(tableDialog.querySelectorAll('tbody tr'))
+    expect(rows).toHaveLength(2)
+    expect(rows[0].textContent).toContain('alice')
+    expect(rows[0].textContent).toContain('alice@example.com')
+    expect(rows[0].textContent).toContain(locale.t('users.roleUsers.status.enabled'))
+    expect(rows[1].textContent).toContain('bob')
+    expect(rows[1].textContent).toContain(locale.t('users.roleUsers.status.disabled'))
+  })
+
+  it('shows a spinner (not the empty state) while the role-users query is in flight', async () => {
+    // Never-resolving promise keeps the dialog in the loading branch.
+    apolloQueryMock.mockReturnValue(new Promise(() => {}))
+    setUsers([makeUser()])
+    setRoles([makeRole({ id: 'r-admin', name: 'Administrator', userCount: 1, builtIn: true })])
+    mountView()
+    await flushPromises()
+    await switchTab(1)
+
+    click(roleGrid()!.querySelector('.user-count-link'))
+    await flushPromises()
+
+    const dialogs = Array.from(document.body.querySelectorAll<HTMLElement>('[role="dialog"]'))
+    const dialog = dialogs[dialogs.length - 1]
+    expect(dialog.textContent).toContain(locale.t('users.roleUsers.loading'))
+    expect(dialog.querySelector('cds-progress-circle')).not.toBeNull()
+    expect(dialog.textContent).not.toContain(locale.t('users.roleUsers.empty'))
+  })
+
+  it('surfaces a failure toast and falls back to empty when the role-users query rejects', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    apolloQueryMock.mockRejectedValue(new Error('boom'))
+    setUsers([makeUser()])
+    setRoles([makeRole({ id: 'r-admin', name: 'Administrator', userCount: 1, builtIn: true })])
+    mountView()
+    await flushPromises()
+    await switchTab(1)
+
+    click(roleGrid()!.querySelector('.user-count-link'))
+    await flushPromises()
+
+    const messages = toastMessages()
+    expect(messages.some((m) => m.includes('boom'))).toBe(true)
+    const dialogs = Array.from(document.body.querySelectorAll<HTMLElement>('[role="dialog"]'))
+    const dialog = dialogs[dialogs.length - 1]
+    // Loading spinner should be gone; empty state should be visible.
+    expect(dialog.querySelector('cds-progress-circle')).toBeNull()
+    expect(dialog.textContent).toContain(locale.t('users.roleUsers.empty'))
   })
 })

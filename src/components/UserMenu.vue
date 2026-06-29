@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useLocaleStore } from '@/stores/locale'
 import AppDropdown from './AppDropdown.vue'
 import AboutDialog from './AboutDialog.vue'
+import ChangePasswordModal from './ChangePasswordModal.vue'
 import { ref } from 'vue'
 import './icons'
 
@@ -12,12 +13,20 @@ const locale = useLocaleStore()
 const router = useRouter()
 
 const aboutOpen = ref(false)
+const changePasswordOpen = ref(false)
 
 function openAbout() {
   aboutOpen.value = true
 }
 function closeAbout() {
   aboutOpen.value = false
+}
+function openChangePassword(close: () => void) {
+  close()
+  changePasswordOpen.value = true
+}
+function closeChangePassword() {
+  changePasswordOpen.value = false
 }
 
 async function onLogout() {
@@ -28,6 +37,13 @@ async function onLogout() {
   // branch bounces them back, and the user has to click Logout twice.
   await auth.logout()
   router.push({ name: 'login' })
+}
+
+async function goProfile(close: () => void) {
+  // Close the dropdown first, then navigate. Awaiting navigation isn't
+  // needed — the route guard just checks isAuthenticated.
+  close()
+  router.push({ name: 'profile' })
 }
 </script>
 
@@ -47,9 +63,13 @@ async function onLogout() {
         <div class="who-email">{{ auth.user?.email }}</div>
       </div>
       <cds-divider cds-card-remove-margin></cds-divider>
-      <button type="button" class="opt" @click="close()">
+      <button type="button" class="opt" @click="goProfile(close)">
         <cds-icon shape="user" size="sm"></cds-icon>
         <span>{{ locale.t('user.profile') }}</span>
+      </button>
+      <button type="button" class="opt" @click="openChangePassword(close)">
+        <cds-icon shape="lock" size="sm"></cds-icon>
+        <span>{{ locale.t('profile.action.changePassword') }}</span>
       </button>
       <button type="button" class="opt" @click="openAbout()">
         <cds-icon shape="info-circle" size="sm"></cds-icon>
@@ -64,6 +84,11 @@ async function onLogout() {
   </AppDropdown>
 
   <AboutDialog :open="aboutOpen" @close="closeAbout" />
+  <ChangePasswordModal
+    v-if="changePasswordOpen"
+    closable
+    @close="closeChangePassword"
+  />
 </template>
 
 <style scoped>

@@ -7,7 +7,6 @@ import {
   LOGIN_MUTATION,
   LOGOUT_MUTATION,
   ME_QUERY,
-  type AuthUser,
   type ChangePasswordResult,
   type ChangePasswordVars,
   type LoginMutationResult,
@@ -23,8 +22,32 @@ import {
 // else sessionStorage (matching the session cookie).
 const USER_STORAGE_KEY = 'clarity-auth-user'
 
-function toUser(u: AuthUser): User {
-  return { email: u.email, displayName: u.displayName || u.username }
+/** Full profile row, as returned by the `me` resolver after PR #27. Used by
+ *  the `ProfileView` and the auth store's `user` ref. */
+type MeUser = MeQueryResult['me']
+
+/** Narrower row returned by the `login` mutation — login intentionally does
+ *  not surface the profile metadata, only the identity fields. */
+type LoginUser = LoginMutationResult['login']['user']
+
+function toUser(u: MeUser | LoginUser): User {
+  // The `me` row carries the profile metadata (lastLoginAt, etc.); the login
+  // row does not — fill those in as null so the shape stays uniform and the
+  // ProfileView's `null` placeholder rendering kicks in. The login path
+  // always re-fetches `me` shortly after, so the values are populated again
+  // almost immediately.
+  const extended = u as Partial<MeUser> & LoginUser
+  return {
+    email: u.email,
+    displayName: u.displayName || u.username,
+    id: u.id,
+    username: u.username,
+    role: u.role,
+    lastLoginAt: extended.lastLoginAt ?? null,
+    connectionStatus: extended.connectionStatus ?? null,
+    createdAt: extended.createdAt ?? null,
+    enabled: extended.enabled ?? null,
+  }
 }
 
 function readStoredUser(): User | null {
