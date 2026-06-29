@@ -231,6 +231,7 @@ export const STRINGS: Dict = {
   'users.form.confirmPassword':    { zh: '确认密码',      en: '' },
   'users.form.passwordMismatch':    { zh: '两次输入的密码不一致', en: '' },
   'users.form.passwordHint':        { zh: '密码须包含大小写字母、数字,长度 ≥ 12', en: '' },
+  'users.form.requiredMark':       { zh: '*',                en: '*' },
   'users.form.submit':              { zh: '创建',          en: '' },
   'users.form.submitEdit':          { zh: '保存',          en: '' },
   'users.form.cancel':              { zh: '取消',          en: '' },

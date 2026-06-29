@@ -230,7 +230,9 @@ function close() {
         <!-- username -->
         <cds-control>
           <cds-input>
-            <label>{{ locale.t('users.form.username') }}</label>
+            <label>
+              {{ locale.t('users.form.username') }}<sup class="required-mark" aria-hidden="true">{{ locale.t('users.form.requiredMark') }}</sup>
+            </label>
             <input
               slot="input"
               type="text"
@@ -252,7 +254,9 @@ function close() {
         <!-- displayName (required by the backend CreateUser schema) -->
         <cds-control>
           <cds-input>
-            <label>{{ locale.t('users.form.displayName') }}</label>
+            <label>
+              {{ locale.t('users.form.displayName') }}<sup class="required-mark" aria-hidden="true">{{ locale.t('users.form.requiredMark') }}</sup>
+            </label>
             <input
               slot="input"
               type="text"
@@ -265,7 +269,9 @@ function close() {
         <!-- email -->
         <cds-control>
           <cds-input>
-            <label>{{ locale.t('users.form.email') }}</label>
+            <label>
+              {{ locale.t('users.form.email') }}<sup class="required-mark" aria-hidden="true">{{ locale.t('users.form.requiredMark') }}</sup>
+            </label>
             <input
               slot="input"
               type="email"
@@ -287,7 +293,9 @@ function close() {
         <!-- role -->
         <cds-control>
           <cds-select>
-            <label>{{ locale.t('users.form.role') }}</label>
+            <label>
+              {{ locale.t('users.form.role') }}<sup class="required-mark" aria-hidden="true">{{ locale.t('users.form.requiredMark') }}</sup>
+            </label>
             <select
               :value="roleId"
               @change="(e: Event) => roleId = (e.target as HTMLSelectElement).value"
@@ -343,7 +351,9 @@ function close() {
         <template v-if="passwordMode === 'CUSTOM'">
           <cds-control>
             <cds-password>
-              <label>{{ locale.t('users.form.customPassword') }}</label>
+              <label>
+                {{ locale.t('users.form.customPassword') }}<sup class="required-mark" aria-hidden="true">{{ locale.t('users.form.requiredMark') }}</sup>
+              </label>
               <input
                 slot="input"
                 type="password"
@@ -364,7 +374,9 @@ function close() {
 
           <cds-control>
             <cds-password>
-              <label>{{ locale.t('users.form.confirmPassword') }}</label>
+              <label>
+                {{ locale.t('users.form.confirmPassword') }}<sup class="required-mark" aria-hidden="true">{{ locale.t('users.form.requiredMark') }}</sup>
+              </label>
               <input
                 slot="input"
                 type="password"
@@ -435,6 +447,22 @@ function close() {
   font-size: 12px;
   color: var(--cds-alias-status-danger, #c21d00);
   margin: 2px 0 0;
+}
+
+/* Required-field marker: a red asterisk hugging the top-right of the
+   preceding label text. Rendered as <sup> so the browser does the
+   baseline-shift for us, but we additionally pull it above the cap-line
+   with negative top margin and zero out <sup>'s default whitespace below
+   the baseline so it floats at the very top. */
+.required-mark {
+  color: var(--cds-alias-status-danger, #c21d00);
+  font-size: 0.7em;
+  font-weight: 700;
+  line-height: 1;
+  /* Lift above the cap-line: -0.2em clears top-gap padding, -0.3em
+     additional pull adds the "upper-right corner" appearance. */
+  margin: -0.5em 0 0 1px;
+  display: inline-block;
 }
 
 /* Password-mode row: a custom <div> grid that emulates the layout Clarity
