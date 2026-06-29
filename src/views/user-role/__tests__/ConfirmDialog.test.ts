@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-import ConfirmDialog from '@/views/user-role/ConfirmDialog.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 /**
  * ConfirmDialog is a Teleport-to-body confirm modal driven entirely by props:

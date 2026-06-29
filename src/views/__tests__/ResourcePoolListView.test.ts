@@ -84,7 +84,7 @@ vi.mock('@vue/apollo-composable', () => ({
 // Imported AFTER the mocks are registered.
 import ResourcePoolListView from '@/views/ResourcePoolListView.vue'
 import CreateOrEditResourcePoolDialog from '@/views/resource-list/CreateOrEditResourcePoolDialog.vue'
-import ConfirmDialog from '@/views/user-role/ConfirmDialog.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 /* ---------- Fixtures ---------- */
 
