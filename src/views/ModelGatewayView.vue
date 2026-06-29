@@ -317,9 +317,11 @@ async function doDelete() {
   }
 }
 
-/* Splits the locale body template at {{name}} so the typed-input name
-   can be rendered with <strong> emphasis — same approach as the
-   UsersTab delete-final dialog. */
+/* Splits the locale body template at {{name}} and substitutes the
+   gateway's actual name in bold inline, mirroring UsersTab.vue's
+   `deleteFinalBodySegments`. The same name is also bound to the
+   dialog's `expectedInput`, so the bold text the user sees is the
+   exact value they must type. */
 const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() => {
   const template = locale.t('gateway.delete.confirm.body')
   const name = showDeleteFinalConfirm.value?.name ?? ''

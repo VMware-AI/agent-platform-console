@@ -675,6 +675,11 @@ describe('ModelGatewayView — delete flow (two-step)', () => {
       locale.t('gateway.delete.confirm.title'),
     )
     expect(dialog?.querySelector('.confirm-body')?.textContent).toContain('Alpha Router')
+    // The gateway name must render as bold inline — not as a literal
+    // `{{name}}` placeholder left in the body. (Regression guard.)
+    const bold = dialog?.querySelector('.confirm-body strong')
+    expect(bold?.textContent).toBe('Alpha Router')
+    expect(dialog?.querySelector('.confirm-body')?.textContent).not.toContain('{{name}}')
     expect(isStep2Open()).toBe(true)
     // Confirm button is disabled until the typed name matches.
     expect(isConfirmDisabled()).toBe(true)

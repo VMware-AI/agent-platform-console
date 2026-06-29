@@ -487,8 +487,8 @@ export const STRINGS: Dict = {
     en: 'Confirm Delete Again',
   },
   'gateway.delete.confirm.body': {
-    zh: '将永久删除“{{name}}”且无法恢复。请输入 {{name}} 以确认。',
-    en: 'Permanently delete "{{name}}". This action cannot be undone. Type {{name}} to confirm.',
+    zh: '将永久删除该模型网关接入且无法恢复。请输入 {{name}} 以确认。',
+    en: 'This model gateway integration will be permanently deleted. Type {{name}} to confirm.',
   },
   'gateway.delete.confirm.inputPlaceholder': {
     zh: '输入网关名称',
