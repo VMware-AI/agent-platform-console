@@ -376,9 +376,9 @@ const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
         <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
         {{ locale.t('gateway.connectButton') }}
       </cds-button>
-      <cds-button
+      <button
+        type="button"
         class="refresh-button"
-        action="ghost"
         :disabled="loading"
         :aria-label="locale.t('gateway.action.refresh')"
         :title="locale.t('gateway.action.refresh')"
@@ -390,7 +390,7 @@ const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
           :class="{ spinning: loading }"
           aria-hidden="true"
         ></cds-icon>
-      </cds-button>
+      </button>
     </div>
 
     <div class="grid-card">
@@ -801,11 +801,33 @@ const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
 .gateway-pager > label {
   color: var(--cds-alias-typography-color-300, #565656);
 }
-/* Toolbar refresh button — no chrome at all (no border, no fill).
-   action="ghost" on cds-button keeps the click target accessible
-   while the icon itself is the only visual. */
+/* Toolbar refresh button — chrome-free, just the icon.
+   Plain <button> element so we can override the cds-button
+   theme defaults (which would otherwise paint a fill on
+   ghost / outline / solid actions). */
 .refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
   flex-shrink: 0;
+  border-radius: 0;
+}
+.refresh-button:hover:not(:disabled) {
+  color: var(--cds-alias-object-app-blue, #0072a3);
+}
+.refresh-button:focus-visible {
+  outline: 2px solid var(--cds-alias-object-app-blue, #0072a3);
+  outline-offset: 2px;
+}
+.refresh-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 .spinning {
   animation: gateway-spin 1s linear infinite;
