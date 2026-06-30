@@ -7,6 +7,9 @@ IMAGE     ?= agent-platform-console
 REGISTRY  ?= quay.io/vmware-ai
 PLATFORMS ?= linux/amd64,linux/arm64
 BUILDER   ?= agent-platform-builder
+# Defaults to the official npm registry; override with NPM_REGISTRY=https://registry.npmmirror.com
+# in environments where registry.npmjs.org is unreachable (e.g. cron in mainland China).
+NPM_REGISTRY ?= https://registry.npmjs.org
 VERSION   := $(shell cat VERSION 2>/dev/null || echo "v0.0.0")
 TAG       := $(VERSION)-$(shell date -u +%Y%m%d)
 IMAGE_TAG := $(TAG)
@@ -71,6 +74,7 @@ release-images: ## Multi-arch build + push to $(REGISTRY)/$(IMAGE):$(TAG) and :l
 	docker buildx build \
 		--builder $(BUILDER) \
 		--platform $(PLATFORMS) \
+		--build-arg NPM_REGISTRY=$(NPM_REGISTRY) \
 		--tag $(REGISTRY)/$(IMAGE):$(TAG) \
 		--tag $(REGISTRY)/$(IMAGE):latest \
 		--push \
