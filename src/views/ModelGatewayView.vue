@@ -269,6 +269,20 @@ function closeForm() {
   formOpen.value = false
 }
 
+/* 立即重新拉取网关列表 — 复用视图已在用的 refetch 闭包,
+   避免在别处再开一条查询。loading 守卫防止重复点击叠加请求。 */
+async function refreshGateways() {
+  if (loading.value) return
+  try {
+    await refetch()
+    toast.success(locale.t('gateway.toast.refreshed'))
+  } catch (error) {
+    toast.error(
+      graphqlErrorMessage(error, locale.t('gateway.toast.refreshFailed')),
+    )
+  }
+}
+
 async function submitGateway(input: ModelGatewayInput) {
   if (saving.value) return
   saving.value = true
