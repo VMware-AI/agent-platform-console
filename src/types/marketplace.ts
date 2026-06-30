@@ -123,6 +123,32 @@ export interface AddOvaTemplateVersionVars {
 }
 
 /* ============================================================
+ * Content Library Items (OVA template picker in Add OVA Template dialog)
+ * ============================================================ */
+
+export interface ContentLibraryItem {
+  name: string
+  type: string
+}
+
+export interface ContentLibrariesQueryVars {
+  resourcePoolId: string
+}
+
+export interface ContentLibrariesQueryResult {
+  contentLibraries: string[]
+}
+
+export interface ContentLibraryItemsQueryVars {
+  resourcePoolId: string
+  libraryName: string
+}
+
+export interface ContentLibraryItemsQueryResult {
+  contentLibraryItems: ContentLibraryItem[]
+}
+
+/* ============================================================
  * Deploy Agent (create-from-OVA)
  *
  * The marketplace deploys a NEW agent from an OVA template version. Deploy ISSUES
@@ -151,6 +177,8 @@ export interface DeployAgentInput {
   hostname?: string | null
   /** Optional per-key spend cap handed to the gateway. */
   maxBudget?: number | null
+  /** Optional target portgroup path for the agent VM's NIC (VsphereNetwork.path). */
+  targetNetwork?: string | null
 }
 
 export interface DeployAgentPayload {
@@ -181,4 +209,20 @@ export interface VsphereResourcePoolsQueryVars {
 
 export interface VsphereResourcePoolsQueryResult {
   vsphereResourcePools: VsphereResourcePool[]
+}
+
+/** A vCenter portgroup (standard or distributed) shown in the deploy form's NIC picker. */
+export interface VsphereNetwork {
+  name: string
+  path: string
+  type: string
+  dvsName: string
+}
+
+export interface VsphereNetworksQueryVars {
+  resourcePoolId: string
+}
+
+export interface VsphereNetworksQueryResult {
+  vsphereNetworks: VsphereNetwork[]
 }

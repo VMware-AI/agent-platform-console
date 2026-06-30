@@ -517,6 +517,7 @@ const typeFilterLabel = computed(() => {
     <AddOvaTemplateDialog
       :open="createDialogOpen"
       :saving="creating"
+      :pools="pools"
       @close="closeCreateDialog"
       @submit="onSubmitCreate"
     />

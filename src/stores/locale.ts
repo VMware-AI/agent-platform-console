@@ -674,6 +674,46 @@ export const STRINGS: Dict = {
   'marketplace.form.cancel': { zh: '取消', en: 'Cancel' },
   'marketplace.form.error.name': { zh: '名称不能为空', en: 'Name is required' },
   'marketplace.form.error.version': { zh: '版本号不能为空', en: 'Version is required' },
+  'marketplace.form.resourcePool': { zh: '资源池', en: 'Resource pool' },
+  'marketplace.form.contentLibrary': { zh: '内容库', en: 'Content library' },
+  'marketplace.form.contentLibrarySelectPool': {
+    zh: '请先选择资源池',
+    en: 'Select a resource pool first',
+  },
+  'marketplace.form.contentLibraryLoading': { zh: '加载中…', en: 'Loading…' },
+  'marketplace.form.contentLibraryEmpty': {
+    zh: '该 vCenter 暂无内容库',
+    en: 'No content libraries on this vCenter',
+  },
+  'marketplace.form.contentLibraryError': {
+    zh: 'vCenter 连接失败，请先更新资源池凭据',
+    en: 'vCenter connection failed, please update resource pool credentials',
+  },
+  'marketplace.form.contentLibraryPlaceholder': {
+    zh: '请选择内容库',
+    en: 'Select content library',
+  },
+  'marketplace.form.ovaTemplate': { zh: 'OVA 模板', en: 'OVA template' },
+  'marketplace.form.ovaTemplateSelectPool': {
+    zh: '请先选择资源池',
+    en: 'Select a resource pool first',
+  },
+  'marketplace.form.ovaTemplateSelectLibrary': {
+    zh: '请先选择内容库',
+    en: 'Select a content library first',
+  },
+  'marketplace.form.ovaTemplateLoading': { zh: '加载中…', en: 'Loading…' },
+  'marketplace.form.ovaTemplateEmpty': {
+    zh: '内容库暂无 OVA 模板',
+    en: 'No OVA templates in content library',
+  },
+  'marketplace.form.ovaTemplatePlaceholder': { zh: '请选择 OVA 模板', en: 'Select OVA template' },
+  'marketplace.form.error.contentLibrary': {
+    zh: '请选择内容库',
+    en: 'Content library is required',
+  },
+  'marketplace.form.error.pool': { zh: '请选择资源池', en: 'Resource pool is required' },
+  'marketplace.form.error.ovaTemplate': { zh: '请选择 OVA 模板', en: 'OVA template is required' },
   'marketplace.form.error.ovaIdentifier': {
     zh: 'OVA 标识符不能为空',
     en: 'OVA identifier is required',
@@ -682,6 +722,8 @@ export const STRINGS: Dict = {
     zh: '标识符只能包含字母、数字、连字符、下划线和点',
     en: 'Identifier may only contain letters, digits, hyphens, underscores and dots',
   },
+  'marketplace.form.switchToCustom': { zh: '自定义', en: 'Advanced' },
+  'marketplace.form.switchToDefault': { zh: '返回默认', en: 'Default' },
 
   // 部署 Dialog (create-from-OVA)
   'marketplace.deploy.title': { zh: '从模板部署智能体', en: 'Deploy Agent from Template' },
@@ -708,6 +750,16 @@ export const STRINGS: Dict = {
   'marketplace.deploy.error.targetPool': {
     zh: '请选择 vSphere 放置资源池',
     en: 'Please select a vSphere placement pool',
+  },
+  'marketplace.deploy.targetNetwork': {
+    zh: '目标网络/端口组（可选）',
+    en: 'Target network / portgroup (optional)',
+  },
+  'marketplace.deploy.targetNetworkPlaceholder': { zh: '请选择端口组', en: 'Select a portgroup' },
+  'marketplace.deploy.targetNetworkLoading': { zh: '正在加载网络…', en: 'Loading networks…' },
+  'marketplace.deploy.targetNetworkEmpty': {
+    zh: '该 vCenter 无可用网络（将继承源模板网卡）',
+    en: 'No networks available (clone inherits the source template NIC)',
   },
   'marketplace.deploy.maxBudget': { zh: '预算上限（可选）', en: 'Budget cap (optional)' },
   'marketplace.deploy.maxBudgetPlaceholder': { zh: '如 100', en: 'e.g. 100' },
