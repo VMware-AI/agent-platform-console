@@ -376,6 +376,20 @@ const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
         <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
         {{ locale.t('gateway.connectButton') }}
       </cds-button>
+      <cds-button
+        class="refresh-button"
+        :disabled="loading"
+        :aria-label="locale.t('gateway.action.refresh')"
+        :title="locale.t('gateway.action.refresh')"
+        @click="refreshGateways"
+      >
+        <cds-icon
+          shape="refresh"
+          size="sm"
+          :class="{ spinning: loading }"
+          aria-hidden="true"
+        ></cds-icon>
+      </cds-button>
     </div>
 
     <div class="grid-card">
@@ -785,6 +799,17 @@ const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
 }
 .gateway-pager > label {
   color: var(--cds-alias-typography-color-300, #565656);
+}
+/* Toolbar refresh button — round 32x32 icon-only.
+   Spinning keyframe + reduced-motion override are defined above
+   alongside the existing test-connection spinning icon, so we
+   just reuse the .spinning class via :class binding. */
+.refresh-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 .spinning {
   animation: gateway-spin 1s linear infinite;
