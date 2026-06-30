@@ -1007,3 +1007,40 @@ describe('ModelGatewayView — name filter + pagination', () => {
     expect(prevBtn?.hasAttribute('disabled')).toBe(true)
   })
 })
+
+describe('ModelGatewayView — refresh button', () => {
+  it('clicking the refresh button calls refetch and toasts success', async () => {
+    setListData([GW_A])
+    mountView()
+    await flushPromises()
+
+    expect(listSlot.refetch).not.toHaveBeenCalled()
+
+    const btn = wrapper!.element.querySelector<HTMLElement>('.refresh-button')!
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(listSlot.refetch).toHaveBeenCalledTimes(1)
+    expect(toastMessages()).toContain(locale.t('gateway.toast.refreshed'))
+    expect(toastStatuses()).toContain('success')
+  })
+
+  it('the refresh button is disabled while loading is true', () => {
+    listSlot.loading.value = true
+    setListData([GW_A])
+    mountView()
+
+    const btn = wrapper!.element.querySelector<HTMLElement>('.refresh-button')!
+    expect(btn.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('the refresh button is enabled when not loading', () => {
+    listSlot.loading.value = false
+    setListData([GW_A])
+    mountView()
+    await flushPromises()
+
+    const btn = wrapper!.element.querySelector<HTMLElement>('.refresh-button')!
+    expect(btn.hasAttribute('disabled')).toBe(false)
+  })
+})
