@@ -597,214 +597,209 @@ function goToPage(page: number) {
         </template>
       </AppDropdown>
 
-      <cds-button
-        action="ghost"
+      <button
+        type="button"
         class="refresh-button"
         :disabled="loading"
         :aria-label="locale.t('virtualKey.action.refresh')"
         :title="locale.t('virtualKey.action.refresh')"
         @click="refreshKeys"
       >
-        <cds-icon shape="refresh" size="md" :class="{ spinning: loading }"></cds-icon>
-        <span>{{ locale.t('virtualKey.action.refresh') }}</span>
-      </cds-button>
+        <cds-icon shape="refresh" size="md" :class="{ spinning: loading }" aria-hidden="true"></cds-icon>
+      </button>
     </div>
 
-    <div class="grid-card">
-      <cds-grid
-        border="row"
-        column-layout="flex"
-        role="grid"
-        :aria-label="locale.t('virtualKey.table.label')"
-      >
-        <cds-grid-column type="action" :resizable="false">
+    <cds-grid
+      border="row"
+      column-layout="flex"
+      role="grid"
+      scroll-lock
+      :aria-label="locale.t('virtualKey.table.label')"
+    >
+      <cds-grid-column type="action" :resizable="false">
+        <input
+          type="checkbox"
+          class="app-checkbox"
+          :checked="allVisibleSelected"
+          :aria-label="locale.t('virtualKey.col.selectAll')"
+          @change="toggleSelectAll(($event.target as HTMLInputElement).checked)"
+        />
+      </cds-grid-column>
+
+      <cds-grid-column v-for="column in COLUMNS" :key="column.key" :width="column.width">
+        <div class="column-head">
+          <span>{{ locale.t(column.label) }}</span>
+          <span class="column-head-actions">
+            <cds-button-action
+              :aria-label="locale.t('virtualKey.sort').replace('{column}', locale.t(column.label))"
+              @click="toggleSort(column.key)"
+            >
+              <cds-icon
+                v-if="sortStateFor(column.key) === 'ascending'"
+                shape="angle"
+                direction="up"
+                size="sm"
+              ></cds-icon>
+              <cds-icon
+                v-else-if="sortStateFor(column.key) === 'descending'"
+                shape="angle"
+                direction="down"
+                size="sm"
+              ></cds-icon>
+              <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
+            </cds-button-action>
+            <cds-button-action
+              shape="filter"
+              :expanded="hasFilter(column.key)"
+              :aria-label="locale.t('virtualKey.filter').replace('{column}', locale.t(column.label))"
+              @click="(event: MouseEvent) => openFilterMenu(column.key, event)"
+            ></cds-button-action>
+          </span>
+        </div>
+      </cds-grid-column>
+      <cds-grid-column width="15%">{{ locale.t('virtualKey.col.actions') }}</cds-grid-column>
+
+      <cds-grid-row v-for="keyItem in visibleKeys" :key="keyItem.id">
+        <cds-grid-cell>
           <input
             type="checkbox"
             class="app-checkbox"
-            :checked="allVisibleSelected"
-            :aria-label="locale.t('virtualKey.col.selectAll')"
-            @change="toggleSelectAll(($event.target as HTMLInputElement).checked)"
+            :checked="selectedIds.has(keyItem.id)"
+            :disabled="keyItem.status === 'revoked'"
+            :aria-label="locale.t('virtualKey.col.selectKey').replace('{name}', displayName(keyItem))"
+            @change="toggleSelect(keyItem.id, ($event.target as HTMLInputElement).checked)"
           />
-        </cds-grid-column>
+        </cds-grid-cell>
 
-        <cds-grid-column v-for="column in COLUMNS" :key="column.key" :width="column.width">
-          <div class="column-head">
-            <span>{{ locale.t(column.label) }}</span>
-            <span class="column-head-actions">
-              <cds-button-action
-                :aria-label="locale.t('virtualKey.sort').replace('{column}', locale.t(column.label))"
-                @click="toggleSort(column.key)"
-              >
-                <cds-icon
-                  v-if="sortStateFor(column.key) === 'ascending'"
-                  shape="angle"
-                  direction="up"
-                  size="sm"
-                ></cds-icon>
-                <cds-icon
-                  v-else-if="sortStateFor(column.key) === 'descending'"
-                  shape="angle"
-                  direction="down"
-                  size="sm"
-                ></cds-icon>
-                <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-              </cds-button-action>
-              <cds-button-action
-                shape="filter"
-                :expanded="hasFilter(column.key)"
-                :aria-label="locale.t('virtualKey.filter').replace('{column}', locale.t(column.label))"
-                @click="(event: MouseEvent) => openFilterMenu(column.key, event)"
-              ></cds-button-action>
-            </span>
-          </div>
-        </cds-grid-column>
-        <cds-grid-column width="15%">{{ locale.t('virtualKey.col.actions') }}</cds-grid-column>
-
-        <cds-grid-row v-for="keyItem in visibleKeys" :key="keyItem.id">
-          <cds-grid-cell>
-            <input
-              type="checkbox"
-              class="app-checkbox"
-              :checked="selectedIds.has(keyItem.id)"
-              :disabled="keyItem.status === 'revoked'"
-              :aria-label="locale.t('virtualKey.col.selectKey').replace('{name}', displayName(keyItem))"
-              @change="toggleSelect(keyItem.id, ($event.target as HTMLInputElement).checked)"
-            />
-          </cds-grid-cell>
-
-          <cds-grid-cell v-for="column in COLUMNS" :key="column.key">
-            <strong v-if="column.key === 'NAME'" class="key-name" :title="displayName(keyItem)">
-              {{ displayName(keyItem) }}
-            </strong>
-            <div v-else-if="column.key === 'AGENT'" class="agent-cell">
-              <span :title="agentName(keyItem)">{{ agentName(keyItem) }}</span>
-              <button
-                v-if="keyItem.agentId"
-                type="button"
-                class="icon-action"
-                :title="locale.t('virtualKey.action.copyAgent')"
-                @click="copyValue(keyItem.agentId, 'virtualKey.toast.agentCopied')"
-              >
-                <cds-icon shape="copy" size="sm"></cds-icon>
-              </button>
-            </div>
-            <cds-badge
-              v-else-if="column.key === 'STATUS'"
-              :status="statusVariant(keyItem.status)"
-              class="status-badge"
+        <cds-grid-cell v-for="column in COLUMNS" :key="column.key">
+          <strong v-if="column.key === 'NAME'" class="key-name" :title="displayName(keyItem)">
+            {{ displayName(keyItem) }}
+          </strong>
+          <div v-else-if="column.key === 'AGENT'" class="agent-cell">
+            <span :title="agentName(keyItem)">{{ agentName(keyItem) }}</span>
+            <button
+              v-if="keyItem.agentId"
+              type="button"
+              class="icon-action"
+              :title="locale.t('virtualKey.action.copyAgent')"
+              @click="copyValue(keyItem.agentId, 'virtualKey.toast.agentCopied')"
             >
-              <cds-icon :shape="statusIcon(keyItem.status)" size="sm"></cds-icon>
-              {{ statusLabel(keyItem.status) }}
-            </cds-badge>
-            <span v-else-if="column.key === 'CREATED_AT'" class="date-cell">
-              {{ formatDateTime(keyItem.createdAt) }}
-            </span>
-            <span v-else-if="column.key === 'EXPIRES_AT'" class="date-cell">
-              {{ formatDateTime(keyItem.expiresAt) }}
-            </span>
-            <span v-else class="policy-cell" :title="keyItem.policyName">{{ keyItem.policyName }}</span>
-          </cds-grid-cell>
-
-          <cds-grid-cell>
-            <div v-if="keyItem.status !== 'revoked'" class="row-actions">
-              <AppDropdown align="end" :offset="4">
-                <template #trigger>
-                  <button
-                    type="button"
-                    class="more-button"
-                    :title="locale.t('virtualKey.action.more')"
-                    :aria-label="locale.t('virtualKey.action.more')"
-                  >
-                    <cds-icon shape="ellipsis-vertical" size="sm"></cds-icon>
-                  </button>
-                </template>
-                <template #default="{ close }">
-                  <button class="menu-option" type="button" @click="regenerate(keyItem, close)">
-                    <cds-icon shape="refresh" size="sm"></cds-icon>
-                    {{ locale.t('virtualKey.action.regenerate') }}
-                  </button>
-                  <button class="menu-option" type="button" @click="toggleEnabled(keyItem, close)">
-                    <cds-icon :shape="keyItem.status === 'active' ? 'ban' : 'check-circle'" size="sm"></cds-icon>
-                    {{ locale.t(keyItem.status === 'active' ? 'virtualKey.action.disable' : 'virtualKey.action.enable') }}
-                  </button>
-                  <button class="menu-option danger" type="button" @click="requestDelete(keyItem, close)">
-                    <cds-icon shape="trash" size="sm"></cds-icon>
-                    {{ locale.t('virtualKey.action.delete') }}
-                  </button>
-                </template>
-              </AppDropdown>
-            </div>
-            <span v-else class="revoked-note">{{ locale.t('virtualKey.status.revoked') }}</span>
-          </cds-grid-cell>
-        </cds-grid-row>
-
-        <cds-grid-placeholder v-if="visibleKeys.length === 0">
-          <cds-icon shape="key" size="xl"></cds-icon>
-          <p cds-text="subsection">{{ locale.t('virtualKey.empty') }}</p>
-          <cds-button action="outline" size="sm" @click="openCreate">
-            {{ locale.t('virtualKey.action.create') }}
-          </cds-button>
-        </cds-grid-placeholder>
-
-        <cds-grid-footer v-if="totalCount > 0">
-          <span v-if="selectedCount > 0" class="selected-summary">
-            {{ locale.t('virtualKey.selected').replace('{count}', String(selectedCount)) }}
-          </span>
-          <div class="pager">
-            <label for="virtual-key-page-size">{{ locale.t('virtualKey.pagination.pageSize') }}</label>
-            <cds-select control-width="shrink">
-              <select
-                id="virtual-key-page-size"
-                :value="pageSize"
-                :aria-label="locale.t('virtualKey.pagination.pageSize')"
-                @change="onPageSizeChange"
-              >
-                <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
-                  {{ option }}
-                </option>
-              </select>
-            </cds-select>
-            <span class="pager-summary">{{ summaryText }}</span>
-            <cds-pagination :aria-label="locale.t('virtualKey.pagination.label')">
-              <cds-pagination-button
-                action="first"
-                :disabled="currentPage <= 1"
-                :aria-label="locale.t('agents.pager.first')"
-                @click="goToPage(1)"
-              ></cds-pagination-button>
-              <cds-pagination-button
-                action="prev"
-                :disabled="currentPage <= 1"
-                :aria-label="locale.t('agents.pager.prev')"
-                @click="goToPage(currentPage - 1)"
-              ></cds-pagination-button>
-              <cds-input cds-pagination-number>
-                <input
-                  type="number"
-                  :value="currentPage"
-                  :min="1"
-                  :max="totalPages"
-                  :aria-label="locale.t('agents.pager.page')"
-                  @change="goToPage(Number(($event.target as HTMLInputElement).value))"
-                />
-              </cds-input>
-              <cds-pagination-button
-                action="next"
-                :disabled="currentPage >= totalPages"
-                :aria-label="locale.t('agents.pager.next')"
-                @click="goToPage(currentPage + 1)"
-              ></cds-pagination-button>
-              <cds-pagination-button
-                action="last"
-                :disabled="currentPage >= totalPages"
-                :aria-label="locale.t('agents.pager.last')"
-                @click="goToPage(totalPages)"
-              ></cds-pagination-button>
-            </cds-pagination>
+              <cds-icon shape="copy" size="sm"></cds-icon>
+            </button>
           </div>
-        </cds-grid-footer>
-      </cds-grid>
-    </div>
+          <cds-badge
+            v-else-if="column.key === 'STATUS'"
+            :status="statusVariant(keyItem.status)"
+            class="status-badge"
+          >
+            <cds-icon :shape="statusIcon(keyItem.status)" size="sm"></cds-icon>
+            {{ statusLabel(keyItem.status) }}
+          </cds-badge>
+          <span v-else-if="column.key === 'CREATED_AT'" class="date-cell">
+            {{ formatDateTime(keyItem.createdAt) }}
+          </span>
+          <span v-else-if="column.key === 'EXPIRES_AT'" class="date-cell">
+            {{ formatDateTime(keyItem.expiresAt) }}
+          </span>
+          <span v-else class="policy-cell" :title="keyItem.policyName">{{ keyItem.policyName }}</span>
+        </cds-grid-cell>
+
+        <cds-grid-cell>
+          <div v-if="keyItem.status !== 'revoked'" class="row-actions">
+            <AppDropdown align="end" :offset="4">
+              <template #trigger>
+                <button
+                  type="button"
+                  class="more-button"
+                  :title="locale.t('virtualKey.action.more')"
+                  :aria-label="locale.t('virtualKey.action.more')"
+                >
+                  <cds-icon shape="ellipsis-vertical" size="sm"></cds-icon>
+                </button>
+              </template>
+              <template #default="{ close }">
+                <button class="menu-option" type="button" @click="regenerate(keyItem, close)">
+                  <cds-icon shape="refresh" size="sm"></cds-icon>
+                  {{ locale.t('virtualKey.action.regenerate') }}
+                </button>
+                <button class="menu-option" type="button" @click="toggleEnabled(keyItem, close)">
+                  <cds-icon :shape="keyItem.status === 'active' ? 'ban' : 'check-circle'" size="sm"></cds-icon>
+                  {{ locale.t(keyItem.status === 'active' ? 'virtualKey.action.disable' : 'virtualKey.action.enable') }}
+                </button>
+                <button class="menu-option danger" type="button" @click="requestDelete(keyItem, close)">
+                  <cds-icon shape="trash" size="sm"></cds-icon>
+                  {{ locale.t('virtualKey.action.delete') }}
+                </button>
+              </template>
+            </AppDropdown>
+          </div>
+          <span v-else class="revoked-note">{{ locale.t('virtualKey.status.revoked') }}</span>
+        </cds-grid-cell>
+      </cds-grid-row>
+
+      <cds-grid-placeholder v-if="visibleKeys.length === 0">
+        <cds-icon shape="key" size="xl"></cds-icon>
+        <p cds-text="subsection">{{ locale.t('virtualKey.empty') }}</p>
+      </cds-grid-placeholder>
+
+      <cds-grid-footer v-if="totalCount > 0">
+        <span v-if="selectedCount > 0" class="selected-summary">
+          {{ locale.t('virtualKey.selected').replace('{count}', String(selectedCount)) }}
+        </span>
+        <div class="pager">
+          <label for="virtual-key-page-size">{{ locale.t('virtualKey.pagination.pageSize') }}</label>
+          <cds-select control-width="shrink">
+            <select
+              id="virtual-key-page-size"
+              :value="pageSize"
+              :aria-label="locale.t('virtualKey.pagination.pageSize')"
+              @change="onPageSizeChange"
+            >
+              <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
+                {{ option }}
+              </option>
+            </select>
+          </cds-select>
+          <span class="pager-summary">{{ summaryText }}</span>
+          <cds-pagination :aria-label="locale.t('virtualKey.pagination.label')">
+            <cds-pagination-button
+              action="first"
+              :disabled="currentPage <= 1"
+              :aria-label="locale.t('agents.pager.first')"
+              @click="goToPage(1)"
+            ></cds-pagination-button>
+            <cds-pagination-button
+              action="prev"
+              :disabled="currentPage <= 1"
+              :aria-label="locale.t('agents.pager.prev')"
+              @click="goToPage(currentPage - 1)"
+            ></cds-pagination-button>
+            <cds-input cds-pagination-number>
+              <input
+                type="number"
+                :value="currentPage"
+                :min="1"
+                :max="totalPages"
+                :aria-label="locale.t('agents.pager.page')"
+                @change="goToPage(Number(($event.target as HTMLInputElement).value))"
+              />
+            </cds-input>
+            <cds-pagination-button
+              action="next"
+              :disabled="currentPage >= totalPages"
+              :aria-label="locale.t('agents.pager.next')"
+              @click="goToPage(currentPage + 1)"
+            ></cds-pagination-button>
+            <cds-pagination-button
+              action="last"
+              :disabled="currentPage >= totalPages"
+              :aria-label="locale.t('agents.pager.last')"
+              @click="goToPage(totalPages)"
+            ></cds-pagination-button>
+          </cds-pagination>
+        </div>
+      </cds-grid-footer>
+    </cds-grid>
 
     <cds-dropdown
       v-if="filterMenuAnchor && filterMenuKey"
@@ -943,22 +938,48 @@ function goToPage(page: number) {
   margin-top: 20px;
 }
 .refresh-button {
-  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 6px 8px;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+  flex-shrink: 0;
+  border-radius: 0;
 }
-.grid-card {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
-  border-radius: 6px;
-  background: var(--cds-alias-object-container-background, #fff);
+.refresh-button:hover:not(:disabled) {
+  color: var(--cds-alias-object-app-blue, #0072a3);
+}
+.refresh-button:focus-visible {
+  outline: 2px solid var(--cds-alias-object-app-blue, #0072a3);
+  outline-offset: 2px;
+}
+.refresh-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 .virtual-key-page cds-grid {
   display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
   width: 100%;
-  min-width: 960px;
-  min-height: 100%;
+  /* scroll-lock on <cds-grid> disables the shadow-DOM scroll container's
+     scrollbars; combined with min-width: 0 + max-width: 100% on the host
+     this prevents the table from ever overflowing the viewport. */
+  overflow: hidden;
+}
+/* Force cds-grid columns + cells to clip instead of expanding past their
+   intrinsic content width (which would re-introduce the inner scrollbar
+   even with scroll-lock applied). */
+.virtual-key-page cds-grid-column,
+.virtual-key-page cds-grid-cell {
+  min-width: 0;
+  overflow: hidden;
 }
 .column-head {
   display: flex;
@@ -1151,11 +1172,6 @@ function goToPage(page: number) {
 @keyframes virtual-key-spin {
   to {
     transform: rotate(360deg);
-  }
-}
-@media (max-width: 900px) {
-  .refresh-button span {
-    display: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

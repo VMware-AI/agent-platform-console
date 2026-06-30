@@ -148,7 +148,7 @@ describe('AgentListView', () => {
 
     const placeholder = wrapper.find('cds-grid-placeholder')
     expect(placeholder.exists()).toBe(true)
-    expect(placeholder.text()).toContain('暂无数据')
+    expect(placeholder.text()).toContain('暂无智能体')
     expect(rows()).toHaveLength(0)
   })
 
@@ -345,7 +345,7 @@ describe('AgentListView', () => {
     queryResult.value = makeResult([makeAgent()], 1)
     wrapper = mount(AgentListView, mountConfig)
 
-    await wrapper.find('.toolbar-refresh').trigger('click')
+    await wrapper.find('.refresh-button').trigger('click')
     expect(refetchSpy).toHaveBeenCalledTimes(1)
   })
 

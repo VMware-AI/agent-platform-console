@@ -497,8 +497,8 @@ function goToPage(page: number) {
         </template>
       </AppDropdown>
 
-      <cds-button
-        action="ghost"
+      <button
+        type="button"
         class="refresh-button"
         :disabled="loading"
         :aria-label="locale.t('modelRoute.action.refresh')"
@@ -511,386 +511,381 @@ function goToPage(page: number) {
           :class="{ spinning: loading }"
           aria-hidden="true"
         ></cds-icon>
-        <span>{{ locale.t('modelRoute.action.refresh') }}</span>
-      </cds-button>
+      </button>
     </div>
 
-    <div class="grid-card">
-      <cds-grid
-        border="row"
-        column-layout="flex"
-        role="grid"
-        :aria-label="locale.t('modelRoute.table.label')"
-      >
-        <cds-grid-column type="action" :resizable="false">
+    <cds-grid
+      border="row"
+      column-layout="flex"
+      role="grid"
+      scroll-lock
+      :aria-label="locale.t('modelRoute.table.label')"
+    >
+      <cds-grid-column type="action" :resizable="false">
+        <input
+          type="checkbox"
+          class="app-checkbox"
+          :checked="allVisibleSelected"
+          :aria-label="locale.t('modelRoute.col.selectAll')"
+          @change="toggleSelectAll(($event.target as HTMLInputElement).checked)"
+        />
+      </cds-grid-column>
+      <cds-grid-column width="18%">
+        <div class="column-head">
+          <span>{{ locale.t('modelRoute.col.name') }}</span>
+          <span class="column-head-actions">
+            <cds-button-action
+              :aria-label="
+                locale.t('modelRoute.sort').replace('{column}', locale.t('modelRoute.col.name'))
+              "
+              @click="toggleSort('NAME')"
+            >
+              <cds-icon
+                v-if="sortStateFor('NAME') === 'ascending'"
+                shape="angle"
+                direction="up"
+                size="sm"
+              ></cds-icon>
+              <cds-icon
+                v-else-if="sortStateFor('NAME') === 'descending'"
+                shape="angle"
+                direction="down"
+                size="sm"
+              ></cds-icon>
+              <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
+            </cds-button-action>
+            <cds-button-action
+              shape="filter"
+              :expanded="hasFilter('NAME')"
+              :aria-label="
+                locale.t('modelRoute.filter').replace('{column}', locale.t('modelRoute.col.name'))
+              "
+              @click="(event: MouseEvent) => openFilterMenu('NAME', event)"
+            ></cds-button-action>
+          </span>
+        </div>
+      </cds-grid-column>
+      <cds-grid-column width="18%">
+        <div class="column-head">
+          <span>{{ locale.t('modelRoute.col.gateway') }}</span>
+          <span class="column-head-actions">
+            <cds-button-action
+              :aria-label="
+                locale
+                  .t('modelRoute.sort')
+                  .replace('{column}', locale.t('modelRoute.col.gateway'))
+              "
+              @click="toggleSort('GATEWAY')"
+            >
+              <cds-icon
+                v-if="sortStateFor('GATEWAY') === 'ascending'"
+                shape="angle"
+                direction="up"
+                size="sm"
+              ></cds-icon>
+              <cds-icon
+                v-else-if="sortStateFor('GATEWAY') === 'descending'"
+                shape="angle"
+                direction="down"
+                size="sm"
+              ></cds-icon>
+              <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
+            </cds-button-action>
+            <cds-button-action
+              shape="filter"
+              :expanded="hasFilter('GATEWAY')"
+              :aria-label="
+                locale
+                  .t('modelRoute.filter')
+                  .replace('{column}', locale.t('modelRoute.col.gateway'))
+              "
+              @click="(event: MouseEvent) => openFilterMenu('GATEWAY', event)"
+            ></cds-button-action>
+          </span>
+        </div>
+      </cds-grid-column>
+      <cds-grid-column width="17%">
+        <div class="column-head">
+          <span>{{ locale.t('modelRoute.col.strategy') }}</span>
+          <span class="column-head-actions">
+            <cds-button-action
+              :aria-label="
+                locale
+                  .t('modelRoute.sort')
+                  .replace('{column}', locale.t('modelRoute.col.strategy'))
+              "
+              @click="toggleSort('STRATEGY')"
+            >
+              <cds-icon
+                v-if="sortStateFor('STRATEGY') === 'ascending'"
+                shape="angle"
+                direction="up"
+                size="sm"
+              ></cds-icon>
+              <cds-icon
+                v-else-if="sortStateFor('STRATEGY') === 'descending'"
+                shape="angle"
+                direction="down"
+                size="sm"
+              ></cds-icon>
+              <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
+            </cds-button-action>
+            <cds-button-action
+              shape="filter"
+              :expanded="hasFilter('STRATEGY')"
+              :aria-label="
+                locale
+                  .t('modelRoute.filter')
+                  .replace('{column}', locale.t('modelRoute.col.strategy'))
+              "
+              @click="(event: MouseEvent) => openFilterMenu('STRATEGY', event)"
+            ></cds-button-action>
+          </span>
+        </div>
+      </cds-grid-column>
+      <cds-grid-column width="20%">
+        <div class="column-head">
+          <span>{{ locale.t('modelRoute.col.models') }}</span>
+          <span class="column-head-actions">
+            <cds-button-action
+              :aria-label="
+                locale.t('modelRoute.sort').replace('{column}', locale.t('modelRoute.col.models'))
+              "
+              @click="toggleSort('MODELS')"
+            >
+              <cds-icon
+                v-if="sortStateFor('MODELS') === 'ascending'"
+                shape="angle"
+                direction="up"
+                size="sm"
+              ></cds-icon>
+              <cds-icon
+                v-else-if="sortStateFor('MODELS') === 'descending'"
+                shape="angle"
+                direction="down"
+                size="sm"
+              ></cds-icon>
+              <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
+            </cds-button-action>
+            <cds-button-action
+              shape="filter"
+              :expanded="hasFilter('MODELS')"
+              :aria-label="
+                locale
+                  .t('modelRoute.filter')
+                  .replace('{column}', locale.t('modelRoute.col.models'))
+              "
+              @click="(event: MouseEvent) => openFilterMenu('MODELS', event)"
+            ></cds-button-action>
+          </span>
+        </div>
+      </cds-grid-column>
+      <cds-grid-column width="9%">
+        <div class="column-head">
+          <span>{{ locale.t('modelRoute.col.status') }}</span>
+          <span class="column-head-actions">
+            <cds-button-action
+              :aria-label="
+                locale.t('modelRoute.sort').replace('{column}', locale.t('modelRoute.col.status'))
+              "
+              @click="toggleSort('STATUS')"
+            >
+              <cds-icon
+                v-if="sortStateFor('STATUS') === 'ascending'"
+                shape="angle"
+                direction="up"
+                size="sm"
+              ></cds-icon>
+              <cds-icon
+                v-else-if="sortStateFor('STATUS') === 'descending'"
+                shape="angle"
+                direction="down"
+                size="sm"
+              ></cds-icon>
+              <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
+            </cds-button-action>
+            <cds-button-action
+              shape="filter"
+              :expanded="hasFilter('STATUS')"
+              :aria-label="
+                locale
+                  .t('modelRoute.filter')
+                  .replace('{column}', locale.t('modelRoute.col.status'))
+              "
+              @click="(event: MouseEvent) => openFilterMenu('STATUS', event)"
+            ></cds-button-action>
+          </span>
+        </div>
+      </cds-grid-column>
+      <cds-grid-column width="18%">{{ locale.t('modelRoute.col.actions') }}</cds-grid-column>
+
+      <cds-grid-row v-for="route in visibleRoutes" :key="route.id">
+        <cds-grid-cell>
           <input
             type="checkbox"
             class="app-checkbox"
-            :checked="allVisibleSelected"
-            :aria-label="locale.t('modelRoute.col.selectAll')"
-            @change="toggleSelectAll(($event.target as HTMLInputElement).checked)"
+            :checked="selectedIds.has(route.id)"
+            :aria-label="locale.t('modelRoute.col.selectRoute').replace('{name}', route.name)"
+            @change="toggleSelect(route.id, ($event.target as HTMLInputElement).checked)"
           />
-        </cds-grid-column>
-        <cds-grid-column width="18%">
-          <div class="column-head">
-            <span>{{ locale.t('modelRoute.col.name') }}</span>
-            <span class="column-head-actions">
-              <cds-button-action
-                :aria-label="
-                  locale.t('modelRoute.sort').replace('{column}', locale.t('modelRoute.col.name'))
-                "
-                @click="toggleSort('NAME')"
-              >
-                <cds-icon
-                  v-if="sortStateFor('NAME') === 'ascending'"
-                  shape="angle"
-                  direction="up"
-                  size="sm"
-                ></cds-icon>
-                <cds-icon
-                  v-else-if="sortStateFor('NAME') === 'descending'"
-                  shape="angle"
-                  direction="down"
-                  size="sm"
-                ></cds-icon>
-                <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-              </cds-button-action>
-              <cds-button-action
-                shape="filter"
-                :expanded="hasFilter('NAME')"
-                :aria-label="
-                  locale.t('modelRoute.filter').replace('{column}', locale.t('modelRoute.col.name'))
-                "
-                @click="(event: MouseEvent) => openFilterMenu('NAME', event)"
-              ></cds-button-action>
+        </cds-grid-cell>
+        <cds-grid-cell>
+          <strong class="route-name" :title="route.name">{{ route.name }}</strong>
+        </cds-grid-cell>
+        <cds-grid-cell>
+          <button type="button" class="gateway-link" @click="manageGateway(route)">
+            {{ route.gatewayName }}
+            <cds-icon shape="pop-out" size="sm" aria-hidden="true"></cds-icon>
+          </button>
+        </cds-grid-cell>
+        <cds-grid-cell>
+          <button
+            type="button"
+            class="strategy-trigger"
+            aria-haspopup="menu"
+            :aria-expanded="strategyMenuTarget?.id === route.id"
+            :aria-label="
+              locale.t('modelRoute.action.changeStrategy').replace('{name}', route.name)
+            "
+            @click="(event: MouseEvent) => openStrategyMenu(route, event)"
+          >
+            <span>{{ locale.t(`modelRoute.strategy.${route.strategy}`) }}</span>
+            <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
+          </button>
+        </cds-grid-cell>
+        <cds-grid-cell>
+          <div class="model-list" :title="route.supportedModels.join(', ')">
+            <span v-for="model in route.supportedModels.slice(0, 3)" :key="model">{{
+              model
+            }}</span>
+            <span v-if="route.supportedModels.length > 3" class="more-models">
+              +{{ route.supportedModels.length - 3 }}
             </span>
           </div>
-        </cds-grid-column>
-        <cds-grid-column width="18%">
-          <div class="column-head">
-            <span>{{ locale.t('modelRoute.col.gateway') }}</span>
-            <span class="column-head-actions">
-              <cds-button-action
-                :aria-label="
-                  locale
-                    .t('modelRoute.sort')
-                    .replace('{column}', locale.t('modelRoute.col.gateway'))
-                "
-                @click="toggleSort('GATEWAY')"
-              >
-                <cds-icon
-                  v-if="sortStateFor('GATEWAY') === 'ascending'"
-                  shape="angle"
-                  direction="up"
-                  size="sm"
-                ></cds-icon>
-                <cds-icon
-                  v-else-if="sortStateFor('GATEWAY') === 'descending'"
-                  shape="angle"
-                  direction="down"
-                  size="sm"
-                ></cds-icon>
-                <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-              </cds-button-action>
-              <cds-button-action
-                shape="filter"
-                :expanded="hasFilter('GATEWAY')"
-                :aria-label="
-                  locale
-                    .t('modelRoute.filter')
-                    .replace('{column}', locale.t('modelRoute.col.gateway'))
-                "
-                @click="(event: MouseEvent) => openFilterMenu('GATEWAY', event)"
-              ></cds-button-action>
-            </span>
-          </div>
-        </cds-grid-column>
-        <cds-grid-column width="17%">
-          <div class="column-head">
-            <span>{{ locale.t('modelRoute.col.strategy') }}</span>
-            <span class="column-head-actions">
-              <cds-button-action
-                :aria-label="
-                  locale
-                    .t('modelRoute.sort')
-                    .replace('{column}', locale.t('modelRoute.col.strategy'))
-                "
-                @click="toggleSort('STRATEGY')"
-              >
-                <cds-icon
-                  v-if="sortStateFor('STRATEGY') === 'ascending'"
-                  shape="angle"
-                  direction="up"
-                  size="sm"
-                ></cds-icon>
-                <cds-icon
-                  v-else-if="sortStateFor('STRATEGY') === 'descending'"
-                  shape="angle"
-                  direction="down"
-                  size="sm"
-                ></cds-icon>
-                <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-              </cds-button-action>
-              <cds-button-action
-                shape="filter"
-                :expanded="hasFilter('STRATEGY')"
-                :aria-label="
-                  locale
-                    .t('modelRoute.filter')
-                    .replace('{column}', locale.t('modelRoute.col.strategy'))
-                "
-                @click="(event: MouseEvent) => openFilterMenu('STRATEGY', event)"
-              ></cds-button-action>
-            </span>
-          </div>
-        </cds-grid-column>
-        <cds-grid-column width="20%">
-          <div class="column-head">
-            <span>{{ locale.t('modelRoute.col.models') }}</span>
-            <span class="column-head-actions">
-              <cds-button-action
-                :aria-label="
-                  locale.t('modelRoute.sort').replace('{column}', locale.t('modelRoute.col.models'))
-                "
-                @click="toggleSort('MODELS')"
-              >
-                <cds-icon
-                  v-if="sortStateFor('MODELS') === 'ascending'"
-                  shape="angle"
-                  direction="up"
-                  size="sm"
-                ></cds-icon>
-                <cds-icon
-                  v-else-if="sortStateFor('MODELS') === 'descending'"
-                  shape="angle"
-                  direction="down"
-                  size="sm"
-                ></cds-icon>
-                <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-              </cds-button-action>
-              <cds-button-action
-                shape="filter"
-                :expanded="hasFilter('MODELS')"
-                :aria-label="
-                  locale
-                    .t('modelRoute.filter')
-                    .replace('{column}', locale.t('modelRoute.col.models'))
-                "
-                @click="(event: MouseEvent) => openFilterMenu('MODELS', event)"
-              ></cds-button-action>
-            </span>
-          </div>
-        </cds-grid-column>
-        <cds-grid-column width="9%">
-          <div class="column-head">
-            <span>{{ locale.t('modelRoute.col.status') }}</span>
-            <span class="column-head-actions">
-              <cds-button-action
-                :aria-label="
-                  locale.t('modelRoute.sort').replace('{column}', locale.t('modelRoute.col.status'))
-                "
-                @click="toggleSort('STATUS')"
-              >
-                <cds-icon
-                  v-if="sortStateFor('STATUS') === 'ascending'"
-                  shape="angle"
-                  direction="up"
-                  size="sm"
-                ></cds-icon>
-                <cds-icon
-                  v-else-if="sortStateFor('STATUS') === 'descending'"
-                  shape="angle"
-                  direction="down"
-                  size="sm"
-                ></cds-icon>
-                <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-              </cds-button-action>
-              <cds-button-action
-                shape="filter"
-                :expanded="hasFilter('STATUS')"
-                :aria-label="
-                  locale
-                    .t('modelRoute.filter')
-                    .replace('{column}', locale.t('modelRoute.col.status'))
-                "
-                @click="(event: MouseEvent) => openFilterMenu('STATUS', event)"
-              ></cds-button-action>
-            </span>
-          </div>
-        </cds-grid-column>
-        <cds-grid-column width="18%">{{ locale.t('modelRoute.col.actions') }}</cds-grid-column>
-
-        <cds-grid-row v-for="route in visibleRoutes" :key="route.id">
-          <cds-grid-cell>
-            <input
-              type="checkbox"
-              class="app-checkbox"
-              :checked="selectedIds.has(route.id)"
-              :aria-label="locale.t('modelRoute.col.selectRoute').replace('{name}', route.name)"
-              @change="toggleSelect(route.id, ($event.target as HTMLInputElement).checked)"
-            />
-          </cds-grid-cell>
-          <cds-grid-cell>
-            <strong class="route-name" :title="route.name">{{ route.name }}</strong>
-          </cds-grid-cell>
-          <cds-grid-cell>
-            <button type="button" class="gateway-link" @click="manageGateway(route)">
-              {{ route.gatewayName }}
-              <cds-icon shape="pop-out" size="sm" aria-hidden="true"></cds-icon>
-            </button>
-          </cds-grid-cell>
-          <cds-grid-cell>
+        </cds-grid-cell>
+        <cds-grid-cell>
+          <cds-badge :status="route.enabled ? 'success' : 'neutral'" class="status-badge">
+            <cds-icon
+              :shape="route.enabled ? 'check-circle' : 'ban'"
+              size="sm"
+              aria-hidden="true"
+            ></cds-icon>
+            {{
+              locale.t(route.enabled ? 'modelRoute.status.enabled' : 'modelRoute.status.disabled')
+            }}
+          </cds-badge>
+        </cds-grid-cell>
+        <cds-grid-cell>
+          <div class="row-actions">
             <button
               type="button"
-              class="strategy-trigger"
-              aria-haspopup="menu"
-              :aria-expanded="strategyMenuTarget?.id === route.id"
-              :aria-label="
-                locale.t('modelRoute.action.changeStrategy').replace('{name}', route.name)
+              class="row-action"
+              :title="
+                locale.t(route.enabled ? 'modelRoute.action.disable' : 'modelRoute.action.enable')
               "
-              @click="(event: MouseEvent) => openStrategyMenu(route, event)"
+              @click="toggleEnabled(route)"
             >
-              <span>{{ locale.t(`modelRoute.strategy.${route.strategy}`) }}</span>
-              <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
-            </button>
-          </cds-grid-cell>
-          <cds-grid-cell>
-            <div class="model-list" :title="route.supportedModels.join(', ')">
-              <span v-for="model in route.supportedModels.slice(0, 3)" :key="model">{{
-                model
+              <cds-icon :shape="route.enabled ? 'ban' : 'check-circle'" size="sm"></cds-icon>
+              <span>{{
+                locale.t(route.enabled ? 'modelRoute.action.disable' : 'modelRoute.action.enable')
               }}</span>
-              <span v-if="route.supportedModels.length > 3" class="more-models">
-                +{{ route.supportedModels.length - 3 }}
-              </span>
-            </div>
-          </cds-grid-cell>
-          <cds-grid-cell>
-            <cds-badge :status="route.enabled ? 'success' : 'neutral'" class="status-badge">
-              <cds-icon
-                :shape="route.enabled ? 'check-circle' : 'ban'"
-                size="sm"
-                aria-hidden="true"
-              ></cds-icon>
-              {{
-                locale.t(route.enabled ? 'modelRoute.status.enabled' : 'modelRoute.status.disabled')
-              }}
-            </cds-badge>
-          </cds-grid-cell>
-          <cds-grid-cell>
-            <div class="row-actions">
-              <button
-                type="button"
-                class="row-action"
-                :title="
-                  locale.t(route.enabled ? 'modelRoute.action.disable' : 'modelRoute.action.enable')
-                "
-                @click="toggleEnabled(route)"
-              >
-                <cds-icon :shape="route.enabled ? 'ban' : 'check-circle'" size="sm"></cds-icon>
-                <span>{{
-                  locale.t(route.enabled ? 'modelRoute.action.disable' : 'modelRoute.action.enable')
-                }}</span>
-              </button>
-              <button
-                type="button"
-                class="row-action"
-                :title="locale.t('modelRoute.action.edit')"
-                @click="openEdit(route)"
-              >
-                <cds-icon shape="pencil" size="sm"></cds-icon>
-                <span>{{ locale.t('modelRoute.action.edit') }}</span>
-              </button>
-              <button
-                type="button"
-                class="row-action"
-                :title="locale.t('modelRoute.action.manage')"
-                @click="manageGateway(route)"
-              >
-                <cds-icon shape="cog" size="sm"></cds-icon>
-                <span>{{ locale.t('modelRoute.action.manage') }}</span>
-              </button>
-              <button
-                type="button"
-                class="row-action danger"
-                :title="locale.t('modelRoute.action.delete')"
-                @click="requestDelete(route)"
-              >
-                <cds-icon shape="trash" size="sm"></cds-icon>
-                <span>{{ locale.t('modelRoute.action.delete') }}</span>
-              </button>
-            </div>
-          </cds-grid-cell>
-        </cds-grid-row>
-
-        <cds-grid-placeholder v-if="visibleRoutes.length === 0">
-          <cds-icon shape="forking" size="xl"></cds-icon>
-          <p cds-text="subsection">{{ locale.t('modelRoute.empty') }}</p>
-          <cds-button action="outline" size="sm" @click="openCreate">
-            {{ locale.t('modelRoute.action.create') }}
-          </cds-button>
-        </cds-grid-placeholder>
-
-        <cds-grid-footer v-if="totalCount > 0">
-          <span v-if="selectedCount > 0" class="selected-summary">
-            {{ locale.t('modelRoute.selected').replace('{count}', String(selectedCount)) }}
-          </span>
-          <div class="pager">
-            <label for="model-route-page-size">{{
-              locale.t('modelRoute.pagination.pageSize')
-            }}</label>
-            <cds-select control-width="shrink">
-              <select
-                id="model-route-page-size"
-                :value="pageSize"
-                :aria-label="locale.t('modelRoute.pagination.pageSize')"
-                @change="onPageSizeChange"
-              >
-                <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
-                  {{ option }}
-                </option>
-              </select>
-            </cds-select>
-            <span class="pager-summary">{{ summaryText }}</span>
-            <cds-pagination :aria-label="locale.t('modelRoute.pagination.label')">
-              <cds-pagination-button
-                action="first"
-                :disabled="currentPage <= 1"
-                :aria-label="locale.t('agents.pager.first')"
-                @click="goToPage(1)"
-              ></cds-pagination-button>
-              <cds-pagination-button
-                action="prev"
-                :disabled="currentPage <= 1"
-                :aria-label="locale.t('agents.pager.prev')"
-                @click="goToPage(currentPage - 1)"
-              ></cds-pagination-button>
-              <cds-input cds-pagination-number>
-                <input
-                  type="number"
-                  :value="currentPage"
-                  :min="1"
-                  :max="totalPages"
-                  :aria-label="locale.t('agents.pager.page')"
-                  @change="goToPage(Number(($event.target as HTMLInputElement).value))"
-                />
-              </cds-input>
-              <cds-pagination-button
-                action="next"
-                :disabled="currentPage >= totalPages"
-                :aria-label="locale.t('agents.pager.next')"
-                @click="goToPage(currentPage + 1)"
-              ></cds-pagination-button>
-              <cds-pagination-button
-                action="last"
-                :disabled="currentPage >= totalPages"
-                :aria-label="locale.t('agents.pager.last')"
-                @click="goToPage(totalPages)"
-              ></cds-pagination-button>
-            </cds-pagination>
+            </button>
+            <button
+              type="button"
+              class="row-action"
+              :title="locale.t('modelRoute.action.edit')"
+              @click="openEdit(route)"
+            >
+              <cds-icon shape="pencil" size="sm"></cds-icon>
+              <span>{{ locale.t('modelRoute.action.edit') }}</span>
+            </button>
+            <button
+              type="button"
+              class="row-action"
+              :title="locale.t('modelRoute.action.manage')"
+              @click="manageGateway(route)"
+            >
+              <cds-icon shape="cog" size="sm"></cds-icon>
+              <span>{{ locale.t('modelRoute.action.manage') }}</span>
+            </button>
+            <button
+              type="button"
+              class="row-action danger"
+              :title="locale.t('modelRoute.action.delete')"
+              @click="requestDelete(route)"
+            >
+              <cds-icon shape="trash" size="sm"></cds-icon>
+              <span>{{ locale.t('modelRoute.action.delete') }}</span>
+            </button>
           </div>
-        </cds-grid-footer>
-      </cds-grid>
-    </div>
+        </cds-grid-cell>
+      </cds-grid-row>
+
+      <cds-grid-placeholder v-if="visibleRoutes.length === 0">
+        <cds-icon shape="forking" size="xl"></cds-icon>
+        <p cds-text="subsection">{{ locale.t('modelRoute.empty') }}</p>
+      </cds-grid-placeholder>
+
+      <cds-grid-footer v-if="totalCount > 0">
+        <span v-if="selectedCount > 0" class="selected-summary">
+          {{ locale.t('modelRoute.selected').replace('{count}', String(selectedCount)) }}
+        </span>
+        <div class="pager">
+          <label for="model-route-page-size">{{
+            locale.t('modelRoute.pagination.pageSize')
+          }}</label>
+          <cds-select control-width="shrink">
+            <select
+              id="model-route-page-size"
+              :value="pageSize"
+              :aria-label="locale.t('modelRoute.pagination.pageSize')"
+              @change="onPageSizeChange"
+            >
+              <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
+                {{ option }}
+              </option>
+            </select>
+          </cds-select>
+          <span class="pager-summary">{{ summaryText }}</span>
+          <cds-pagination :aria-label="locale.t('modelRoute.pagination.label')">
+            <cds-pagination-button
+              action="first"
+              :disabled="currentPage <= 1"
+              :aria-label="locale.t('agents.pager.first')"
+              @click="goToPage(1)"
+            ></cds-pagination-button>
+            <cds-pagination-button
+              action="prev"
+              :disabled="currentPage <= 1"
+              :aria-label="locale.t('agents.pager.prev')"
+              @click="goToPage(currentPage - 1)"
+            ></cds-pagination-button>
+            <cds-input cds-pagination-number>
+              <input
+                type="number"
+                :value="currentPage"
+                :min="1"
+                :max="totalPages"
+                :aria-label="locale.t('agents.pager.page')"
+                @change="goToPage(Number(($event.target as HTMLInputElement).value))"
+              />
+            </cds-input>
+            <cds-pagination-button
+              action="next"
+              :disabled="currentPage >= totalPages"
+              :aria-label="locale.t('agents.pager.next')"
+              @click="goToPage(currentPage + 1)"
+            ></cds-pagination-button>
+            <cds-pagination-button
+              action="last"
+              :disabled="currentPage >= totalPages"
+              :aria-label="locale.t('agents.pager.last')"
+              @click="goToPage(totalPages)"
+            ></cds-pagination-button>
+          </cds-pagination>
+        </div>
+      </cds-grid-footer>
+    </cds-grid>
 
     <cds-dropdown
       v-if="strategyMenuAnchor && strategyMenuTarget"
@@ -1073,7 +1068,28 @@ function goToPage(page: number) {
   margin-top: 20px;
 }
 .refresh-button {
-  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 6px 8px;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+  flex-shrink: 0;
+  border-radius: 0;
+}
+.refresh-button:hover:not(:disabled) {
+  color: var(--cds-alias-object-app-blue, #0072a3);
+}
+.refresh-button:focus-visible {
+  outline: 2px solid var(--cds-alias-object-app-blue, #0072a3);
+  outline-offset: 2px;
+}
+.refresh-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 .menu-option {
   display: flex;
@@ -1094,21 +1110,32 @@ function goToPage(page: number) {
 .menu-option.danger {
   color: var(--cds-alias-status-danger, #c92100);
 }
-.grid-card {
+.route-page cds-grid {
+  display: block;
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
-  overflow: auto;
-  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
-  border-radius: 6px;
-  background: var(--cds-alias-object-container-background, #fff);
-}
-.route-page cds-grid {
-  display: block;
+  max-width: 100%;
   width: 100%;
-  min-width: 900px;
-  min-height: 100%;
+  overflow: hidden;
 }
+/* Force cds-grid columns + cells to shrink below their intrinsic content
+   width so the table never overflows the viewport horizontally. Both
+   `min-width: 0` (override the custom element default `min-width: auto`)
+   and `overflow: hidden` (clip cells whose content is still too wide for
+   the column) are needed for this to work reliably. */
+.route-page cds-grid-column,
+.route-page cds-grid-cell {
+  min-width: 0;
+  overflow: hidden;
+}
+/* cds-grid's shadow-DOM `.scroll-container` has `overflow: auto`, so when
+   the sum of column widths exceeds the host width (e.g. 36px checkbox
+   column + 100% percentage columns = ~1025px on a 990px scroll-container)
+   a horizontal scrollbar appears inside the grid even though the page
+   itself does not overflow. The fix is the cds-grid `scroll-lock`
+   attribute on the `<cds-grid>` element, which sets the inner scroll
+   container to `overflow: hidden`. */
 .column-head {
   display: flex;
   align-items: center;
@@ -1166,7 +1193,7 @@ function goToPage(page: number) {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
-  min-width: 128px;
+  min-width: 0;
   min-height: 28px;
   padding: 3px 8px;
   border: 0;
@@ -1272,7 +1299,11 @@ function goToPage(page: number) {
   display: flex;
   align-items: center;
   gap: 4px;
-  flex-wrap: nowrap;
+  /* Allow buttons to wrap to a second line when the 操作 column is too
+     narrow to hold them all on one row — the alternative (forcing the
+     column wider) would push the table beyond the viewport and re-introduce
+     the horizontal scrollbar. */
+  flex-wrap: wrap;
 }
 .row-action {
   display: inline-flex;
@@ -1326,11 +1357,6 @@ function goToPage(page: number) {
 @keyframes route-spin {
   to {
     transform: rotate(360deg);
-  }
-}
-@media (max-width: 900px) {
-  .refresh-button span {
-    display: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

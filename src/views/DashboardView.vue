@@ -286,26 +286,21 @@ function statusLabel(status: DashboardAgentStatus): string {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow: auto;
+  overflow: visible;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
 .dashboard-header {
   flex: 0 0 auto;
-  padding-top: 2px;
+  padding-top: 4px;
+  padding-bottom: 8px;
 }
 .heading {
-  display: block;
-  width: 100%;
-  min-height: 32px;
   margin: 0;
-  font-size: 24px;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  font-size: 28px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
-  word-break: keep-all;
 }
 .metric-grid {
   display: grid;

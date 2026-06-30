@@ -366,11 +366,8 @@ const typeFilterLabel = computed(() => {
       cds-layout="vertical p:xl gap:sm align:horizontal-center"
       class="placeholder"
     >
-      <cds-icon shape="history" size="xxl" class="placeholder-icon"></cds-icon>
+      <cds-icon shape="store" size="xxl" class="placeholder-icon"></cds-icon>
       <p cds-text="subsection" class="muted">{{ locale.t('marketplace.empty') }}</p>
-      <cds-button action="outline" @click="openCreateDialog">
-        {{ locale.t('marketplace.toolbar.create') }}
-      </cds-button>
     </div>
 
     <!-- `.card-scroll` owns the vertical scroll so the grid can be

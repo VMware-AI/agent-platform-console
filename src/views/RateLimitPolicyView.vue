@@ -394,210 +394,205 @@ function goToPage(page: number) {
           </template>
         </AppDropdown>
 
-        <cds-button
-          action="ghost"
+        <button
+          type="button"
           class="refresh-button"
           :disabled="loading"
           :aria-label="locale.t('rateLimit.action.refresh')"
           :title="locale.t('rateLimit.action.refresh')"
           @click="refreshPolicies"
         >
-          <cds-icon shape="refresh" size="md" :class="{ spinning: loading }"></cds-icon>
-          <span>{{ locale.t('rateLimit.action.refresh') }}</span>
-        </cds-button>
+          <cds-icon shape="refresh" size="md" :class="{ spinning: loading }" aria-hidden="true"></cds-icon>
+        </button>
       </div>
 
-      <div class="grid-card">
-        <cds-grid
-          border="row"
-          column-layout="flex"
-          role="grid"
-          :aria-label="locale.t('rateLimit.table.label')"
-        >
-          <cds-grid-column type="action" :resizable="false">
+      <cds-grid
+        border="row"
+        column-layout="flex"
+        role="grid"
+        scroll-lock
+        :aria-label="locale.t('rateLimit.table.label')"
+      >
+        <cds-grid-column type="action" :resizable="false">
+          <input
+            type="checkbox"
+            class="app-checkbox"
+            :checked="allVisibleSelected"
+            :aria-label="locale.t('rateLimit.col.selectAll')"
+            @change="toggleSelectAll(($event.target as HTMLInputElement).checked)"
+          />
+        </cds-grid-column>
+
+        <cds-grid-column width="50%">
+          <div class="column-head">
+            <span>{{ locale.t('rateLimit.col.name') }}</span>
+            <span class="column-head-actions">
+              <cds-button-action
+                :aria-label="locale.t('rateLimit.sort').replace('{column}', locale.t('rateLimit.col.name'))"
+                @click="toggleSort('NAME')"
+              >
+                <cds-icon
+                  v-if="sortStateFor('NAME') === 'ascending'"
+                  shape="angle"
+                  direction="up"
+                  size="sm"
+                ></cds-icon>
+                <cds-icon
+                  v-else-if="sortStateFor('NAME') === 'descending'"
+                  shape="angle"
+                  direction="down"
+                  size="sm"
+                ></cds-icon>
+                <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
+              </cds-button-action>
+              <cds-button-action
+                shape="filter"
+                :expanded="hasFilter('NAME')"
+                :aria-label="locale.t('rateLimit.filter').replace('{column}', locale.t('rateLimit.col.name'))"
+                @click="(event: MouseEvent) => openFilterMenu('NAME', event)"
+              ></cds-button-action>
+            </span>
+          </div>
+        </cds-grid-column>
+
+        <cds-grid-column width="13%">
+          <div class="column-head">
+            <span>{{ locale.t('rateLimit.col.status') }}</span>
+            <span class="column-head-actions">
+              <cds-button-action
+                :aria-label="locale.t('rateLimit.sort').replace('{column}', locale.t('rateLimit.col.status'))"
+                @click="toggleSort('STATUS')"
+              >
+                <cds-icon
+                  v-if="sortStateFor('STATUS') === 'ascending'"
+                  shape="angle"
+                  direction="up"
+                  size="sm"
+                ></cds-icon>
+                <cds-icon
+                  v-else-if="sortStateFor('STATUS') === 'descending'"
+                  shape="angle"
+                  direction="down"
+                  size="sm"
+                ></cds-icon>
+                <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
+              </cds-button-action>
+              <cds-button-action
+                shape="filter"
+                :expanded="hasFilter('STATUS')"
+                :aria-label="locale.t('rateLimit.filter').replace('{column}', locale.t('rateLimit.col.status'))"
+                @click="(event: MouseEvent) => openFilterMenu('STATUS', event)"
+              ></cds-button-action>
+            </span>
+          </div>
+        </cds-grid-column>
+
+        <cds-grid-column width="32%">{{ locale.t('rateLimit.col.actions') }}</cds-grid-column>
+
+        <cds-grid-row v-for="policy in visiblePolicies" :key="policy.id">
+          <cds-grid-cell>
             <input
               type="checkbox"
               class="app-checkbox"
-              :checked="allVisibleSelected"
-              :aria-label="locale.t('rateLimit.col.selectAll')"
-              @change="toggleSelectAll(($event.target as HTMLInputElement).checked)"
+              :checked="selectedIds.has(policy.id)"
+              :aria-label="locale.t('rateLimit.col.selectPolicy').replace('{name}', policy.name)"
+              @change="toggleSelect(policy.id, ($event.target as HTMLInputElement).checked)"
             />
-          </cds-grid-column>
-
-          <cds-grid-column width="50%">
-            <div class="column-head">
-              <span>{{ locale.t('rateLimit.col.name') }}</span>
-              <span class="column-head-actions">
-                <cds-button-action
-                  :aria-label="locale.t('rateLimit.sort').replace('{column}', locale.t('rateLimit.col.name'))"
-                  @click="toggleSort('NAME')"
-                >
-                  <cds-icon
-                    v-if="sortStateFor('NAME') === 'ascending'"
-                    shape="angle"
-                    direction="up"
-                    size="sm"
-                  ></cds-icon>
-                  <cds-icon
-                    v-else-if="sortStateFor('NAME') === 'descending'"
-                    shape="angle"
-                    direction="down"
-                    size="sm"
-                  ></cds-icon>
-                  <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-                </cds-button-action>
-                <cds-button-action
-                  shape="filter"
-                  :expanded="hasFilter('NAME')"
-                  :aria-label="locale.t('rateLimit.filter').replace('{column}', locale.t('rateLimit.col.name'))"
-                  @click="(event: MouseEvent) => openFilterMenu('NAME', event)"
-                ></cds-button-action>
-              </span>
+          </cds-grid-cell>
+          <cds-grid-cell>
+            <strong class="policy-name" :title="policy.name">{{ policy.name }}</strong>
+          </cds-grid-cell>
+          <cds-grid-cell>
+            <cds-badge :status="policy.enabled ? 'success' : 'neutral'" class="status-badge">
+              <cds-icon :shape="policy.enabled ? 'check-circle' : 'ban'" size="sm"></cds-icon>
+              {{ locale.t(policy.enabled ? 'rateLimit.status.enabled' : 'rateLimit.status.disabled') }}
+            </cds-badge>
+          </cds-grid-cell>
+          <cds-grid-cell>
+            <div class="row-actions">
+              <button type="button" class="row-action" @click="openEdit(policy)">
+                <cds-icon shape="pencil" size="sm"></cds-icon>
+                <span>{{ locale.t('rateLimit.action.edit') }}</span>
+              </button>
+              <button type="button" class="row-action" @click="applyPolicy(policy)">
+                <cds-icon shape="users" size="sm"></cds-icon>
+                <span>{{ locale.t('rateLimit.action.apply') }}</span>
+              </button>
+              <button type="button" class="row-action" @click="toggleEnabled(policy)">
+                <cds-icon :shape="policy.enabled ? 'ban' : 'check-circle'" size="sm"></cds-icon>
+                <span>{{ locale.t(policy.enabled ? 'rateLimit.action.disable' : 'rateLimit.action.enable') }}</span>
+              </button>
+              <button type="button" class="row-action danger" @click="requestDelete(policy)">
+                <cds-icon shape="trash" size="sm"></cds-icon>
+                <span>{{ locale.t('rateLimit.action.delete') }}</span>
+              </button>
             </div>
-          </cds-grid-column>
+          </cds-grid-cell>
+        </cds-grid-row>
 
-          <cds-grid-column width="13%">
-            <div class="column-head">
-              <span>{{ locale.t('rateLimit.col.status') }}</span>
-              <span class="column-head-actions">
-                <cds-button-action
-                  :aria-label="locale.t('rateLimit.sort').replace('{column}', locale.t('rateLimit.col.status'))"
-                  @click="toggleSort('STATUS')"
-                >
-                  <cds-icon
-                    v-if="sortStateFor('STATUS') === 'ascending'"
-                    shape="angle"
-                    direction="up"
-                    size="sm"
-                  ></cds-icon>
-                  <cds-icon
-                    v-else-if="sortStateFor('STATUS') === 'descending'"
-                    shape="angle"
-                    direction="down"
-                    size="sm"
-                  ></cds-icon>
-                  <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-                </cds-button-action>
-                <cds-button-action
-                  shape="filter"
-                  :expanded="hasFilter('STATUS')"
-                  :aria-label="locale.t('rateLimit.filter').replace('{column}', locale.t('rateLimit.col.status'))"
-                  @click="(event: MouseEvent) => openFilterMenu('STATUS', event)"
-                ></cds-button-action>
-              </span>
-            </div>
-          </cds-grid-column>
+        <cds-grid-placeholder v-if="visiblePolicies.length === 0">
+          <cds-icon shape="filter" size="xl"></cds-icon>
+          <p cds-text="subsection">{{ locale.t('rateLimit.empty') }}</p>
+        </cds-grid-placeholder>
 
-          <cds-grid-column width="32%">{{ locale.t('rateLimit.col.actions') }}</cds-grid-column>
-
-          <cds-grid-row v-for="policy in visiblePolicies" :key="policy.id">
-            <cds-grid-cell>
-              <input
-                type="checkbox"
-                class="app-checkbox"
-                :checked="selectedIds.has(policy.id)"
-                :aria-label="locale.t('rateLimit.col.selectPolicy').replace('{name}', policy.name)"
-                @change="toggleSelect(policy.id, ($event.target as HTMLInputElement).checked)"
-              />
-            </cds-grid-cell>
-            <cds-grid-cell>
-              <strong class="policy-name" :title="policy.name">{{ policy.name }}</strong>
-            </cds-grid-cell>
-            <cds-grid-cell>
-              <cds-badge :status="policy.enabled ? 'success' : 'neutral'" class="status-badge">
-                <cds-icon :shape="policy.enabled ? 'check-circle' : 'ban'" size="sm"></cds-icon>
-                {{ locale.t(policy.enabled ? 'rateLimit.status.enabled' : 'rateLimit.status.disabled') }}
-              </cds-badge>
-            </cds-grid-cell>
-            <cds-grid-cell>
-              <div class="row-actions">
-                <button type="button" class="row-action" @click="openEdit(policy)">
-                  <cds-icon shape="pencil" size="sm"></cds-icon>
-                  <span>{{ locale.t('rateLimit.action.edit') }}</span>
-                </button>
-                <button type="button" class="row-action" @click="applyPolicy(policy)">
-                  <cds-icon shape="users" size="sm"></cds-icon>
-                  <span>{{ locale.t('rateLimit.action.apply') }}</span>
-                </button>
-                <button type="button" class="row-action" @click="toggleEnabled(policy)">
-                  <cds-icon :shape="policy.enabled ? 'ban' : 'check-circle'" size="sm"></cds-icon>
-                  <span>{{ locale.t(policy.enabled ? 'rateLimit.action.disable' : 'rateLimit.action.enable') }}</span>
-                </button>
-                <button type="button" class="row-action danger" @click="requestDelete(policy)">
-                  <cds-icon shape="trash" size="sm"></cds-icon>
-                  <span>{{ locale.t('rateLimit.action.delete') }}</span>
-                </button>
-              </div>
-            </cds-grid-cell>
-          </cds-grid-row>
-
-          <cds-grid-placeholder v-if="visiblePolicies.length === 0">
-            <cds-icon shape="filter" size="xl"></cds-icon>
-            <p cds-text="subsection">{{ locale.t('rateLimit.empty') }}</p>
-            <cds-button action="outline" size="sm" @click="openCreate">
-              {{ locale.t('rateLimit.action.create') }}
-            </cds-button>
-          </cds-grid-placeholder>
-
-          <cds-grid-footer v-if="totalCount > 0">
-            <span v-if="selectedCount > 0" class="selected-summary">
-              {{ locale.t('rateLimit.selected').replace('{count}', String(selectedCount)) }}
-            </span>
-            <div class="pager">
-              <label for="rate-limit-page-size">{{ locale.t('rateLimit.pagination.pageSize') }}</label>
-              <cds-select control-width="shrink">
-                <select
-                  id="rate-limit-page-size"
-                  :value="pageSize"
-                  :aria-label="locale.t('rateLimit.pagination.pageSize')"
-                  @change="onPageSizeChange"
-                >
-                  <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
-                    {{ option }}
-                  </option>
-                </select>
-              </cds-select>
-              <span class="pager-summary">{{ summaryText }}</span>
-              <cds-pagination :aria-label="locale.t('rateLimit.pagination.label')">
-                <cds-pagination-button
-                  action="first"
-                  :disabled="currentPage <= 1"
-                  :aria-label="locale.t('agents.pager.first')"
-                  @click="goToPage(1)"
-                ></cds-pagination-button>
-                <cds-pagination-button
-                  action="prev"
-                  :disabled="currentPage <= 1"
-                  :aria-label="locale.t('agents.pager.prev')"
-                  @click="goToPage(currentPage - 1)"
-                ></cds-pagination-button>
-                <cds-input cds-pagination-number>
-                  <input
-                    type="number"
-                    :value="currentPage"
-                    :min="1"
-                    :max="totalPages"
-                    :aria-label="locale.t('agents.pager.page')"
-                    @change="goToPage(Number(($event.target as HTMLInputElement).value))"
-                  />
-                </cds-input>
-                <cds-pagination-button
-                  action="next"
-                  :disabled="currentPage >= totalPages"
-                  :aria-label="locale.t('agents.pager.next')"
-                  @click="goToPage(currentPage + 1)"
-                ></cds-pagination-button>
-                <cds-pagination-button
-                  action="last"
-                  :disabled="currentPage >= totalPages"
-                  :aria-label="locale.t('agents.pager.last')"
-                  @click="goToPage(totalPages)"
-                ></cds-pagination-button>
-              </cds-pagination>
-            </div>
-          </cds-grid-footer>
-        </cds-grid>
-      </div>
+        <cds-grid-footer v-if="totalCount > 0">
+          <span v-if="selectedCount > 0" class="selected-summary">
+            {{ locale.t('rateLimit.selected').replace('{count}', String(selectedCount)) }}
+          </span>
+          <div class="pager">
+            <label for="rate-limit-page-size">{{ locale.t('rateLimit.pagination.pageSize') }}</label>
+            <cds-select control-width="shrink">
+              <select
+                id="rate-limit-page-size"
+                :value="pageSize"
+                :aria-label="locale.t('rateLimit.pagination.pageSize')"
+                @change="onPageSizeChange"
+              >
+                <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
+                  {{ option }}
+                </option>
+              </select>
+            </cds-select>
+            <span class="pager-summary">{{ summaryText }}</span>
+            <cds-pagination :aria-label="locale.t('rateLimit.pagination.label')">
+              <cds-pagination-button
+                action="first"
+                :disabled="currentPage <= 1"
+                :aria-label="locale.t('agents.pager.first')"
+                @click="goToPage(1)"
+              ></cds-pagination-button>
+              <cds-pagination-button
+                action="prev"
+                :disabled="currentPage <= 1"
+                :aria-label="locale.t('agents.pager.prev')"
+                @click="goToPage(currentPage - 1)"
+              ></cds-pagination-button>
+              <cds-input cds-pagination-number>
+                <input
+                  type="number"
+                  :value="currentPage"
+                  :min="1"
+                  :max="totalPages"
+                  :aria-label="locale.t('agents.pager.page')"
+                  @change="goToPage(Number(($event.target as HTMLInputElement).value))"
+                />
+              </cds-input>
+              <cds-pagination-button
+                action="next"
+                :disabled="currentPage >= totalPages"
+                :aria-label="locale.t('agents.pager.next')"
+                @click="goToPage(currentPage + 1)"
+              ></cds-pagination-button>
+              <cds-pagination-button
+                action="last"
+                :disabled="currentPage >= totalPages"
+                :aria-label="locale.t('agents.pager.last')"
+                @click="goToPage(totalPages)"
+              ></cds-pagination-button>
+            </cds-pagination>
+          </div>
+        </cds-grid-footer>
+      </cds-grid>
     </div>
 
     <cds-dropdown
@@ -694,10 +689,6 @@ function goToPage(page: number) {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
-  border-radius: 6px;
-  background: var(--cds-alias-object-container-background, #fff);
   margin-top: 20px;
 }
 .toolbar {
@@ -707,21 +698,48 @@ function goToPage(page: number) {
   gap: 10px;
 }
 .refresh-button {
-  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 6px 8px;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+  flex-shrink: 0;
+  border-radius: 0;
 }
-.grid-card {
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 0;
-  overflow: auto;
-  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
-  border-radius: 4px;
+.refresh-button:hover:not(:disabled) {
+  color: var(--cds-alias-object-app-blue, #0072a3);
+}
+.refresh-button:focus-visible {
+  outline: 2px solid var(--cds-alias-object-app-blue, #0072a3);
+  outline-offset: 2px;
+}
+.refresh-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 .rate-limit-page cds-grid {
   display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  max-width: 100%;
   width: 100%;
-  min-width: 760px;
-  min-height: 100%;
+  /* scroll-lock on <cds-grid> disables the shadow-DOM scroll container's
+     scrollbars; combined with min-width: 0 + max-width: 100% on the host
+     this prevents the table from ever overflowing the viewport. */
+  overflow: hidden;
+}
+/* Force cds-grid columns + cells to clip instead of expanding past their
+   intrinsic content width (which would re-introduce the inner scrollbar
+   even with scroll-lock applied). */
+.rate-limit-page cds-grid-column,
+.rate-limit-page cds-grid-cell {
+  min-width: 0;
+  overflow: hidden;
 }
 .column-head {
   display: flex;
@@ -872,11 +890,6 @@ function goToPage(page: number) {
 @keyframes rate-limit-spin {
   to {
     transform: rotate(360deg);
-  }
-}
-@media (max-width: 900px) {
-  .refresh-button span {
-    display: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -281,9 +281,23 @@ async function onSubmit(payload: {
 
 function onManage(p: ResourcePool) {
   // "管理" is a navigation-style action — for now just toast a placeholder.
-   
+
   console.log('[resources] manage', { id: p.id })
   toast.info(locale.t('resources.action.manage'))
+}
+
+/* 立即重新拉取资源池列表 — 复用视图已在用的 refetch 闭包,
+   避免在别处再开一条查询。loading 守卫防止重复点击叠加请求。 */
+async function refreshPools() {
+  if (loading.value) return
+  try {
+    await refetch()
+    toast.success(locale.t('resources.toast.refreshed'))
+  } catch (error) {
+    toast.error(
+      graphqlErrorMessage(error, locale.t('resources.toast.refreshFailed')),
+    )
+  }
 }
 
 async function onSync(p: ResourcePool) {
@@ -341,6 +355,21 @@ async function doDelete() {
         <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
         {{ locale.t('resources.toolbar.create') }}
       </cds-button>
+      <button
+        type="button"
+        class="refresh-button"
+        :disabled="loading"
+        :aria-label="locale.t('resources.action.refresh')"
+        :title="locale.t('resources.action.refresh')"
+        @click="refreshPools"
+      >
+        <cds-icon
+          shape="refresh"
+          size="md"
+          :class="{ spinning: loading }"
+          aria-hidden="true"
+        ></cds-icon>
+      </button>
       <cds-input class="toolbar-search">
         <input
           type="search"
@@ -499,7 +528,7 @@ async function doDelete() {
       </cds-grid-placeholder>
 
       <cds-grid-placeholder v-else-if="pools.length === 0">
-        <cds-icon shape="history" size="xl"></cds-icon>
+        <cds-icon shape="resource-pool" size="xl"></cds-icon>
         <p cds-text="subsection">{{ locale.t('resources.empty') }}</p>
       </cds-grid-placeholder>
 
@@ -662,6 +691,50 @@ async function doDelete() {
      left next to it. */
   width: 360px;
   flex: 0 0 auto;
+}
+
+/* Refresh button: chrome-free plain <button> — no background, no border —
+   just the icon. Matches ModelGatewayView's reference refresh button. */
+.refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 6px 8px;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+  flex-shrink: 0;
+  border-radius: 0;
+}
+.refresh-button:hover:not(:disabled) {
+  color: var(--cds-alias-object-app-blue, #0072a3);
+}
+.refresh-button:focus-visible {
+  outline: 2px solid var(--cds-alias-object-app-blue, #0072a3);
+  outline-offset: 2px;
+}
+.refresh-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* When the refresh button is in-flight, spin the icon itself. The animation
+   runs at 1s per full turn, linear, infinite. Applied to the cds-icon host;
+   its internal SVG rotates with the host transform. */
+.refresh-button .spinning {
+  animation: resources-refresh-spin 1s linear infinite;
+  transform-origin: center;
+}
+@keyframes resources-refresh-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .refresh-button .spinning {
+    animation: none;
+  }
 }
 
 /* cds-input's shadow-DOM `.input-message-container` is the wrapper that

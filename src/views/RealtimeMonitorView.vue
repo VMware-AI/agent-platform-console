@@ -531,8 +531,9 @@ function toggleFocus(key: string) {
 
 <template>
   <section class="monitor-page">
-    <header class="page-header">
-      <h1 class="heading">{{ locale.t('monitor.title') }}</h1>
+    <header class="page-head">
+      <h1 cds-text="title" class="heading">{{ locale.t('monitor.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('monitor.description') }}</p>
     </header>
 
     <div class="toolbar">
@@ -732,21 +733,33 @@ function toggleFocus(key: string) {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow: auto;
+  overflow: visible;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
 
-.page-header {
+.page-head {
   flex: 0 0 auto;
   min-width: 0;
+  padding-top: 4px;
 }
 
 .heading {
   margin: 0;
-  font-size: 24px;
-  line-height: 1.25;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  font-size: 28px;
+  line-height: 1.3;
   font-weight: 600;
-  letter-spacing: 0;
+  letter-spacing: -0.01em;
+}
+.desc {
+  margin: 12px 0 0;
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 720px;
+}
+.muted {
+  color: var(--cds-alias-typography-color-300, #565656);
 }
 
 .toolbar {

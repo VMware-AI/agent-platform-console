@@ -194,209 +194,180 @@ function onSubmit() {
 function close() {
   emit('close')
 }
-function onBackdropClick(e: MouseEvent) {
-  if (e.target === e.currentTarget) close()
-}
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="resource-fade">
-      <div
-        v-if="open"
-        class="resource-backdrop"
-        role="dialog"
-        aria-modal="true"
-        :aria-label="locale.t(titleKey)"
-        @click="onBackdropClick"
-      >
-        <div class="resource-card" @click.stop>
-          <h2 cds-text="section" class="resource-title">
-            {{ locale.t(titleKey) }}
-          </h2>
+  <cds-modal :hidden="!open" :closable="true" size="md" @closeChange="close">
+    <cds-modal-header>
+      <h3 cds-text="title">{{ locale.t(titleKey) }}</h3>
+    </cds-modal-header>
 
-          <form class="resource-form" @submit.prevent="onSubmit">
-            <label class="resource-field">
-              <span class="resource-label">{{ locale.t('resources.form.name') }}</span>
-              <input
-                type="text"
-                class="app-input"
-                :value="form.name"
-                @input="(e: Event) => form.name = (e.target as HTMLInputElement).value"
-              />
+    <cds-modal-content>
+      <form class="resource-form" cds-layout="vertical align:stretch gap:md" @submit.prevent="onSubmit">
+        <!-- Name: required in both create and edit (mirrors UserFormDialog / ModelGatewayFormModal pattern) -->
+        <cds-control>
+          <cds-input>
+            <label>{{ locale.t('resources.form.name') }}<sup class="required-mark" aria-hidden="true">{{ locale.t('resources.form.requiredMark') }}</sup></label>
+            <input
+              slot="input"
+              type="text"
+              :value="form.name"
+              @input="(e: Event) => form.name = (e.target as HTMLInputElement).value"
+            />
+          </cds-input>
+        </cds-control>
+
+        <!-- Endpoint: required in both create and edit -->
+        <cds-control>
+          <cds-input>
+            <label>{{ locale.t('resources.form.endpoint') }}<sup class="required-mark" aria-hidden="true">{{ locale.t('resources.form.requiredMark') }}</sup></label>
+            <input
+              slot="input"
+              type="text"
+              :value="form.endpoint"
+              placeholder="https://vc.example.local/sdk"
+              @input="(e: Event) => form.endpoint = (e.target as HTMLInputElement).value"
+            />
+          </cds-input>
+        </cds-control>
+
+        <!-- Username: required in create, optional in edit (rotating credentials) -->
+        <cds-control>
+          <cds-input>
+            <label>
+              {{ locale.t('resources.form.username') }}<sup v-if="!isEdit" class="required-mark" aria-hidden="true">{{ locale.t('resources.form.requiredMark') }}</sup>
             </label>
+            <input
+              slot="input"
+              type="text"
+              autocomplete="off"
+              :value="form.username"
+              :placeholder="locale.t('resources.form.usernamePlaceholder')"
+              @input="(e: Event) => form.username = (e.target as HTMLInputElement).value"
+            />
+          </cds-input>
+        </cds-control>
 
-            <label class="resource-field">
-              <span class="resource-label">{{ locale.t('resources.form.endpoint') }}</span>
-              <input
-                type="text"
-                class="app-input"
-                :value="form.endpoint"
-                placeholder="https://vc.example.local/sdk"
-                @input="(e: Event) => form.endpoint = (e.target as HTMLInputElement).value"
-              />
+        <!-- Password: required in create, optional in edit (leave blank to keep stored credentials).
+             In edit mode we surface the hint via cds-control-message so it sits
+             directly under the password field, matching the model-gateway form's
+             error-message placement. -->
+        <cds-control>
+          <cds-password>
+            <label>
+              {{ locale.t('resources.form.password') }}<sup v-if="!isEdit" class="required-mark" aria-hidden="true">{{ locale.t('resources.form.requiredMark') }}</sup>
             </label>
+            <input
+              slot="input"
+              type="password"
+              autocomplete="new-password"
+              :value="form.password"
+              @input="(e: Event) => form.password = (e.target as HTMLInputElement).value"
+            />
+            <cds-control-message v-if="isEdit" status="info">
+              {{ locale.t('resources.form.passwordEditHint') }}
+            </cds-control-message>
+          </cds-password>
+        </cds-control>
 
-            <label class="resource-field">
-              <span class="resource-label">{{ locale.t('resources.form.username') }}</span>
-              <input
-                type="text"
-                class="app-input"
-                autocomplete="off"
-                :value="form.username"
-                :placeholder="locale.t('resources.form.usernamePlaceholder')"
-                @input="(e: Event) => form.username = (e.target as HTMLInputElement).value"
-              />
-            </label>
+        <label class="resource-check">
+          <input
+            type="checkbox"
+            :checked="form.insecure"
+            @change="(e: Event) => form.insecure = (e.target as HTMLInputElement).checked"
+          />
+          <span>
+            <span class="resource-check-label">{{ locale.t('resources.form.insecure') }}</span>
+            <span class="resource-check-hint">{{ locale.t('resources.form.insecureHint') }}</span>
+          </span>
+        </label>
 
-            <label class="resource-field">
-              <span class="resource-label">{{ locale.t('resources.form.password') }}</span>
-              <input
-                type="password"
-                class="app-input"
-                autocomplete="new-password"
-                :value="form.password"
-                @input="(e: Event) => form.password = (e.target as HTMLInputElement).value"
-              />
-              <span v-if="isEdit" class="resource-check-hint">
-                {{ locale.t('resources.form.passwordEditHint') }}
-              </span>
-            </label>
-
-            <label class="resource-check">
-              <input
-                type="checkbox"
-                :checked="form.insecure"
-                @change="(e: Event) => form.insecure = (e.target as HTMLInputElement).checked"
-              />
-              <span>
-                <span class="resource-check-label">{{ locale.t('resources.form.insecure') }}</span>
-                <span class="resource-check-hint">{{ locale.t('resources.form.insecureHint') }}</span>
-              </span>
-            </label>
-
-            <div class="resource-test">
-              <cds-button
-                type="button"
-                action="outline"
-                status="primary"
-                :disabled="!canTest || testing"
-                @click="onTestConnection"
-              >
-                <cds-icon
-                  v-if="testing"
-                  shape="circle-loader"
-                  size="sm"
-                  aria-hidden="true"
-                ></cds-icon>
-                {{ locale.t('resources.form.testConnection') }}
-              </cds-button>
-              <cds-alert
-                v-if="testResult"
-                :status="testResult.ok ? 'success' : 'danger'"
-                class="resource-test-alert"
-              >
-                <div class="resource-test-message">{{ testResult.message }}</div>
-                <div
-                  v-if="testResult.detail && testResult.detail.vSphereVersion"
-                  class="resource-test-detail"
-                >
-                  vSphere {{ testResult.detail.vSphereVersion }} · {{ testResult.detail.contentLibraries.length }} 个内容库
-                </div>
-                <cds-button-action
-                  shape="times"
-                  :title="locale.t('common.cancel')"
-                  :aria-label="locale.t('common.cancel')"
-                  @click="dismissTestResult"
-                ></cds-button-action>
-              </cds-alert>
+        <div class="resource-test">
+          <cds-button
+            type="button"
+            action="outline"
+            status="primary"
+            size="sm"
+            :disabled="!canTest || testing"
+            @click="onTestConnection"
+          >
+            <cds-icon
+              v-if="testing"
+              shape="circle-loader"
+              size="sm"
+              aria-hidden="true"
+            ></cds-icon>
+            {{ locale.t('resources.form.testConnection') }}
+          </cds-button>
+          <cds-alert
+            v-if="testResult"
+            :status="testResult.ok ? 'success' : 'danger'"
+            class="resource-test-alert"
+          >
+            <div class="resource-test-message">{{ testResult.message }}</div>
+            <div
+              v-if="testResult.detail && testResult.detail.vSphereVersion"
+              class="resource-test-detail"
+            >
+              vSphere {{ testResult.detail.vSphereVersion }} · {{ testResult.detail.contentLibraries.length }} 个内容库
             </div>
-
-            <!-- Content library dropdown: appears after a successful test -->
-            <label v-if="contentLibraries.length > 0 || selectedLibrary" class="resource-field">
-              <span class="resource-label">{{ locale.t('resources.form.contentLibrary') }}</span>
-              <select
-                class="app-input app-select"
-                :value="selectedLibrary"
-                @change="(e: Event) => selectedLibrary = (e.target as HTMLSelectElement).value"
-              >
-                <option value="" disabled>{{ locale.t('resources.form.contentLibrarySelect') }}</option>
-                <option v-for="lib in contentLibraries" :key="lib" :value="lib">{{ lib }}</option>
-              </select>
-            </label>
-
-            <div class="resource-actions">
-              <cds-button type="button" action="outline" @click="close">
-                {{ locale.t('common.cancel') }}
-              </cds-button>
-              <cds-button
-                type="submit"
-                action="solid"
-                status="primary"
-                :disabled="!canSubmit"
-              >
-                {{ locale.t('resources.form.submit') }}
-              </cds-button>
-            </div>
-          </form>
+            <cds-button-action
+              shape="times"
+              :title="locale.t('common.cancel')"
+              :aria-label="locale.t('common.cancel')"
+              @click="dismissTestResult"
+            ></cds-button-action>
+          </cds-alert>
         </div>
-      </div>
-    </Transition>
-  </Teleport>
+
+        <!-- Content library dropdown: appears after a successful test -->
+        <cds-control v-if="contentLibraries.length > 0 || selectedLibrary">
+          <cds-select>
+            <label>{{ locale.t('resources.form.contentLibrary') }}</label>
+            <select
+              :value="selectedLibrary"
+              @change="(e: Event) => selectedLibrary = (e.target as HTMLSelectElement).value"
+            >
+              <option value="" disabled>{{ locale.t('resources.form.contentLibrarySelect') }}</option>
+              <option v-for="lib in contentLibraries" :key="lib" :value="lib">{{ lib }}</option>
+            </select>
+          </cds-select>
+        </cds-control>
+      </form>
+    </cds-modal-content>
+
+    <cds-modal-actions>
+      <cds-button type="button" action="outline" @click="close">
+        {{ locale.t('common.cancel') }}
+      </cds-button>
+      <cds-button
+        type="submit"
+        action="solid"
+        status="primary"
+        :disabled="!canSubmit"
+        @click="onSubmit"
+      >
+        {{ locale.t('resources.form.submit') }}
+      </cds-button>
+    </cds-modal-actions>
+  </cds-modal>
 </template>
 
 <style scoped>
-.resource-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(11, 18, 32, 0.55);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  display: grid;
-  place-items: center;
-  z-index: 1100;
-  padding: 24px;
+/* cds-modal is teleported to <body>, so deep selectors are required to size
+   the host. Same width as ModelGatewayFormModal (560px) so the two dialogs
+   read as the same family at the same breakpoint. */
+:deep(cds-modal) {
+  --width: 560px;
 }
 
-.resource-card {
-  width: min(520px, 100%);
-  background: var(--cds-alias-object-container-background, #ffffff);
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  border-radius: 12px;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.resource-title {
-  margin: 0;
-  font-size: 18px;
-}
-
+/* Match ModelGatewayFormModal: the form should not span the full modal
+   content width — the columns would leave inputs visually over-long.
+   `align:stretch` on the form itself still stretches internal controls
+   to the form's max width (70% of the modal content), which is the
+   intended "Compact 2-column" clarity form layout. */
 .resource-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.resource-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.resource-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--cds-alias-typography-color-300, #565656);
-}
-
-.resource-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  max-width: 70%;
 }
 
 .resource-check {
@@ -404,6 +375,11 @@ function onBackdropClick(e: MouseEvent) {
   align-items: flex-start;
   gap: 8px;
   cursor: pointer;
+  /* Push the checkbox row to the right of the cds-input label column so its
+     left edge lines up with the vCenter 密码 input's text (i.e. the
+     start of the input column). Same 24px offset as ModelGatewayFormModal's
+     test-connection-row. */
+  margin-left: 24px;
 }
 .resource-check input {
   margin-top: 2px;
@@ -426,6 +402,10 @@ function onBackdropClick(e: MouseEvent) {
   flex-direction: column;
   gap: 8px;
   align-items: flex-start;
+  /* Same 24px left offset as .resource-check above and as
+     ModelGatewayFormModal's .test-connection-row: the 测试连接 button
+     should line up under the vCenter 密码 input column, not the modal edge. */
+  margin-left: 24px;
 }
 
 .resource-test-alert {
@@ -443,41 +423,18 @@ function onBackdropClick(e: MouseEvent) {
   color: var(--cds-alias-typography-color-300, #565656);
 }
 
-.app-input {
-  font: inherit;
-  font-size: 14px;
-  width: 100%;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 4px;
-  border: 1px solid var(--cds-alias-object-border-color, #cbd4d8);
-  background: var(--cds-alias-object-container-background, #ffffff);
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  outline: none;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
-  box-sizing: border-box;
-}
-.app-input:focus {
-  border-color: var(--cds-alias-status-info, #0079ad);
-  box-shadow: 0 0 0 2px var(--cds-alias-object-interaction-background-hover, #e0f6ff);
-}
-.app-select {
-  appearance: auto;
-  cursor: pointer;
-}
-
-.resource-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.resource-fade-enter-active,
-.resource-fade-leave-active {
-  transition: opacity 0.18s ease;
-}
-.resource-fade-enter-from,
-.resource-fade-leave-to {
-  opacity: 0;
+/* Mark for backend-required fields. Same CSS contract as UserFormDialog.vue
+   and ModelGatewayFormModal.vue. */
+.required-mark {
+  color: var(--cds-alias-status-danger, #c21d00);
+  font-size: 0.7em;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 1px;
+  display: inline-block;
+  vertical-align: top;
+  /* Lift the asterisk above the cap-line of the label baseline. */
+  position: relative;
+  top: -0.25em;
 }
 </style>

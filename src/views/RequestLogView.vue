@@ -247,7 +247,10 @@ async function copyRequestId(value: string) {
 
 <template>
   <section class="request-log-page">
-    <h1 cds-text="title" class="heading">{{ locale.t('requestLog.title') }}</h1>
+    <header class="page-head">
+      <h1 cds-text="title" class="heading">{{ locale.t('requestLog.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('requestLog.description') }}</p>
+    </header>
 
     <div class="log-shell">
       <div class="toolbar" :aria-label="locale.t('requestLog.filter.toolbar')">
@@ -279,27 +282,16 @@ async function copyRequestId(value: string) {
           </button>
         </div>
 
-        <cds-button
-          action="outline"
-          class="icon-refresh"
+        <button
+          type="button"
+          class="refresh-button"
           :disabled="loading"
           :aria-label="locale.t('requestLog.action.refresh')"
           :title="locale.t('requestLog.action.refresh')"
           @click="refreshLogs"
         >
-          <cds-icon shape="refresh" size="sm" :class="{ spinning: loading }"></cds-icon>
-        </cds-button>
-
-        <cds-button
-          action="solid"
-          status="primary"
-          class="primary-refresh"
-          :disabled="loading"
-          @click="refreshLogs"
-        >
-          <cds-icon shape="refresh" size="sm" :class="{ spinning: loading }"></cds-icon>
-          <span>{{ locale.t('requestLog.action.refresh') }}</span>
-        </cds-button>
+          <cds-icon shape="refresh" size="md" :class="{ spinning: loading }" aria-hidden="true"></cds-icon>
+        </button>
 
         <div class="toolbar-spacer"></div>
 
@@ -523,16 +515,28 @@ async function copyRequestId(value: string) {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+}
+.page-head {
+  flex: 0 0 auto;
 }
 .heading {
-  flex: 0 0 auto;
   margin: 0;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 24px;
-  line-height: 1.25;
+  font-size: 28px;
+  line-height: 1.3;
   font-weight: 600;
-  letter-spacing: 0;
+  letter-spacing: -0.01em;
+}
+.desc {
+  margin: 12px 0 0;
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 720px;
+}
+.muted {
+  color: var(--cds-alias-typography-color-300, #565656);
 }
 .log-shell {
   flex: 1 1 auto;
@@ -588,16 +592,31 @@ async function copyRequestId(value: string) {
 .time-tab.active {
   background: var(--cds-alias-object-app-background, #f1f5f8);
 }
-.icon-refresh,
-.primary-refresh {
+/* Refresh button: chrome-free plain <button> — no background, no border —
+   just the icon. Matches ModelGatewayView's reference refresh button. */
+.refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 6px 8px;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
   flex: 0 0 auto;
+  border-radius: 0;
 }
-.icon-refresh {
-  --padding: 0;
-  min-width: 32px;
+.refresh-button:hover:not(:disabled) {
+  color: var(--cds-alias-object-app-blue, #0072a3);
 }
-.primary-refresh span {
-  margin-left: 4px;
+.refresh-button:focus-visible {
+  outline: 2px solid var(--cds-alias-object-app-blue, #0072a3);
+  outline-offset: 2px;
+}
+.refresh-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 .toolbar-spacer {
   flex: 1 1 auto;
@@ -927,9 +946,8 @@ async function copyRequestId(value: string) {
 }
 @media (max-width: 720px) {
   .heading {
-    font-size: 21px;
+    font-size: 24px;
   }
-  .primary-refresh span,
   .page-size {
     display: none;
   }
