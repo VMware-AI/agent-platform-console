@@ -17,3 +17,29 @@ export const VSPHERE_RESOURCE_POOLS_QUERY = gql`
     }
   }
 `
+
+export const VSPHERE_NETWORKS_QUERY = gql`
+  query VsphereNetworks($resourcePoolId: ID!) {
+    vsphereNetworks(resourcePoolId: $resourcePoolId) {
+      name
+      path
+      type
+      dvsName
+    }
+  }
+`
+
+export const CONTENT_LIBRARIES_QUERY = gql`
+  query ContentLibraries($resourcePoolId: ID!) {
+    contentLibraries(resourcePoolId: $resourcePoolId)
+  }
+`
+
+export const CONTENT_LIBRARY_ITEMS_QUERY = gql`
+  query ContentLibraryItems($resourcePoolId: ID!, $libraryName: String!) {
+    contentLibraryItems(resourcePoolId: $resourcePoolId, libraryName: $libraryName) {
+      name
+      type
+    }
+  }
+`
