@@ -420,7 +420,7 @@ export const STRINGS: Dict = {
   'gateway.status.failed': { zh: '同步失败', en: 'Failed' },
   'gateway.status.neverSynced': { zh: '未同步', en: 'Never synced' },
   'gateway.status.syncedAgo': { zh: '{ago}已同步', en: 'Synced {ago} ago' },
-  'gateway.strategy.simpleShuffle': { zh: '简单洗牌', en: 'Simple Shuffle' },
+  'gateway.strategy.simpleShuffle': { zh: '简单分流', en: 'Simple Shuffle' },
   'gateway.strategy.leastBusy': { zh: '最少繁忙', en: 'Least Busy' },
   'gateway.strategy.latencyBasedRouting': { zh: '基于延迟', en: 'Latency-based Routing' },
   'gateway.strategy.usageBasedRoutingV2': { zh: '基于用量 v2', en: 'Usage-based Routing v2' },
