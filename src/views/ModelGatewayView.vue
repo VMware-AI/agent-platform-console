@@ -378,6 +378,7 @@ const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
       </cds-button>
       <cds-button
         class="refresh-button"
+        action="ghost"
         :disabled="loading"
         :aria-label="locale.t('gateway.action.refresh')"
         :title="locale.t('gateway.action.refresh')"
@@ -800,15 +801,10 @@ const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
 .gateway-pager > label {
   color: var(--cds-alias-typography-color-300, #565656);
 }
-/* Toolbar refresh button — round 32x32 icon-only.
-   Spinning keyframe + reduced-motion override are defined above
-   alongside the existing test-connection spinning icon, so we
-   just reuse the .spinning class via :class binding. */
+/* Toolbar refresh button — no chrome at all (no border, no fill).
+   action="ghost" on cds-button keeps the click target accessible
+   while the icon itself is the only visual. */
 .refresh-button {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: 50%;
   flex-shrink: 0;
 }
 .spinning {
