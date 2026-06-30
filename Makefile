@@ -65,18 +65,9 @@ clean-all: clean ## Also remove node_modules
 	rm -rf node_modules
 
 # ---------- Docker ----------
-.PHONY: build-images
-build-images: ## Multi-arch build (PLATFORMS=$(PLATFORMS)); loads $(IMAGE):$(TAG) into local docker
-	docker buildx create --name $(BUILDER) --use --driver docker-container 2>/dev/null || true
-	docker buildx build \
-		--builder $(BUILDER) \
-		--platform $(PLATFORMS) \
-		--tag $(REGISTRY)/$(IMAGE):$(TAG) \
-		--load \
-		.
-
 .PHONY: release-images
-release-images: build-images ## Multi-arch build + push to $(REGISTRY)/$(IMAGE):$(TAG) and :latest
+release-images: ## Multi-arch build + push to $(REGISTRY)/$(IMAGE):$(TAG) and :latest
+	docker buildx create --name $(BUILDER) --use --driver docker-container 2>/dev/null || true
 	docker buildx build \
 		--builder $(BUILDER) \
 		--platform $(PLATFORMS) \
