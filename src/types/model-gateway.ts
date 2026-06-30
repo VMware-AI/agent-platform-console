@@ -1,10 +1,23 @@
+/**
+ * `ModelGateway` schema types — see Postman collection
+ * `agent-platform-backend.postman_collection.json` § Model Gateways (LITELLM)
+ * for the live GraphQL contract.
+ *
+ * Backend fields no longer surfaced to the UI (compared to the previous
+ * contract): `status` (folded into `lastSyncStatus`),
+ * `latencyMs` (no longer probed on connect/sync), and `adminUrl`
+ * (the UI is derived from `endpoint + '/ui'`).
+ */
 export type ModelGatewayProvider = 'LITELLM'
-
-export type ModelGatewayStatus = 'CONNECTED' | 'DISCONNECTED' | 'ERROR'
 
 export type ModelGatewaySyncState = 'SYNCED' | 'SYNCING' | 'PARTIAL' | 'FAILED' | 'NEVER'
 
-export type LoadBalancingStrategy = 'ROUND_ROBIN'
+export type LoadBalancingStrategy =
+  | 'SIMPLE_SHUFFLE'
+  | 'LEAST_BUSY'
+  | 'LATENCY_BASED_ROUTING'
+  | 'USAGE_BASED_ROUTING_V2'
+  | 'COST_BASED_ROUTING'
 
 export type ModelGatewaySortField = 'NAME' | 'ENDPOINT' | 'STATUS' | 'CREATED_AT' | 'UPDATED_AT'
 
@@ -20,10 +33,11 @@ export interface ModelGateway {
   name: string
   provider: ModelGatewayProvider
   endpoint: string
-  status: ModelGatewayStatus
-  loadBalancingStrategy: LoadBalancingStrategy
-  latencyMs: number | null
-  adminUrl: string | null
+  /** Number of models deployed on the backend gateway, populated by the
+   * latest sync. Always non-null — backend projects a NULL DB column as
+   * `0` (see internal/graph/gateway_facade.go `toModelGateway`). */
+  backendModelCount: number
+  loadBalancingStrategy: LoadBalancingStrategy | null
   lastSyncAt: string | null
   lastSyncStatus: ModelGatewaySyncState
   lastSyncMessage: string | null
@@ -46,7 +60,6 @@ export interface ModelGatewaySyncSummary {
 
 export interface ModelGatewayFilterInput {
   search?: string | null
-  status?: ModelGatewayStatus | null
 }
 
 export interface PageInput {
@@ -65,13 +78,14 @@ export interface ModelGatewaysQueryResult {
   modelGatewaySyncSummary: ModelGatewaySyncSummary
 }
 
+/** `ModelGatewayInput` — the only writable subset of a gateway.
+ * Backend rejects `backendModelCount` / `loadBalancingStrategy` as inputs
+ * (they are read-only, populated by sync). */
 export interface ModelGatewayInput {
   name: string
   provider: ModelGatewayProvider
   endpoint: string
-  adminUrl?: string | null
   masterKey?: string | null
-  loadBalancingStrategy: LoadBalancingStrategy
 }
 
 export interface CreateModelGatewayVars {
@@ -82,15 +96,6 @@ export interface CreateModelGatewayResult {
   createModelGateway: ModelGateway
 }
 
-export interface UpdateModelGatewayVars {
-  id: string
-  input: ModelGatewayInput
-}
-
-export interface UpdateModelGatewayResult {
-  updateModelGateway: ModelGateway
-}
-
 export interface DeleteModelGatewayVars {
   id: string
 }
@@ -99,25 +104,46 @@ export interface DeleteModelGatewayResult {
   deleteModelGateway: { deletedID: string }
 }
 
-export interface TestModelGatewayConnectionVars {
+/* ---------- Sync (post-create background sync + manual trigger) ---------- */
+
+/** `syncModelGatewayConnection(id)` — manually triggers the same path as
+ * the post-create background sync. On success the backend updates
+ * `loadBalancingStrategy` and `backendModelCount`; on failure the stored
+ * values are preserved. */
+export interface SyncModelGatewayConnectionVars {
   id: string
 }
 
-export interface ModelGatewayTestResult {
+export interface SyncModelGatewayConnectionResult {
   success: boolean
-  status: ModelGatewayStatus
-  latencyMs: number | null
   message: string
-  testedAt: string
   gateway: ModelGateway
 }
 
-export interface TestModelGatewayConnectionResult {
-  testModelGatewayConnection: ModelGatewayTestResult
+export interface SyncModelGatewayConnectionPayload {
+  syncModelGatewayConnection: SyncModelGatewayConnectionResult
 }
 
-export const STATUS_KEY_FROM_GQL: Record<ModelGatewayStatus, string> = {
-  CONNECTED: 'connected',
-  DISCONNECTED: 'disconnected',
-  ERROR: 'error',
+/* ---------- Test connection (dry-run, pre-create) ---------- */
+
+/** `testNewModelGatewayConnection(input)` — pre-create dry-run probe.
+ * Pings a not-yet-saved endpoint + master key without persisting anything.
+ * Only the connectivity probe runs (no routing-strategy probe). */
+export interface TestModelGatewayConnectionInput {
+  endpoint: string
+  masterKey: string
+}
+
+export interface TestNewModelGatewayConnectionVars {
+  input: TestModelGatewayConnectionInput
+}
+
+export interface TestNewModelGatewayConnectionResult {
+  success: boolean
+  message: string
+  testedAt: string
+}
+
+export interface TestNewModelGatewayConnectionPayload {
+  testNewModelGatewayConnection: TestNewModelGatewayConnectionResult
 }

@@ -5,9 +5,10 @@
  * and runs real mutations through `apolloClient.mutate`:
  *   - create  → CreateModelGateway  (via ModelGatewayFormModal, no editing target)
  *   - update  → UpdateModelGateway  (via ModelGatewayFormModal with editing target)
- *   - delete  → DeleteModelGateway  (via ConfirmDeleteModal)
- *   - test/resync connection → TestModelGatewayConnection (row action), which maps
- *     the returned { success, message } onto a success / error toast and refetches.
+ *   - delete  → DeleteModelGateway  (via two ConfirmDialogs: intent → type-to-confirm)
+ *   - manual sync → SyncModelGatewayConnection (row action), which maps the
+ *     returned { success, message, gateway { lastSyncStatus } } onto a
+ *     success / warning / error toast and refetches.
  *
  * Mocking strategy (mirrors ModelRouteView.test.ts):
  *   - `@vue/apollo-composable`'s `useQuery` is mocked to a single controllable slot
@@ -58,6 +59,14 @@ vi.mock('@vue/apollo-composable', () => ({
     error: listSlot.error,
     refetch: listSlot.refetch,
   }),
+  // useMutation is consumed by ModelGatewayFormModal for the Test Connection
+  // button. The shared `mutateMock` spy is reused so each test can drive
+  // both the create/update/delete/sync mutations and the test-connection
+  // mutation through a single `mutateMock.mockResolvedValue / mockRejectedValue`.
+  useMutation: () => ({
+    mutate: mutateMock,
+    loading: ref(false),
+  }),
 }))
 
 const mutateMock = vi.fn()
@@ -87,10 +96,8 @@ function makeGateway(over: Partial<ModelGateway> = {}): ModelGateway {
     name: 'Primary Router',
     provider: 'LITELLM',
     endpoint: 'https://litellm.example.com',
-    status: 'CONNECTED',
-    loadBalancingStrategy: 'ROUND_ROBIN',
-    latencyMs: 42,
-    adminUrl: 'https://litellm.example.com/ui',
+    backendModelCount: 12,
+    loadBalancingStrategy: 'SIMPLE_SHUFFLE',
     lastSyncAt: '2026-02-01T08:30:00Z',
     lastSyncStatus: 'SYNCED',
     lastSyncMessage: null,
@@ -152,20 +159,24 @@ function rows(): HTMLElement[] {
 function formModal(): HTMLElement | null {
   return wrapper!.element.querySelector('.gateway-form')
 }
-function deleteModal(): HTMLElement | null {
-  // ConfirmDeleteModal renders a cds-modal containing the delete note paragraph.
-  const note = wrapper!.element.querySelector('.delete-note')
-  return note ? (note.closest('cds-modal') as HTMLElement | null) : null
+function headerTexts(): string[] {
+  return Array.from(wrapper!.element.querySelectorAll<HTMLElement>('cds-grid-column'))
+    .map((el) => el.textContent?.trim() ?? '')
+    .filter(Boolean)
 }
+
+// --- setup -----------------------------------------------------------------
 
 beforeEach(() => {
   setActivePinia(createPinia())
   locale = useLocaleStore()
   listSlot = makeSlot()
   mutateMock.mockReset()
-  // Toast state is module-scoped + shared across tests; reset it so the
-  // `not.toContain` assertions are not polluted by a prior test's toast.
+  // Toast state is module-scoped (shared across useToast() callers); start clean.
   useToast().clear()
+  // vue-apollo subscribes through onResult in some cases; reset the slot
+  // to undefined so the template falls back to empty arrays.
+  listSlot.result.value = undefined
 })
 
 afterEach(() => {
@@ -173,7 +184,7 @@ afterEach(() => {
   wrapper = null
 })
 
-// ---------------------------------------------------------------------------
+// --- tests -----------------------------------------------------------------
 
 describe('ModelGatewayView — list states', () => {
   it('shows the loading placeholder while loading with no rows yet', () => {
@@ -184,14 +195,12 @@ describe('ModelGatewayView — list states', () => {
     expect(rows()).toHaveLength(0)
   })
 
-  it('shows the empty placeholder + connect CTA when there are no gateways', async () => {
+  it('shows the empty placeholder when there are no gateways', async () => {
     setListData([])
     mountView()
     await flushPromises()
     const placeholder = wrapper!.element.querySelector('cds-grid-placeholder')
     expect(placeholder?.textContent).toContain(locale.t('gateway.empty'))
-    // The empty state offers a connect button.
-    expect(placeholder?.textContent).toContain(locale.t('gateway.connectButton'))
     expect(rows()).toHaveLength(0)
   })
 
@@ -201,7 +210,7 @@ describe('ModelGatewayView — list states', () => {
     await flushPromises()
     const alert = wrapper!.element.querySelector('cds-alert[status="danger"]')
     expect(alert?.textContent?.trim()).toBe(locale.t('gateway.error.load'))
-    // When errored the empty placeholder must NOT also render.
+    // No placeholder for error state — the alert takes the visual real estate.
     const placeholder = wrapper!.element.querySelector('cds-grid-placeholder')
     expect(placeholder).toBeNull()
   })
@@ -215,28 +224,108 @@ describe('ModelGatewayView — list states', () => {
     const first = rows()[0]
     expect(first.textContent).toContain('Alpha Router')
 
-    // Synced gateway → "synced … ago" badge text (interpolated, not raw enum).
+    // GW_A is SYNCED → success-toned badge.
     const syncedBadge = first.querySelector('.sync-status-badge')
     expect(syncedBadge?.getAttribute('status')).toBe('success')
 
-    // Never-synced gateway → neutral badge with the neverSynced string.
+    // GW_B is NEVER → neutral badge with the "未同步" label.
     const second = rows()[1]
     const neverBadge = second.querySelector('.sync-status-badge')
     expect(neverBadge?.getAttribute('status')).toBe('neutral')
     expect(neverBadge?.textContent).toContain(locale.t('gateway.status.neverSynced'))
+
+    // Headers include the new backendModelCount column (no legacy status column).
+    const headerTextsResult = headerTexts()
+    expect(headerTextsResult).toContain(locale.t('gateway.col.backendModelCount'))
+    expect(headerTextsResult).toContain(locale.t('gateway.col.strategy'))
+    expect(headerTextsResult).toContain(locale.t('gateway.col.endpoint'))
+    // Connection-status column is gone — its data is now folded into
+    // `gateway.col.sync` via `lastSyncStatus`.
+    expect(headerTextsResult).not.toContain(locale.t('gateway.col.status'))
+  })
+
+  it('renders the backendModelCount cell as a number, zero for never-synced', async () => {
+    setListData([
+      GW_A, // backendModelCount: 12
+      // Before the first sync the DB column is NULL; the backend's
+      // `toModelGateway` projects it as `0` so the frontend never sees
+      // a nullable value here.
+      makeGateway({ id: 'b', name: 'Not Synced', backendModelCount: 0, lastSyncStatus: 'NEVER' }),
+    ])
+    mountView()
+    await flushPromises()
+
+    const cells = rows()[0].querySelectorAll<HTMLElement>('cds-grid-cell')
+    // backendModelCount is the 3rd cell (after name, endpoint, sync).
+    const modelCountCell = cells[3]
+    expect(modelCountCell.textContent?.trim()).toBe('12')
+    expect(modelCountCell.classList.contains('num-cell')).toBe(true)
+
+    const neverSyncedCells = rows()[1].querySelectorAll<HTMLElement>('cds-grid-cell')
+    expect(neverSyncedCells[3].textContent?.trim()).toBe('0')
+  })
+
+  it('renders the sync badge with the per-state label for SYNCING / FAILED / PARTIAL', async () => {
+    setListData([
+      makeGateway({ id: 's', name: 'Syncing', lastSyncStatus: 'SYNCING' }),
+      makeGateway({ id: 'f', name: 'Failed', lastSyncStatus: 'FAILED' }),
+      makeGateway({ id: 'p', name: 'Partial', lastSyncStatus: 'PARTIAL' }),
+    ])
+    mountView()
+    await flushPromises()
+
+    const badges = rows().map((r) => r.querySelector<HTMLElement>('.sync-status-badge')!)
+    expect(badges[0].getAttribute('status')).toBe('neutral')
+    expect(badges[0].textContent).toContain(locale.t('gateway.status.syncing'))
+    expect(badges[1].getAttribute('status')).toBe('danger')
+    expect(badges[1].textContent).toContain(locale.t('gateway.status.failed'))
+    expect(badges[2].getAttribute('status')).toBe('warning')
+    expect(badges[2].textContent).toContain(locale.t('gateway.status.partial'))
+  })
+
+  it('renders an em-dash in the strategy column when the gateway has no strategy yet', async () => {
+    // Backend `loadBalancingStrategy` is nullable until the first sync
+    // populates the column from /config/router.
+    setListData([makeGateway({ loadBalancingStrategy: null })])
+    mountView()
+    await flushPromises()
+    const row = rows()[0]
+    // The strategy cell is rendered as plain text (no badge). Look up the
+    // cell by its class and assert the em-dash text directly.
+    const strategyCell = row.querySelector<HTMLElement>('cds-grid-cell.strategy-cell')
+    expect(strategyCell).not.toBeNull()
+    expect(strategyCell?.textContent?.trim()).toBe('—')
+  })
+
+  it('maps each LoadBalancingStrategy enum value to its localized label', async () => {
+    const cases: { strategy: 'SIMPLE_SHUFFLE' | 'LEAST_BUSY' | 'LATENCY_BASED_ROUTING' | 'USAGE_BASED_ROUTING_V2' | 'COST_BASED_ROUTING'; key: string }[] = [
+      { strategy: 'SIMPLE_SHUFFLE',         key: 'gateway.strategy.simpleShuffle' },
+      { strategy: 'LEAST_BUSY',             key: 'gateway.strategy.leastBusy' },
+      { strategy: 'LATENCY_BASED_ROUTING',  key: 'gateway.strategy.latencyBasedRouting' },
+      { strategy: 'USAGE_BASED_ROUTING_V2', key: 'gateway.strategy.usageBasedRoutingV2' },
+      { strategy: 'COST_BASED_ROUTING',     key: 'gateway.strategy.costBasedRouting' },
+    ]
+    setListData(cases.map((c, i) =>
+      makeGateway({ id: `g-${i}`, name: `gw-${c.strategy}`, loadBalancingStrategy: c.strategy }),
+    ))
+    mountView()
+    await flushPromises()
+    const renderedRows = rows()
+    cases.forEach((c, i) => {
+      expect(renderedRows[i].querySelector<HTMLElement>('cds-grid-cell.strategy-cell')?.textContent?.trim())
+        .toBe(locale.t(c.key))
+    })
   })
 
   it('renders an http endpoint as a link but a non-http endpoint as plain text', async () => {
     setListData([GW_A, GW_B])
     mountView()
     await flushPromises()
-
     const link = rows()[0].querySelector<HTMLAnchorElement>('a.endpoint')
     expect(link).not.toBeNull()
     expect(link?.getAttribute('href')).toBe('https://litellm.example.com')
     expect(link?.getAttribute('rel')).toContain('noopener')
-
-    // Non-http endpoint is not clickable, rendered as plain text.
+    // GW_B has a unix socket endpoint — never clickable.
     expect(rows()[1].querySelector('a.endpoint')).toBeNull()
     expect(rows()[1].querySelector('.endpoint-text')?.textContent).toContain(
       'unix:///var/run/litellm.sock',
@@ -245,26 +334,26 @@ describe('ModelGatewayView — list states', () => {
 })
 
 describe('ModelGatewayView — create flow', () => {
-  it('opens the create form modal from the connect dropdown LiteLLM option', async () => {
+  it('opens the create form modal when the connect button is clicked', async () => {
     setListData([GW_A])
     mountView()
     await flushPromises()
     expect(formModal()).toBeNull()
 
-    // Open the AppDropdown, then click the LiteLLM menu option.
     wrapper!.element
-      .querySelector<HTMLElement>('.dd-trigger')!
-      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    await flushPromises()
-    wrapper!.element
-      .querySelector<HTMLElement>('.menu-option')!
+      .querySelector<HTMLElement>('.connect-button')!
       .dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
     const form = formModal()
     expect(form).not.toBeNull()
-    // Create title (not edit) is shown.
     expect(wrapper!.element.textContent).toContain(locale.t('gateway.form.createTitle'))
+
+    // Provider is the only available option; the selector is open.
+    const providerSelect = form!.querySelector<HTMLSelectElement>('select')
+    expect(providerSelect).not.toBeNull()
+    expect(providerSelect!.disabled).toBe(false)
+    expect(providerSelect!.value).toBe('LITELLM')
   })
 
   it('submitting the create form calls mutate with the input, toasts success, refetches', async () => {
@@ -275,11 +364,7 @@ describe('ModelGatewayView — create flow', () => {
 
     // Open the create form.
     wrapper!.element
-      .querySelector<HTMLElement>('.dd-trigger')!
-      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    await flushPromises()
-    wrapper!.element
-      .querySelector<HTMLElement>('.menu-option')!
+      .querySelector<HTMLElement>('.connect-button')!
       .dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
@@ -289,10 +374,11 @@ describe('ModelGatewayView — create flow', () => {
       el.value = v
       el.dispatchEvent(new Event('input'))
     }
-    // Order in the form: name, endpoint, adminUrl, masterKey.
+    // Order in the form: name, endpoint, masterKey.
+    // (adminUrl is not collected; loadBalancingStrategy is read-only.)
     setVal(inputs[0], 'My New Router')
     setVal(inputs[1], 'https://new.example.com')
-    setVal(inputs[3], 'sk-secret-key')
+    setVal(inputs[2], 'sk-secret-key')
     await flushPromises()
 
     form.dispatchEvent(new Event('submit'))
@@ -300,13 +386,16 @@ describe('ModelGatewayView — create flow', () => {
 
     expect(mutateMock).toHaveBeenCalledTimes(1)
     const arg = mutateMock.mock.calls[0][0] as { variables: { input: Record<string, unknown> } }
-    expect(arg.variables.input).toMatchObject({
+    expect(arg.variables.input).toEqual({
       name: 'My New Router',
       provider: 'LITELLM',
       endpoint: 'https://new.example.com',
       masterKey: 'sk-secret-key',
-      loadBalancingStrategy: 'ROUND_ROBIN',
     })
+    // Backend rejects these as inputs — make sure the form doesn't send them.
+    expect(arg.variables.input).not.toHaveProperty('adminUrl')
+    expect(arg.variables.input).not.toHaveProperty('loadBalancingStrategy')
+    expect(arg.variables.input).not.toHaveProperty('backendModelCount')
 
     expect(toastMessages()).toContain(locale.t('gateway.toast.created'))
     expect(listSlot.refetch).toHaveBeenCalled()
@@ -320,12 +409,9 @@ describe('ModelGatewayView — create flow', () => {
     mountView()
     await flushPromises()
 
+    // Open the create form.
     wrapper!.element
-      .querySelector<HTMLElement>('.dd-trigger')!
-      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    await flushPromises()
-    wrapper!.element
-      .querySelector<HTMLElement>('.menu-option')!
+      .querySelector<HTMLElement>('.connect-button')!
       .dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
@@ -337,7 +423,7 @@ describe('ModelGatewayView — create flow', () => {
     }
     setVal(inputs[0], 'Dup Router')
     setVal(inputs[1], 'https://dup.example.com')
-    setVal(inputs[3], 'sk-secret-key')
+    setVal(inputs[2], 'sk-secret-key')
     await flushPromises()
 
     form.dispatchEvent(new Event('submit'))
@@ -357,66 +443,213 @@ describe('ModelGatewayView — create flow', () => {
   })
 })
 
-describe('ModelGatewayView — edit flow', () => {
-  function openEdit(index: number) {
-    // Row actions: sync (first), edit (second), delete (third danger).
-    const actions = rows()[index].querySelectorAll<HTMLElement>('.row-action')
-    actions[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+describe('ModelGatewayView — ModelGatewayFormModal test connection', () => {
+  // Helper: open the create form by clicking the connect button. Returns
+  // the form element so each test can drive its own inputs.
+  async function openCreateForm(): Promise<HTMLElement> {
+    wrapper!.element
+      .querySelector<HTMLElement>('.connect-button')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    return formModal()!
   }
 
-  it('opens the edit modal pre-filled with the gateway under edit', async () => {
-    setListData([GW_A, GW_B])
-    mountView()
-    await flushPromises()
+  function testButton(): HTMLElement | null {
+    return wrapper!.element.querySelector<HTMLElement>('[data-testid="test-connection"]')
+  }
 
-    openEdit(0)
-    await flushPromises()
+  function testResultEl(): HTMLElement | null {
+    return wrapper!.element.querySelector<HTMLElement>('[data-testid="test-result"]')
+  }
 
-    const form = formModal()
-    expect(form).not.toBeNull()
-    expect(wrapper!.element.textContent).toContain(locale.t('gateway.form.editTitle'))
-    // Name field is pre-filled with the edited gateway's name.
-    const nameInput = form!.querySelector<HTMLInputElement>('input')!
-    expect(nameInput.value).toBe('Alpha Router')
-  })
-
-  it('submitting the edit form calls update mutate with the id + input, toasts updated', async () => {
-    mutateMock.mockResolvedValue({ data: { updateModelGateway: makeGateway({ id: 'a' }) } })
+  it('renders the test-connection button disabled when the form first opens', async () => {
     setListData([GW_A])
     mountView()
     await flushPromises()
+    await openCreateForm()
 
-    openEdit(0)
+    // Empty endpoint + empty master key → button is disabled.
+    // Note: cds-button binds :disabled as the literal string "true" / "false",
+    // not via the property, so we assert on the attribute value.
+    expect(testButton()).not.toBeNull()
+    expect(testButton()!.getAttribute('disabled')).toBe('true')
+  })
+
+  it('create-mode success calls the dry-run mutation and shows success hint', async () => {
+    mutateMock.mockResolvedValue({
+      data: {
+        testNewModelGatewayConnection: {
+          success: true,
+          message: 'connection ok',
+          testedAt: '2026-02-02T00:00:00Z',
+        },
+      },
+    })
+    setListData([GW_A])
+    mountView()
     await flushPromises()
-
-    const form = formModal()!
+    const form = await openCreateForm()
     const inputs = form.querySelectorAll<HTMLInputElement>('input')
-    inputs[0].value = 'Alpha Router Renamed'
-    inputs[0].dispatchEvent(new Event('input'))
-    await flushPromises()
-
-    form.dispatchEvent(new Event('submit'))
-    await flushPromises()
-
-    expect(mutateMock).toHaveBeenCalledTimes(1)
-    const arg = mutateMock.mock.calls[0][0] as {
-      variables: { id: string; input: Record<string, unknown> }
+    const setVal = (el: HTMLInputElement, v: string) => {
+      el.value = v
+      el.dispatchEvent(new Event('input'))
     }
-    expect(arg.variables.id).toBe('a')
-    expect(arg.variables.input).toMatchObject({ name: 'Alpha Router Renamed' })
-    expect(toastMessages()).toContain(locale.t('gateway.toast.updated'))
-    expect(listSlot.refetch).toHaveBeenCalled()
-    expect(formModal()).toBeNull()
+    setVal(inputs[0], 'Test Gateway')
+    setVal(inputs[1], 'https://new.example.com')
+    setVal(inputs[2], 'sk-secret-key')
+    await flushPromises()
+
+    expect(testButton()!.getAttribute('disabled')).toBe('false')
+    testButton()!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    // The dry-run mutation was called with the unwrapped payload.
+    // Note: useMutation's `mutate` receives the variables directly, not the
+    // full GraphQL options object — so the first arg is `{ input: ... }`.
+    expect(mutateMock).toHaveBeenCalledTimes(1)
+    const arg = mutateMock.mock.calls[0][0] as { input: { endpoint: string; masterKey: string } }
+    expect(arg.input).toEqual({
+      endpoint: 'https://new.example.com',
+      masterKey: 'sk-secret-key',
+    })
+
+    // Success hint + success toast.
+    expect(testResultEl()?.textContent).toContain('connection ok')
+    expect(testResultEl()?.classList.contains('test-result--success')).toBe(true)
+    expect(toastMessages().some((m) => m.includes('connection ok'))).toBe(true)
+    expect(toastStatuses()).toContain('success')
+  })
+
+  it('create-mode failure shows the backend message in the form + toast', async () => {
+    mutateMock.mockResolvedValue({
+      data: {
+        testNewModelGatewayConnection: {
+          success: false,
+          message: 'upstream unreachable',
+          testedAt: '2026-02-02T00:00:00Z',
+        },
+      },
+    })
+    setListData([GW_A])
+    mountView()
+    await flushPromises()
+    const form = await openCreateForm()
+    const inputs = form.querySelectorAll<HTMLInputElement>('input')
+    const setVal = (el: HTMLInputElement, v: string) => {
+      el.value = v
+      el.dispatchEvent(new Event('input'))
+    }
+    setVal(inputs[0], 'Test Gateway')
+    setVal(inputs[1], 'https://broken.example.com')
+    setVal(inputs[2], 'sk-bad-key')
+    await flushPromises()
+
+    testButton()!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(testResultEl()?.classList.contains('test-result--failure')).toBe(true)
+    expect(testResultEl()?.textContent).toContain('upstream unreachable')
+    expect(toastMessages().some((m) => m.includes('upstream unreachable'))).toBe(true)
+    expect(toastStatuses()).toContain('danger')
+  })
+
+  it('a thrown error during test surfaces a failure hint + danger toast', async () => {
+    mutateMock.mockRejectedValue(new Error('network down'))
+    setListData([GW_A])
+    mountView()
+    await flushPromises()
+    const form = await openCreateForm()
+    const inputs = form.querySelectorAll<HTMLInputElement>('input')
+    const setVal = (el: HTMLInputElement, v: string) => {
+      el.value = v
+      el.dispatchEvent(new Event('input'))
+    }
+    setVal(inputs[0], 'Test Gateway')
+    setVal(inputs[1], 'https://broken.example.com')
+    setVal(inputs[2], 'sk-bad-key')
+    await flushPromises()
+
+    testButton()!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(testResultEl()?.classList.contains('test-result--failure')).toBe(true)
+    expect(toastStatuses()).toContain('danger')
   })
 })
 
-describe('ModelGatewayView — delete flow', () => {
+describe('ModelGatewayView — delete flow (two-step)', () => {
+  /* `ConfirmDialog` teleports its markup to <body>. The two dialogs share
+     the same `.confirm-backdrop` selector and use a Vue `<Transition>`,
+     so at any moment only one backdrop is in the DOM — the one whose
+     `open` prop is true. Helpers below grab whichever backdrop is
+     currently visible. The two dialogs are distinguished by their title:
+       step 1 — `gateway.delete.title` ("删除模型网关接入")
+       step 2 — `gateway.delete.confirm.title` ("再次确认删除") */
   function openDelete(index: number) {
     const deleteBtn = rows()[index].querySelector<HTMLElement>('.row-action.danger')!
     deleteBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   }
 
-  it('requesting delete opens a confirm modal naming the target', async () => {
+  function currentDialog(): HTMLElement | null {
+    return document.body.querySelector<HTMLElement>('.confirm-backdrop')
+  }
+
+  function confirmButton(): HTMLElement {
+    const dialog = currentDialog()
+    if (!dialog) throw new Error('no confirm dialog open')
+    const btns = dialog.querySelectorAll<HTMLElement>('.confirm-actions cds-button')
+    return btns[1]!
+  }
+
+  function cancelButton(): HTMLElement {
+    const dialog = currentDialog()
+    if (!dialog) throw new Error('no confirm dialog open')
+    return dialog.querySelector<HTMLElement>('.confirm-actions cds-button')!
+  }
+
+  function typeToConfirmInput(): HTMLInputElement {
+    const dialog = currentDialog()
+    if (!dialog) throw new Error('no confirm dialog open')
+    const input = dialog.querySelector<HTMLInputElement>('input[type="text"]')
+    if (!input) throw new Error('type-to-confirm input missing — step-2 dialog not open')
+    return input
+  }
+
+  function isStep2Open(): boolean {
+    const dialog = currentDialog()
+    if (!dialog) return false
+    return dialog.querySelector('input[type="text"]') !== null
+  }
+
+  async function setTypeToConfirm(value: string) {
+    const input = typeToConfirmInput()
+    // Vue's controlled-input binding (`:value="typedInput"`) re-applies the
+    // reactive value back to the DOM on every render. Writing the DOM value
+    // directly and dispatching `input` would race with that and get reset
+    // on the next flush. Using the native setter bypasses Vue's tracking
+    // so the input event handler sees the value the test meant to type.
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+    setter.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    // Vue updates `typedInput` synchronously, but the re-render that
+    // re-applies `:value` to the DOM and recomputes `confirmDisabled`
+    // runs on the next microtask. Wait one tick before assertions.
+    await flushPromises()
+  }
+
+  function isConfirmDisabled(): boolean {
+    return confirmButton().getAttribute('disabled') === 'true'
+  }
+
+  function clickConfirm() {
+    confirmButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  }
+
+  function clickCancel() {
+    cancelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  }
+
+  it('row delete click opens the intent dialog naming the target', async () => {
     setListData([GW_A, GW_B])
     mountView()
     await flushPromises()
@@ -424,36 +657,105 @@ describe('ModelGatewayView — delete flow', () => {
     openDelete(1)
     await flushPromises()
 
-    const modal = deleteModal()
-    expect(modal).not.toBeNull()
-    // Message interpolates the gateway name.
+    const dialog = currentDialog()
+    expect(dialog).not.toBeNull()
     const expected = locale.t('gateway.delete.message').replace('{name}', 'Beta Router')
-    expect(modal?.textContent).toContain(expected)
+    expect(dialog?.textContent).toContain(expected)
+    expect(dialog?.querySelector('.confirm-title')?.textContent).toBe(
+      locale.t('gateway.delete.title'),
+    )
+    expect(isStep2Open()).toBe(false)
   })
 
-  it('confirming delete calls mutate with the target id, toasts deleted, refetches', async () => {
-    mutateMock.mockResolvedValue({ data: { deleteModelGateway: { deletedID: 'b' } } })
-    setListData([GW_A, GW_B])
+  it('cancel on the intent dialog closes it without calling the mutation', async () => {
+    setListData([GW_A])
     mountView()
     await flushPromises()
 
-    openDelete(1)
+    openDelete(0)
+    await flushPromises()
+    expect(currentDialog()).not.toBeNull()
+
+    clickCancel()
     await flushPromises()
 
-    // The danger button inside the confirm modal is the confirm action.
-    const confirmBtn = deleteModal()!.querySelector<HTMLElement>('cds-button[status="danger"]')!
-    confirmBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(currentDialog()).toBeNull()
+    expect(mutateMock).not.toHaveBeenCalled()
+    expect(toastMessages()).toEqual([])
+  })
+
+  it('confirming the intent dialog opens the type-to-confirm dialog', async () => {
+    setListData([GW_A])
+    mountView()
+    await flushPromises()
+
+    openDelete(0)
+    await flushPromises()
+    clickConfirm()
+    await flushPromises()
+
+    const dialog = currentDialog()
+    expect(dialog).not.toBeNull()
+    expect(dialog?.querySelector('.confirm-title')?.textContent).toBe(
+      locale.t('gateway.delete.confirm.title'),
+    )
+    expect(dialog?.querySelector('.confirm-body')?.textContent).toContain('Alpha Router')
+    // The gateway name must render as bold inline — not as a literal
+    // `{{name}}` placeholder left in the body. (Regression guard.)
+    const bold = dialog?.querySelector('.confirm-body strong')
+    expect(bold?.textContent).toBe('Alpha Router')
+    expect(dialog?.querySelector('.confirm-body')?.textContent).not.toContain('{{name}}')
+    expect(isStep2Open()).toBe(true)
+    // Confirm button is disabled until the typed name matches.
+    expect(isConfirmDisabled()).toBe(true)
+  })
+
+  it('step-2 confirm is disabled until the typed name matches the gateway', async () => {
+    setListData([GW_A])
+    mountView()
+    await flushPromises()
+
+    openDelete(0)
+    await flushPromises()
+    clickConfirm()
+    await flushPromises()
+
+    expect(isConfirmDisabled()).toBe(true)
+
+    // Wrong value → still disabled.
+    await setTypeToConfirm('alpha-router')   // case-sensitive, target is 'Alpha Router'
+    expect(isConfirmDisabled()).toBe(true)
+
+    // Trailing whitespace must be trimmed before matching.
+    await setTypeToConfirm('  Alpha Router  ')
+    expect(isConfirmDisabled()).toBe(false)
+  })
+
+  it('matching the type-to-confirm input fires the delete mutation, toasts success, refetches', async () => {
+    mutateMock.mockResolvedValue({ data: { deleteModelGateway: { deletedID: 'a' } } })
+    setListData([GW_A])
+    mountView()
+    await flushPromises()
+
+    openDelete(0)
+    await flushPromises()
+    clickConfirm()
+    await flushPromises()
+
+    await setTypeToConfirm('Alpha Router')
+    clickConfirm()
     await flushPromises()
 
     expect(mutateMock).toHaveBeenCalledTimes(1)
     const arg = mutateMock.mock.calls[0][0] as { variables: { id: string } }
-    expect(arg.variables.id).toBe('b')
+    expect(arg.variables.id).toBe('a')
     expect(toastMessages()).toContain(locale.t('gateway.toast.deleted'))
+    expect(toastStatuses()).toContain('success')
     expect(listSlot.refetch).toHaveBeenCalled()
-    expect(deleteModal()).toBeNull()
+    expect(currentDialog()).toBeNull()
   })
 
-  it('delete failure surfaces the backend error and keeps the modal open', async () => {
+  it('mutation failure surfaces the backend error and clears the dialog', async () => {
     mutateMock.mockRejectedValue(new Error('forbidden'))
     setListData([GW_A])
     mountView()
@@ -461,38 +763,54 @@ describe('ModelGatewayView — delete flow', () => {
 
     openDelete(0)
     await flushPromises()
-    deleteModal()!
-      .querySelector<HTMLElement>('cds-button[status="danger"]')!
-      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    clickConfirm()
+    await flushPromises()
+    await setTypeToConfirm('Alpha Router')
+    clickConfirm()
     await flushPromises()
 
-    // PR #23: backend error message surfaces via graphqlErrorMessage.
     const messages = toastMessages()
     expect(messages.some((m) => m.includes('forbidden'))).toBe(true)
     expect(toastStatuses()).toContain('danger')
     expect(messages).not.toContain(locale.t('gateway.toast.deleted'))
-    // Modal stays open (deleteTarget not cleared on failure).
-    expect(deleteModal()).not.toBeNull()
+    // The dialog was cleared before the mutation ran.
+    expect(currentDialog()).toBeNull()
+  })
+
+  it('cancel on the type-to-confirm dialog closes it without calling the mutation', async () => {
+    setListData([GW_A])
+    mountView()
+    await flushPromises()
+
+    openDelete(0)
+    await flushPromises()
+    clickConfirm()
+    await flushPromises()
+    expect(currentDialog()).not.toBeNull()
+
+    clickCancel()
+    await flushPromises()
+
+    expect(currentDialog()).toBeNull()
+    expect(mutateMock).not.toHaveBeenCalled()
+    expect(toastMessages()).toEqual([])
   })
 })
 
-describe('ModelGatewayView — test/resync connection', () => {
+describe('ModelGatewayView — manual sync', () => {
   function clickSync(index: number) {
     // The sync action is the first row-action (non-danger).
     const syncBtn = rows()[index].querySelector<HTMLElement>('.row-action:not(.danger)')!
     syncBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   }
 
-  it('success result toasts testSuccess naming the gateway and refetches', async () => {
+  it('success with SYNCED state toasts syncSuccess naming the gateway and refetches', async () => {
     mutateMock.mockResolvedValue({
       data: {
-        testModelGatewayConnection: {
+        syncModelGatewayConnection: {
           success: true,
-          status: 'CONNECTED',
-          latencyMs: 30,
           message: 'ok',
-          testedAt: '2026-02-02T00:00:00Z',
-          gateway: GW_A,
+          gateway: { ...GW_A, lastSyncStatus: 'SYNCED', lastSyncAt: '2026-02-02T00:00:00Z' },
         },
       },
     })
@@ -507,22 +825,72 @@ describe('ModelGatewayView — test/resync connection', () => {
     const arg = mutateMock.mock.calls[0][0] as { variables: { id: string } }
     expect(arg.variables.id).toBe('a')
 
-    const expected = locale.t('gateway.toast.testSuccess').replace('{name}', 'Alpha Router')
+    const expected = locale.t('gateway.toast.syncSuccess').replace('{name}', 'Alpha Router')
     expect(toastMessages()).toContain(expected)
     expect(toastStatuses()).toContain('success')
     expect(listSlot.refetch).toHaveBeenCalled()
   })
 
+  it('success with PARTIAL state toasts the partial-sync warning', async () => {
+    mutateMock.mockResolvedValue({
+      data: {
+        syncModelGatewayConnection: {
+          success: true,
+          message: 'partial',
+          gateway: { ...GW_A, lastSyncStatus: 'PARTIAL' },
+        },
+      },
+    })
+    setListData([GW_A])
+    mountView()
+    await flushPromises()
+
+    clickSync(0)
+    await flushPromises()
+
+    // The partial toast is the gateway.toast.syncPartial template, which
+    // carries the gateway name and success/failed counts. The backend's
+    // `message` field is informational and is not interpolated into the
+    // toast — assert on the template's gateway name + the PARTIAL label
+    // instead.
+    const messages = toastMessages()
+    expect(messages.some((m) => m.includes('Alpha Router'))).toBe(true)
+    // PARTIAL → warning status (yellow), not success.
+    expect(toastStatuses()).toContain('warning')
+    // No success toast.
+    expect(messages).not.toContain(locale.t('gateway.toast.syncSuccess').replace('{name}', 'Alpha Router'))
+  })
+
+  it('success with FAILED state surfaces the backend message as a danger toast', async () => {
+    mutateMock.mockResolvedValue({
+      data: {
+        syncModelGatewayConnection: {
+          success: true,
+          message: 'router rejected',
+          gateway: { ...GW_A, lastSyncStatus: 'FAILED' },
+        },
+      },
+    })
+    setListData([GW_A])
+    mountView()
+    await flushPromises()
+
+    clickSync(0)
+    await flushPromises()
+
+    expect(toastMessages()).toContain('router rejected')
+    expect(toastStatuses()).toContain('danger')
+    const success = locale.t('gateway.toast.syncSuccess').replace('{name}', 'Alpha Router')
+    expect(toastMessages()).not.toContain(success)
+  })
+
   it('failed result toasts the backend message and does not toast success', async () => {
     mutateMock.mockResolvedValue({
       data: {
-        testModelGatewayConnection: {
+        syncModelGatewayConnection: {
           success: false,
-          status: 'ERROR',
-          latencyMs: null,
           message: 'upstream unreachable',
-          testedAt: '2026-02-02T00:00:00Z',
-          gateway: GW_A,
+          gateway: { ...GW_A, lastSyncStatus: 'FAILED' },
         },
       },
     })
@@ -535,7 +903,7 @@ describe('ModelGatewayView — test/resync connection', () => {
 
     expect(toastMessages()).toContain('upstream unreachable')
     expect(toastStatuses()).toContain('danger')
-    const success = locale.t('gateway.toast.testSuccess').replace('{name}', 'Alpha Router')
+    const success = locale.t('gateway.toast.syncSuccess').replace('{name}', 'Alpha Router')
     expect(toastMessages()).not.toContain(success)
   })
 
@@ -579,12 +947,9 @@ describe('ModelGatewayView — test/resync connection', () => {
     // Resolve so the test does not leak a pending promise.
     resolveMutate({
       data: {
-        testModelGatewayConnection: {
+        syncModelGatewayConnection: {
           success: true,
-          status: 'CONNECTED',
-          latencyMs: 1,
           message: 'ok',
-          testedAt: '2026-02-02T00:00:00Z',
           gateway: GW_A,
         },
       },

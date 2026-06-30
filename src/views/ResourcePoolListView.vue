@@ -46,7 +46,7 @@ import type {
 import '@/components/icons'
 
 import CreateOrEditResourcePoolDialog from './resource-list/CreateOrEditResourcePoolDialog.vue'
-import ConfirmDialog from './user-role/ConfirmDialog.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 const locale = useLocaleStore()
 const toast = useToast()

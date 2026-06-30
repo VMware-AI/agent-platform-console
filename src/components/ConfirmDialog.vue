@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
  * Generic confirm dialog. Mirrors the AboutDialog backdrop + card pattern
- * (Teleport → backdrop → card). Used by destructive row actions in the
- * Users / Roles tabs.
+ * (Teleport → backdrop → card). Shared by destructive row actions in any
+ * view (e.g. the Users tab's delete flow and the Model Gateway view's
+ * delete flow).
  *
  * Supports an optional "type-to-confirm" mode used for irreversible
  * destructive actions (e.g. deleting a user). When `expectedInput` is
