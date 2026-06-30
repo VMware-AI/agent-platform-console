@@ -1034,7 +1034,7 @@ describe('ModelGatewayView — refresh button', () => {
     expect(btn.hasAttribute('disabled')).toBe(true)
   })
 
-  it('the refresh button is enabled when not loading', () => {
+  it('the refresh button is enabled when not loading', async () => {
     listSlot.loading.value = false
     setListData([GW_A])
     mountView()

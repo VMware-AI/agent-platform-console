@@ -158,7 +158,7 @@ export const STRINGS: Dict = {
   'agents.pager.page': { zh: '当前页', en: 'Page' },
   'agents.pager.pageSize': { zh: '每页条数', en: 'Per page' },
   'agents.pager.label': { zh: '分页', en: 'Pagination' },
-  'agents.empty': { zh: '暂无数据', en: 'No data' },
+  'agents.empty': { zh: '暂无智能体', en: 'No agents' },
   'agents.loading': { zh: '加载中…', en: 'Loading…' },
   'agents.error': { zh: '加载失败', en: 'Failed to load' },
 
@@ -339,10 +339,14 @@ export const STRINGS: Dict = {
   'resources.action.sync': { zh: '同步数据', en: '' },
   'resources.action.edit': { zh: '编辑', en: '' },
   'resources.action.delete': { zh: '删除', en: '' },
+  'resources.action.refresh': { zh: '刷新', en: 'Refresh' },
 
   'resources.empty': { zh: '暂无资源池', en: '' },
   'resources.loading': { zh: '加载中…', en: '' },
   'resources.error': { zh: '加载失败', en: '' },
+
+  'resources.toast.refreshed': { zh: '资源池列表已刷新', en: 'Resource pool list refreshed' },
+  'resources.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
 
   'resources.footer.syncStatus.title': { zh: '当前同步状态', en: '' },
   'resources.footer.syncStatus.summary': {
@@ -371,6 +375,7 @@ export const STRINGS: Dict = {
   'resources.form.usernamePlaceholder': { zh: 'administrator@vsphere.local', en: '' },
   'resources.form.password': { zh: 'vCenter 密码', en: '' },
   'resources.form.passwordEditHint': { zh: '留空则不修改已保存的凭据', en: '' },
+  'resources.form.requiredMark': { zh: '*', en: '*' },
   'resources.form.insecure': { zh: '跳过 TLS 验证', en: '' },
   'resources.form.insecureHint': {
     zh: '仅用于自签名 / 内网 CA 的 vCenter；生产环境请保持验证',
@@ -447,6 +452,7 @@ export const STRINGS: Dict = {
   'gateway.pagination.pageSize': { zh: '每页条数', en: 'Per page' },
   'gateway.form.createTitle': { zh: '接入模型网关', en: 'Connect Model Gateway' },
   'gateway.form.provider': { zh: '网关类型', en: 'Gateway Type' },
+  'gateway.form.requiredMark': { zh: '*', en: '*' },
   'gateway.form.name': { zh: '网关名称', en: 'Gateway Name' },
   'gateway.form.namePlaceholder': { zh: '例如 LiteLLM_Router_1', en: 'e.g. LiteLLM_Router_1' },
   'gateway.form.nameError': {
@@ -1009,6 +1015,10 @@ export const STRINGS: Dict = {
 
   // Metering center
   'metering.title': { zh: '计量中心仪表板', en: 'Metering Center Dashboard' },
+  'metering.description': {
+    zh: '按时间范围汇总网关调用量、Token 消耗与成本估算，支持按智能体与模型下钻。',
+    en: 'Aggregated gateway call volume, token usage, and cost estimate over a time range, drill-down by agent and model.',
+  },
   'metering.range.label': { zh: '时间范围', en: 'Time Range' },
   'metering.range.7d': { zh: '过去 7 天', en: 'Last 7 Days' },
   'metering.range.30d': { zh: '过去 30 天', en: 'Last 30 Days' },
@@ -1240,12 +1250,20 @@ export const STRINGS: Dict = {
   'agentConfig.action.view': { zh: '查看', en: 'View' },
   'agentConfig.action.edit': { zh: '编辑', en: 'Edit' },
   'agentConfig.action.delete': { zh: '删除', en: 'Delete' },
+  'agentConfig.action.create': { zh: '新建配置', en: 'New Config' },
+  'agentConfig.action.createUnavailable': {
+    zh: '新建配置功能即将上线',
+    en: 'New config is coming soon',
+  },
   'agentConfig.filter.agentType': { zh: '智能体类型', en: 'Agent Type' },
   'agentConfig.filter.allTypes': { zh: '全部类型', en: 'All types' },
   'agentConfig.table.label': { zh: '智能体配置列表', en: 'Agent config list' },
   'agentConfig.col.name': { zh: '配置名称', en: 'Config Name' },
   'agentConfig.col.agentType': { zh: '智能体类型', en: 'Agent Type' },
   'agentConfig.col.actions': { zh: '操作', en: 'Actions' },
+  'agentConfig.col.name.search': { zh: '搜索配置名称', en: 'Search config name' },
+  'agentConfig.sort': { zh: '排序：{column}', en: 'Sort {column}' },
+  'agentConfig.filter': { zh: '过滤：{column}', en: 'Filter {column}' },
   'agentConfig.pagination.pageSize': { zh: '每页', en: 'Rows' },
   'agentConfig.pagination.page': { zh: '页码:', en: 'Page:' },
   'agentConfig.pagination.next': { zh: '下一页', en: 'Next' },

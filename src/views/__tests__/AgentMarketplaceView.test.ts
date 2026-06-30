@@ -232,14 +232,14 @@ describe('AgentMarketplaceView', () => {
     expect(wrapper.find('.card-grid').exists()).toBe(false)
   })
 
-  it('shows the empty placeholder (with a create button) when there are no families', () => {
+  it('shows the empty placeholder while the toolbar still exposes create', () => {
     setFamilies([])
     wrapper = mount(AgentMarketplaceView, mountConfig)
 
     const locale = useLocaleStore()
     expect(wrapper.text()).toContain(locale.t('marketplace.empty'))
-    // Toolbar create + empty-state create.
-    expect(wrapper.findAll('.placeholder cds-button').length).toBeGreaterThan(0)
+    // Toolbar create button is still rendered so an admin can bootstrap the catalog.
+    expect(wrapper.find('.toolbar-create').exists()).toBe(true)
     expect(wrapper.find('.card-grid').exists()).toBe(false)
   })
 

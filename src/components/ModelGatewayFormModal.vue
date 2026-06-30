@@ -199,7 +199,7 @@ function close() {
         <!-- gateway name -->
         <cds-control>
           <cds-input :status="attempted && !nameValid ? 'error' : 'neutral'">
-            <label>{{ locale.t('gateway.form.name') }}</label>
+            <label>{{ locale.t('gateway.form.name') }}<sup class="required-mark" aria-hidden="true">{{ locale.t('gateway.form.requiredMark') }}</sup></label>
             <input
               slot="input"
               type="text"
@@ -219,7 +219,7 @@ function close() {
              is enabled so future providers can be added without UI work. -->
         <cds-control>
           <cds-select>
-            <label>{{ locale.t('gateway.form.provider') }}</label>
+            <label>{{ locale.t('gateway.form.provider') }}<sup class="required-mark" aria-hidden="true">{{ locale.t('gateway.form.requiredMark') }}</sup></label>
             <select
               :value="provider"
               @change="(e: Event) => provider = (e.target as HTMLSelectElement).value as ModelGatewayProvider"
@@ -232,7 +232,7 @@ function close() {
         <!-- gateway URL (label: 网关地址) -->
         <cds-control>
           <cds-input :status="attempted && !endpointValid ? 'error' : 'neutral'">
-            <label>{{ locale.t('gateway.form.endpoint') }}</label>
+            <label>{{ locale.t('gateway.form.endpoint') }}<sup class="required-mark" aria-hidden="true">{{ locale.t('gateway.form.requiredMark') }}</sup></label>
             <input
               slot="input"
               type="url"
@@ -252,7 +252,7 @@ function close() {
           <cds-password
             :status="attempted && !masterKeyValid ? 'error' : 'neutral'"
           >
-            <label>{{ locale.t('gateway.form.masterKey') }}</label>
+            <label>{{ locale.t('gateway.form.masterKey') }}<sup class="required-mark" aria-hidden="true">{{ locale.t('gateway.form.requiredMark') }}</sup></label>
             <input
               slot="input"
               type="password"
@@ -357,6 +357,17 @@ function close() {
 }
 .test-result--failure {
   color: var(--cds-alias-status-danger, #c21d00);
+}
+
+/* Mark for backend-required fields. Same CSS contract as UserFormDialog.vue:
+   crimson color, 0.7em, floats above the cap-line via negative top margin. */
+.required-mark {
+  color: var(--cds-alias-status-danger, #c21d00);
+  font-size: 0.7em;
+  font-weight: 700;
+  line-height: 1;
+  margin: -0.5em 0 0 1px;
+  display: inline-block;
 }
 
 /* cds-modal is teleported to <body>, so deep selectors are required to size

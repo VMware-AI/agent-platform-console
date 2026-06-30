@@ -386,7 +386,7 @@ const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
       >
         <cds-icon
           shape="refresh"
-          size="sm"
+          size="md"
           :class="{ spinning: loading }"
           aria-hidden="true"
         ></cds-icon>
@@ -811,7 +811,7 @@ const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
   justify-content: center;
   background: transparent;
   border: 0;
-  padding: 4px;
+  padding: 6px 8px;
   margin: 0;
   cursor: pointer;
   color: inherit;

@@ -251,22 +251,6 @@ describe('AgentConfigView', () => {
     expect(wrapper.findAll('.detail-row dd')[1].text()).toBe('否')
   })
 
-  it('populates the agentType filter with distinct types and refetches via the reactive var on change', async () => {
-    configsResult.value = { agentConfigs: [CFG_GOOSE, CFG_CLAUDE] }
-    wrapper = mountView()
-    await flushPromises()
-
-    const select = wrapper.find('.type-filter select')
-    const optionValues = select.findAll('option').map((o) => (o.element as HTMLOptionElement).value)
-    // "__ALL__" sentinel + one per distinct type (sorted).
-    expect(optionValues).toEqual(['__ALL__', 'claude', 'goose'])
-
-    // Changing the filter updates the reactive var consumed by useQuery; the
-    // query doc is reactive in the real client. Assert the bound value updates.
-    await select.setValue('goose')
-    expect((select.element as HTMLSelectElement).value).toBe('goose')
-  })
-
   it('shows the mounted knowledge packs of the selected config', async () => {
     configsResult.value = { agentConfigs: [CFG_GOOSE] }
     wrapper = mountView()

@@ -473,12 +473,12 @@ const summaryText = computed(() => {
         </template>
       </AppDropdown>
 
-      <cds-button
-        action="ghost"
-        class="toolbar-refresh"
+      <button
+        type="button"
+        class="refresh-button"
+        :disabled="loading"
         :aria-label="locale.t('agents.list.refresh')"
         :title="locale.t('agents.list.refresh')"
-        :disabled="loading"
         @click="onRefresh"
       >
         <cds-icon
@@ -487,7 +487,7 @@ const summaryText = computed(() => {
           :class="{ spinning: loading }"
           aria-hidden="true"
         ></cds-icon>
-      </cds-button>
+      </button>
     </div>
 
     <!-- Error banner sits above the grid (Clarity alert pattern) -->
@@ -505,6 +505,7 @@ const summaryText = computed(() => {
       :selectable="null"
       role="grid"
       aria-label="agents"
+      scroll-lock
     >
         <!-- Column definitions -->
         <cds-grid-column type="action" :resizable="false">
@@ -833,7 +834,7 @@ const summaryText = computed(() => {
 
         <!-- Empty state (official placeholder pattern) -->
         <cds-grid-placeholder v-else-if="agents.length === 0">
-          <cds-icon shape="history" size="xl"></cds-icon>
+          <cds-icon shape="atom" size="xl"></cds-icon>
           <p cds-text="subsection">{{ locale.t('agents.empty') }}</p>
         </cds-grid-placeholder>
 
@@ -1106,36 +1107,39 @@ const summaryText = computed(() => {
   margin-top: 20px;
 }
 
-/* Refresh button: fully transparent — no background, no border, no focus
-   ring, no pressed-state wash — so it reads as a bare icon at every
-   interaction state. cds-button's `:active` rule paints an *inset* box-shadow
-   on the internal `.private-host` (the "top edge" the user keeps seeing);
-   the only way to defeat it from outside the shadow DOM is to set the
-   `--box-shadow-color` token it uses as transparent. */
-.toolbar-refresh,
-.toolbar-refresh:hover,
-.toolbar-refresh:focus,
-.toolbar-refresh:focus-visible,
-.toolbar-refresh:active {
-  --background: transparent;
-  --background-hover: var(--cds-alias-object-opacity-100, rgba(0, 0, 0, 0.06));
-  --background-active: var(--cds-alias-object-opacity-200, rgba(0, 0, 0, 0.12));
-  --border-color: transparent;
-  --border-width: 0;
-  --box-shadow-color: transparent;
-  --color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  /* Keep a guaranteed clickable area even though the button looks bare. */
-  min-width: 32px;
-  min-height: 32px;
-  outline: none !important;
-  box-shadow: none !important;
+/* Refresh button: fully transparent — no background, no border — so it reads
+   as a bare icon at every interaction state. Plain <button> element so we can
+   override the cds-button theme defaults (which would otherwise paint a fill
+   on ghost / outline / solid actions). */
+.refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 6px 8px;
+  margin: 0;
+  cursor: pointer;
+  color: inherit;
+  flex-shrink: 0;
+  border-radius: 0;
+}
+.refresh-button:hover:not(:disabled) {
+  color: var(--cds-alias-object-app-blue, #0072a3);
+}
+.refresh-button:focus-visible {
+  outline: 2px solid var(--cds-alias-object-app-blue, #0072a3);
+  outline-offset: 2px;
+}
+.refresh-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
-/* When the refresh button is in-flight, spin the icon itself (replaces
-   cds-button's built-in progress-circle, per the user's spec). The
-   animation runs at 1s per full turn, linear, infinite. Applied to the
-   cds-icon host; its internal SVG rotates with the host transform. */
-.toolbar-refresh .spinning {
+/* When the refresh button is in-flight, spin the icon itself. The animation
+   runs at 1s per full turn, linear, infinite. Applied to the cds-icon host;
+   its internal SVG rotates with the host transform. */
+.refresh-button .spinning {
   animation: refresh-spin 1s linear infinite;
   transform-origin: center;
 }
@@ -1144,7 +1148,7 @@ const summaryText = computed(() => {
   to   { transform: rotate(360deg); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .toolbar-refresh .spinning {
+  .refresh-button .spinning {
     animation: none;
   }
 }
@@ -1167,12 +1171,25 @@ const summaryText = computed(() => {
 /* Force the cds-grid host to respect the parent column. Without this the
    element's default `min-width: auto` expands to the intrinsic min-width of
    its cells (long key names + two outline action buttons), forcing a
-   horizontal scroll on the page even when the columns use % widths. */
+   horizontal scroll on the page even when the columns use % widths.
+   `scroll-lock` on <cds-grid> disables the shadow-DOM scroll container's
+   scrollbars; combined with `overflow: hidden` on the host this prevents
+   the table from ever overflowing the viewport. */
 .agent-list cds-grid {
   display: block;
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  overflow: hidden;
+}
+
+/* Force cds-grid columns + cells to clip instead of expanding past their
+   intrinsic content width (which would re-introduce the inner scrollbar
+   even with scroll-lock applied). */
+.agent-list cds-grid-column,
+.agent-list cds-grid-cell {
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Native checkbox used for row + header selection. We use a plain <input

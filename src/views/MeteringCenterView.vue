@@ -329,10 +329,11 @@ const rankingBars = computed<RankingBar[]>(() => {
 
 <template>
   <section class="metering-page">
-    <header class="page-header">
-      <h1 class="heading" :title="locale.t('metering.title')">
+    <header class="page-head">
+      <h1 cds-text="title" class="heading" :title="locale.t('metering.title')">
         {{ locale.t('metering.title') }}
       </h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('metering.description') }}</p>
     </header>
 
     <div class="filter-toolbar">
@@ -609,29 +610,31 @@ const rankingBars = computed<RankingBar[]>(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  overflow: auto;
+  gap: 12px;
+  overflow: visible;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
-.page-header {
-  width: 100%;
-  min-width: 0;
+.page-head {
   flex: 0 0 auto;
-  overflow: visible;
+  padding-top: 4px;
 }
 .heading {
-  display: block;
-  width: 100%;
-  min-height: 32px;
   margin: 0;
-  font-size: 24px;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  font-size: 28px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
-  word-break: keep-all;
+}
+.desc {
+  margin: 12px 0 0;
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 720px;
+}
+.muted {
+  color: var(--cds-alias-typography-color-300, #565656);
 }
 .filter-toolbar {
   display: flex;
