@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import '@/components/icons'
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
 import { useAgentExport } from '@/composables/useAgentExport'
 import { useMutation, useQuery } from '@vue/apollo-composable'
@@ -9,7 +8,6 @@ import { useRouter } from 'vue-router'
 import { useLocaleStore } from '@/stores/locale'
 import AppDropdown from '@/components/AppDropdown.vue'
 
-const router = useRouter()
 import { AGENTS_QUERY } from '@/api/graphql/queries/agents'
 import type {
   Agent,
