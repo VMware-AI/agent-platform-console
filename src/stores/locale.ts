@@ -389,6 +389,12 @@ export const STRINGS: Dict = {
   // Confirm dialog
   'resources.confirm.delete.title': { zh: '确认删除资源池', en: '' },
   'resources.confirm.delete.body': { zh: '确定要删除资源池 {name} 吗?此操作不可撤销。', en: '' },
+  'resources.confirm.finalDelete.title': { zh: '再次确认删除', en: '' },
+  'resources.confirm.finalDelete.body': {
+    zh: '将永久删除该资源池接入且无法恢复。请输入 {{name}} 以确认。',
+    en: 'This resource pool integration will be permanently deleted. Type {{name}} to confirm.',
+  },
+  'resources.confirm.finalDelete.inputPlaceholder': { zh: '输入资源池名称', en: 'Type the resource pool name' },
 
   // platform settings — user/role management (UserRoleView)
 

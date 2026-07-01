@@ -230,6 +230,8 @@ const { mutate: syncPoolMutate, loading: syncing } = useMutation<{
 /* ---------- Row action dialogs ---------- */
 const editingPool = ref<ResourcePool | null>(null)
 const deletingPool = ref<ResourcePool | null>(null)
+// Holds the row during the second (type-to-confirm) step of the delete flow.
+const finalDeletingPool = ref<ResourcePool | null>(null)
 const createDialogOpen = ref(false)
 
 // Per-row in-flight tracking for the sync action. Mirrors ModelGatewayView's
@@ -323,25 +325,57 @@ async function onSync(p: ResourcePool) {
   }
 }
 
+/* Two-step delete (mirrors ModelGatewayView): the first ConfirmDialog asks
+   for intent; the second requires the operator to type the target pool's
+   `name` verbatim before the mutation fires. `deletingPool` holds the row
+   during step 1; `finalDeletingPool` takes over for step 2 so step 1 can
+   be cleanly torn down before the type-to-confirm dialog opens. */
 function openDelete(p: ResourcePool) {
   deletingPool.value = p
 }
 
-async function doDelete() {
-  const p = deletingPool.value
-  if (!p) return
+/* Step 1 confirm → swap into the type-to-confirm dialog. */
+function onDeleteConfirmed() {
+  const target = deletingPool.value
+  if (!target) return
   deletingPool.value = null
+  finalDeletingPool.value = target
+}
+
+/* Step 2 confirm (gated by ConfirmDialog's input match) → run mutation. */
+async function doDelete() {
+  const p = finalDeletingPool.value
+  if (!p) return
+  finalDeletingPool.value = null
   try {
     const r = await deletePoolMutate({ id: p.id })
     const deletedName = r?.data?.deleteResourcePool.deletedName ?? p.name
     toast.success(locale.t('resources.toast.deleteOk').replace('{name}', deletedName))
     refetch()
   } catch (err) {
-     
+
     console.error('[resources] delete failed', err)
     toast.error(graphqlErrorMessage(err, locale.t('resources.toast.deleteFail')))
   }
 }
+
+/* Splits the locale body template at {{name}} and substitutes the pool's
+   actual name in bold inline. The same name is also bound to the dialog's
+   `expectedInput`, so the bold text the user sees is the exact value
+   they must type. Mirrors ModelGatewayView's `deleteFinalBodySegments`. */
+const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() => {
+  const template = locale.t('resources.confirm.finalDelete.body')
+  const name = finalDeletingPool.value?.name ?? ''
+  const idx = template.indexOf('{{name}}')
+  if (idx < 0) {
+    return [{ text: template }]
+  }
+  return [
+    { text: template.slice(0, idx) },
+    { text: name, bold: true },
+    { text: template.slice(idx + '{{name}}'.length) },
+  ]
+})
 </script>
 
 <template>
@@ -528,7 +562,7 @@ async function doDelete() {
               type="button"
               class="row-action danger"
               :title="locale.t('resources.action.delete')"
-              :disabled="!!deletingPool"
+              :disabled="!!deletingPool || !!finalDeletingPool"
               @click="openDelete(p)"
             >
               <cds-icon shape="trash" size="sm" aria-hidden="true"></cds-icon>
@@ -652,6 +686,17 @@ async function doDelete() {
       :body="(deletingPool?.name ? locale.t('resources.confirm.delete.body').replace('{name}', deletingPool.name) : '')"
       danger
       @close="deletingPool = null"
+      @confirm="onDeleteConfirmed"
+    />
+
+    <ConfirmDialog
+      :open="!!finalDeletingPool"
+      :title="locale.t('resources.confirm.finalDelete.title')"
+      :body-segments="finalDeleteBodySegments"
+      :input-placeholder="locale.t('resources.confirm.finalDelete.inputPlaceholder')"
+      :expected-input="finalDeletingPool?.name ?? ''"
+      danger
+      @close="finalDeletingPool = null"
       @confirm="doDelete"
     />
   </section>
