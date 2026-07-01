@@ -335,8 +335,7 @@ export const STRINGS: Dict = {
   'resources.status.neverSynced': { zh: '未同步', en: '' },
   'resources.status.syncedAgo': { zh: '{ago}已同步', en: '' },
 
-  'resources.action.manage': { zh: '管理', en: '' },
-  'resources.action.sync': { zh: '同步数据', en: '' },
+  'resources.action.sync': { zh: '立即同步', en: '' },
   'resources.action.edit': { zh: '编辑', en: '' },
   'resources.action.delete': { zh: '删除', en: '' },
   'resources.action.refresh': { zh: '刷新', en: 'Refresh' },
@@ -390,6 +389,31 @@ export const STRINGS: Dict = {
   // Confirm dialog
   'resources.confirm.delete.title': { zh: '确认删除资源池', en: '' },
   'resources.confirm.delete.body': { zh: '确定要删除资源池 {name} 吗?此操作不可撤销。', en: '' },
+  'resources.confirm.finalDelete.title': { zh: '再次确认删除', en: '' },
+  'resources.confirm.finalDelete.body': {
+    zh: '将永久删除该资源池接入且无法恢复。请输入 {{name}} 以确认。',
+    en: 'This resource pool integration will be permanently deleted. Type {{name}} to confirm.',
+  },
+  'resources.confirm.finalDelete.inputPlaceholder': { zh: '输入资源池名称', en: 'Type the resource pool name' },
+
+  // Inventory viewer (asset tree) modal — opened from the "资产" column's
+  // "查看" link. Lazy-loaded via RESOURCE_POOL_QUERY (single-pool variant
+  // that adds the `datacenters` subtree; the list query omits it).
+  'resources.col.inventory': { zh: '资产', en: '' },
+  'resources.action.view': { zh: '查看', en: '' },
+  'resources.inventory.title': { zh: '资源池资产', en: '' },
+  'resources.inventory.viewTitle': { zh: '查看资源池资产', en: '' },
+  'resources.inventory.viewDisabledTitle': { zh: '资源池尚未同步,无法查看资产', en: '' },
+  'resources.inventory.loadFail': { zh: '加载资源池资产失败', en: '' },
+  'resources.inventory.empty': { zh: '尚未同步,无资产数据', en: '' },
+  'resources.inventory.close': { zh: '关闭', en: '' },
+  'resources.inventory.group.clusters': { zh: '集群', en: '' },
+  'resources.inventory.group.datastores': { zh: '数据存储', en: '' },
+  'resources.inventory.group.networks': { zh: '网络', en: '' },
+  'resources.inventory.group.folders': { zh: 'VM 文件夹', en: '' },
+  'resources.inventory.group.storagePolicies': { zh: '存储策略', en: '' },
+  'resources.inventory.group.hosts': { zh: '主机', en: '' },
+  'resources.inventory.group.resourcePools': { zh: '资源池', en: '' },
 
   // platform settings — user/role management (UserRoleView)
 

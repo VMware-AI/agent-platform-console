@@ -10,8 +10,9 @@
  *
  * Per spec:
  *  - 6 visible columns (no esxi / vm counts)
- *  - 4 row icons (cog / sync / pencil / trash) — sync/edit/delete hit real
- *    mutations; manage is a placeholder toast
+ *  - 3 row actions (sync / edit / delete) — icon-above-text buttons styled
+ *    to match ModelGatewayView's `.row-action` pattern; sync spins
+ *    per-row while in flight
  *  - "当前同步状态" banner rendered inline above the grid (single cds-alert)
  *  - Sort / filter / pager work the same as AgentListView
  */
@@ -46,6 +47,7 @@ import type {
 import '@/components/icons'
 
 import CreateOrEditResourcePoolDialog from './resource-list/CreateOrEditResourcePoolDialog.vue'
+import ResourcePoolInventoryDialog from './resource-list/ResourcePoolInventoryDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 const locale = useLocaleStore()
@@ -219,17 +221,26 @@ const { mutate: createPoolMutate, loading: creating } = useMutation<{
 const { mutate: updatePoolMutate } = useMutation<{
   updateResourcePool: UpdateResourcePoolPayload
 }, UpdateResourcePoolVars>(UPDATE_RESOURCE_POOL_MUTATION)
-const { mutate: deletePoolMutate, loading: deleting } = useMutation<{
+const { mutate: deletePoolMutate } = useMutation<{
   deleteResourcePool: DeleteResourcePoolPayload
 }, DeleteResourcePoolVars>(DELETE_RESOURCE_POOL_MUTATION)
-const { mutate: syncPoolMutate, loading: syncing } = useMutation<{
+const { mutate: syncPoolMutate } = useMutation<{
   syncResourcePool: SyncResourcePoolPayload
 }, SyncResourcePoolVars>(SYNC_RESOURCE_POOL_MUTATION)
 
 /* ---------- Row action dialogs ---------- */
 const editingPool = ref<ResourcePool | null>(null)
 const deletingPool = ref<ResourcePool | null>(null)
+// Holds the row during the second (type-to-confirm) step of the delete flow.
+const finalDeletingPool = ref<ResourcePool | null>(null)
 const createDialogOpen = ref(false)
+
+// Per-row in-flight tracking for the sync action. Mirrors ModelGatewayView's
+// `testingIDs` Set so only the row being synced shows the spinning icon
+// and is disabled — the previous global `syncing` flag disabled every
+// row's sync button while any one of them was in flight, which was both
+// noisy and not what ModelGatewayView does for the same action.
+const syncingIDs = ref(new Set<string>())
 
 function openCreate() {
   editingPool.value = null
@@ -242,6 +253,20 @@ function openEdit(p: ResourcePool) {
 function closeCreateDialog() {
   createDialogOpen.value = false
   editingPool.value = null
+}
+
+/* ---------- Inventory view modal ----------
+ * The "查看" link per row opens a modal that lazily fetches the vSphere
+ * inventory tree for the given pool. While the underlying `syncStatus` is
+ * `NEVER` the backend has no inventory to return, so the row's link is
+ * disabled; the modal still gracefully renders an empty-state alert when
+ * the response carries no datacenters. */
+const inventoryFor = ref<ResourcePool | null>(null)
+function openInventory(p: ResourcePool) {
+  inventoryFor.value = p
+}
+function closeInventory() {
+  inventoryFor.value = null
 }
 
 async function onSubmit(payload: {
@@ -279,13 +304,6 @@ async function onSubmit(payload: {
   }
 }
 
-function onManage(p: ResourcePool) {
-  // "管理" is a navigation-style action — for now just toast a placeholder.
-
-  console.log('[resources] manage', { id: p.id })
-  toast.info(locale.t('resources.action.manage'))
-}
-
 /* 立即重新拉取资源池列表 — 复用视图已在用的 refetch 闭包,
    避免在别处再开一条查询。loading 守卫防止重复点击叠加请求。 */
 async function refreshPools() {
@@ -301,6 +319,7 @@ async function refreshPools() {
 }
 
 async function onSync(p: ResourcePool) {
+  syncingIDs.value.add(p.id)
   try {
     const r = await syncPoolMutate({ id: p.id })
     const syncedAt = r?.data?.syncResourcePool.syncedAt
@@ -309,31 +328,69 @@ async function onSync(p: ResourcePool) {
       refetch()
     }
   } catch (err) {
-     
+
     console.error('[resources] sync failed', err)
     toast.error(graphqlErrorMessage(err, locale.t('resources.toast.syncFail')))
+  } finally {
+    syncingIDs.value.delete(p.id)
+    // Force reactivity: Set mutations don't trigger Vue's reactivity on .add/.delete
+    // for the in-place ref. Replace with a new Set so has(id) re-evaluates in the
+    // template.
+    syncingIDs.value = new Set(syncingIDs.value)
   }
 }
 
+/* Two-step delete (mirrors ModelGatewayView): the first ConfirmDialog asks
+   for intent; the second requires the operator to type the target pool's
+   `name` verbatim before the mutation fires. `deletingPool` holds the row
+   during step 1; `finalDeletingPool` takes over for step 2 so step 1 can
+   be cleanly torn down before the type-to-confirm dialog opens. */
 function openDelete(p: ResourcePool) {
   deletingPool.value = p
 }
 
-async function doDelete() {
-  const p = deletingPool.value
-  if (!p) return
+/* Step 1 confirm → swap into the type-to-confirm dialog. */
+function onDeleteConfirmed() {
+  const target = deletingPool.value
+  if (!target) return
   deletingPool.value = null
+  finalDeletingPool.value = target
+}
+
+/* Step 2 confirm (gated by ConfirmDialog's input match) → run mutation. */
+async function doDelete() {
+  const p = finalDeletingPool.value
+  if (!p) return
+  finalDeletingPool.value = null
   try {
     const r = await deletePoolMutate({ id: p.id })
     const deletedName = r?.data?.deleteResourcePool.deletedName ?? p.name
     toast.success(locale.t('resources.toast.deleteOk').replace('{name}', deletedName))
     refetch()
   } catch (err) {
-     
+
     console.error('[resources] delete failed', err)
     toast.error(graphqlErrorMessage(err, locale.t('resources.toast.deleteFail')))
   }
 }
+
+/* Splits the locale body template at {{name}} and substitutes the pool's
+   actual name in bold inline. The same name is also bound to the dialog's
+   `expectedInput`, so the bold text the user sees is the exact value
+   they must type. Mirrors ModelGatewayView's `deleteFinalBodySegments`. */
+const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() => {
+  const template = locale.t('resources.confirm.finalDelete.body')
+  const name = finalDeletingPool.value?.name ?? ''
+  const idx = template.indexOf('{{name}}')
+  if (idx < 0) {
+    return [{ text: template }]
+  }
+  return [
+    { text: template.slice(0, idx) },
+    { text: name, bold: true },
+    { text: template.slice(idx + '{{name}}'.length) },
+  ]
+})
 </script>
 
 <template>
@@ -414,7 +471,7 @@ async function doDelete() {
         </div>
       </cds-grid-column>
 
-      <cds-grid-column :width="'18%'">
+      <cds-grid-column :width="'16%'">
         <div class="col-head">
           <span>{{ locale.t('resources.col.endpoint') }}</span>
         </div>
@@ -426,7 +483,7 @@ async function doDelete() {
         </div>
       </cds-grid-column>
 
-      <cds-grid-column :width="'16%'">
+      <cds-grid-column :width="'14%'">
         <div class="col-head">
           <span>{{ locale.t('resources.col.contentLibrary') }}</span>
           <span class="col-head-actions">
@@ -446,15 +503,22 @@ async function doDelete() {
         </div>
       </cds-grid-column>
 
-      <!-- 创建时间列 -->
+      <!-- 资产(Inventory)列 -->
       <cds-grid-column :width="'10%'">
+        <div class="col-head col-center">
+          <span>{{ locale.t('resources.col.inventory') }}</span>
+        </div>
+      </cds-grid-column>
+
+      <!-- 创建时间列 -->
+      <cds-grid-column :width="'12%'">
         <div class="col-head">
           <span>{{ locale.t('resources.col.createdAt') }}</span>
         </div>
       </cds-grid-column>
 
       <!-- 更新时间列 -->
-      <cds-grid-column :width="'10%'">
+      <cds-grid-column :width="'12%'">
         <div class="col-head">
           <span>{{ locale.t('resources.col.updatedAt') }}</span>
         </div>
@@ -488,36 +552,59 @@ async function doDelete() {
         <cds-grid-cell class="content-library-cell" :title="p.contentLibraryName">
           {{ p.contentLibraryName }}
         </cds-grid-cell>
+        <cds-grid-cell class="inventory-cell">
+          <button
+            type="button"
+            class="inventory-link"
+            :disabled="!p.syncStatus || p.syncStatus === 'NEVER'"
+            :aria-label="locale.t('resources.action.view')"
+            :title="p.syncStatus === 'NEVER'
+              ? locale.t('resources.inventory.viewDisabledTitle')
+              : locale.t('resources.inventory.viewTitle')"
+            @click="openInventory(p)"
+          >
+            <cds-icon shape="eye" size="sm" aria-hidden="true"></cds-icon>
+            <span>{{ locale.t('resources.action.view') }}</span>
+          </button>
+        </cds-grid-cell>
         <cds-grid-cell class="muted">{{ fmtDateTime(p.createdAt) }}</cds-grid-cell>
         <cds-grid-cell class="muted">{{ fmtDateTime(p.updatedAt) }}</cds-grid-cell>
         <cds-grid-cell>
           <span class="actions-cell">
-            <cds-button-action
-              shape="cog"
-              :title="locale.t('resources.action.manage')"
-              :aria-label="locale.t('resources.action.manage')"
-              @click="onManage(p)"
-            ></cds-button-action>
-            <cds-button-action
-              shape="sync"
+            <button
+              type="button"
+              class="row-action"
+              :disabled="syncingIDs.has(p.id)"
               :title="locale.t('resources.action.sync')"
-              :aria-label="locale.t('resources.action.sync')"
-              :disabled="syncing"
               @click="onSync(p)"
-            ></cds-button-action>
-            <cds-button-action
-              shape="pencil"
+            >
+              <cds-icon
+                shape="sync"
+                size="sm"
+                :class="{ spinning: syncingIDs.has(p.id) }"
+                aria-hidden="true"
+              ></cds-icon>
+              <span>{{ locale.t('resources.action.sync') }}</span>
+            </button>
+            <button
+              type="button"
+              class="row-action"
               :title="locale.t('resources.action.edit')"
-              :aria-label="locale.t('resources.action.edit')"
               @click="openEdit(p)"
-            ></cds-button-action>
-            <cds-button-action
-              shape="trash"
+            >
+              <cds-icon shape="pencil" size="sm" aria-hidden="true"></cds-icon>
+              <span>{{ locale.t('resources.action.edit') }}</span>
+            </button>
+            <button
+              type="button"
+              class="row-action danger"
               :title="locale.t('resources.action.delete')"
-              :aria-label="locale.t('resources.action.delete')"
-              :disabled="deleting"
+              :disabled="!!deletingPool || !!finalDeletingPool"
               @click="openDelete(p)"
-            ></cds-button-action>
+            >
+              <cds-icon shape="trash" size="sm" aria-hidden="true"></cds-icon>
+              <span>{{ locale.t('resources.action.delete') }}</span>
+            </button>
           </span>
         </cds-grid-cell>
       </cds-grid-row>
@@ -636,7 +723,26 @@ async function doDelete() {
       :body="(deletingPool?.name ? locale.t('resources.confirm.delete.body').replace('{name}', deletingPool.name) : '')"
       danger
       @close="deletingPool = null"
+      @confirm="onDeleteConfirmed"
+    />
+
+    <ConfirmDialog
+      :open="!!finalDeletingPool"
+      :title="locale.t('resources.confirm.finalDelete.title')"
+      :body-segments="finalDeleteBodySegments"
+      :input-placeholder="locale.t('resources.confirm.finalDelete.inputPlaceholder')"
+      :expected-input="finalDeletingPool?.name ?? ''"
+      danger
+      @close="finalDeletingPool = null"
       @confirm="doDelete"
+    />
+
+    <ResourcePoolInventoryDialog
+      v-if="inventoryFor"
+      :open="!!inventoryFor"
+      :pool-id="inventoryFor?.id ?? null"
+      :pool-name="inventoryFor?.name ?? ''"
+      @close="closeInventory"
     />
   </section>
 </template>
@@ -792,7 +898,7 @@ async function doDelete() {
 }
 
 .col-head.col-actions {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .endpoint-cell {
@@ -824,12 +930,135 @@ async function doDelete() {
   border-radius: 12px;
 }
 
+/* Row action buttons mirror ModelGatewayView's `.row-action` pattern:
+   icon-above-text native buttons, info-blue by default and danger-red for
+   the trash action, with a per-row spinning sync icon. The previous
+   `<cds-button-action>` web component gave only icon-only chrome and a
+   global disable flag, which didn't match the rest of the list views. */
 .actions-cell {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+.row-action {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 40px;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cds-alias-object-interaction-color, #006e9c);
+  font: inherit;
+  cursor: pointer;
+}
+.row-action span {
+  font-size: 10px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.row-action:focus-visible {
+  outline: 2px solid var(--cds-alias-status-info, #0079ad);
+  outline-offset: 1px;
+}
+.row-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.row-action.danger {
+  color: var(--cds-alias-status-danger, #c92100);
+}
+
+/* Inventory "查看" pill button.
+   Centred inside the cell (cds-grid-cell's private host is
+   display:flex with default justify-content:start, so a plain
+   `text-align:center` on the cell would NOT centre an inline
+   button — we set flex/center on the cell host itself via the
+   attribute selector that targets our class), pill-shaped with an
+   icon + label, primary info-blue background, and a clear disabled
+   state. Mirrors the visual weight of .row-action buttons in the
+   actions column without competing with them. */
+.inventory-cell {
+  /* Override cds-grid-cell's default flex justification (start) so
+     the pill is centred horizontally inside the cell, matching the
+     column header's `.col-center` treatment. */
+  --justify-content: center;
+}
+.inventory-link {
+  /* Pill-shaped chrome: subtle background, info-blue tint, border
+     matching the colour family. */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  appearance: none;
+  margin: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--cds-alias-status-info, #0079ad);
+  border-radius: 999px;
+  background: var(--cds-alias-object-app-blue-50, rgba(0, 114, 163, 0.08));
+  color: var(--cds-alias-status-info, #0079ad);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease,
+    transform 0.12s ease;
+  white-space: nowrap;
+}
+.inventory-link > cds-icon {
+  /* Clarity icons inherit currentColor — ensure the icon takes the
+     same colour as the surrounding text. */
+  color: inherit;
+  display: inline-flex;
+}
+.inventory-link:hover:not(:disabled) {
+  background: var(--cds-alias-status-info, #0079ad);
+  border-color: var(--cds-alias-status-info, #0079ad);
+  color: #fff;
+}
+.inventory-link:hover:not(:disabled) > cds-icon {
+  color: #fff;
+}
+.inventory-link:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.inventory-link:disabled {
+  border-color: var(--cds-alias-object-border-color, #d6d6d6);
+  background: var(--cds-alias-object-app-background-shade, #f4f4f4);
+  color: var(--cds-alias-typography-color-muted, #999);
+  cursor: not-allowed;
+}
+.inventory-link:focus-visible {
+  outline: 2px solid var(--cds-alias-status-info, #0079ad);
+  outline-offset: 2px;
+}
+
+/* Centered column header for the inventory column. */
+.col-center {
+  justify-content: center;
+}
+.spinning {
+  animation: resources-spin 1s linear infinite;
+  transform-origin: center;
+}
+@keyframes resources-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinning {
+    animation: none;
+  }
 }
 
 .pager {

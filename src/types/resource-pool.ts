@@ -8,16 +8,22 @@
  */
 import type { PageInfo, SortDirection, Pagination } from './agents'
 
-export type PoolConnectionStatus = 'CONNECTED' | 'DISCONNECTED'
-export type PoolConnectionStatusKey = 'connected' | 'disconnected'
-
 export type ResourcePoolSyncState = 'SYNCED' | 'SYNCING' | 'PARTIAL' | 'FAILED' | 'NEVER'
 
-export const POOL_CONNECTION_FROM_GQL: Record<PoolConnectionStatus, PoolConnectionStatusKey> = {
-  CONNECTED: 'connected',
-  DISCONNECTED: 'disconnected',
-}
-
+/**
+ * Resource pool (a vCenter integration managed by the platform).
+ *
+ * Mirrors `postman/agent-platform-backend.postman_collection.json`:
+ * - `query ResourcePools` selects ONLY the scalar fields below — no
+ *   inventory children, to keep the list poll cheap.
+ * - `query ResourcePool($id)` re-selects the same scalars AND adds
+ *   `datacenters`, fetched lazily by the inventory viewer when the
+ *   user clicks the row's "查看" link.
+ *
+ * `datacenters` is therefore `null` on every `resourcePools.nodes` entry
+ * returned by the list query, and populated only on the single-pool
+ * detail query. Treat absence as "not yet fetched".
+ */
 export interface ResourcePool {
   id: string
   name: string
@@ -25,13 +31,12 @@ export interface ResourcePool {
   contentLibraryName: string
   /** Skip vCenter TLS verification for this pool (self-signed/internal CA). LLD-13. */
   insecure: boolean
-  connectionStatus: PoolConnectionStatus
-  esxiHostCount: number
-  vmInstanceCount: number
   syncStatus: ResourcePoolSyncState
   lastSyncedAt: string | null
   createdAt: string
   updatedAt: string
+  /** vSphere inventory — only present on the single-pool detail query. */
+  datacenters?: VsphereDataCenter[] | null
 }
 
 export interface ResourcePoolConnection {
@@ -43,10 +48,7 @@ export interface ResourcePoolConnection {
 export type ResourcePoolSortField =
   | 'NAME'
   | 'ENDPOINT'
-  | 'CONNECTION_STATUS'
   | 'CONTENT_LIBRARY_NAME'
-  | 'ESXI_HOST_COUNT'
-  | 'VM_INSTANCE_COUNT'
   | 'CREATED_AT'
   | 'UPDATED_AT'
 
@@ -58,7 +60,6 @@ export interface ResourcePoolSort {
 export interface ResourcePoolFilter {
   nameKeyword?: string | null
   endpointKeyword?: string | null
-  connectionStatus?: PoolConnectionStatus | null
 }
 
 export interface ResourcePoolsQueryVars {
@@ -154,4 +155,48 @@ export interface TestResourcePoolConnectionVars {
 }
 export interface TestResourcePoolConnectionResult {
   testResourcePoolConnection: ResourcePoolConnectionTest
+}
+
+/* ---------- vSphere inventory (returned by single-pool query only) ----------
+ * The backend exposes inventory as `ResourcePool.datacenters` on the
+ * single-pool detail query (`RESOURCE_POOL_QUERY`); the list query
+ * deliberately omits it to keep polls cheap. UI must therefore treat
+ * `datacenters` as `null` on list rows and as the populated tree on
+ * single-pool fetches. */
+export interface PlacementRef {
+  name: string
+  path?: string | null
+}
+export interface VsphereCluster {
+  name: string
+  path: string
+  esxiHosts: PlacementRef[]
+  resourcePools: PlacementRef[]
+}
+export interface VsphereDataCenter {
+  name: string
+  path: string
+  clusters: VsphereCluster[]
+  datastores: PlacementRef[]
+  networks: PlacementRef[]
+  folders: PlacementRef[]
+  storagePolicies: PlacementRef[]
+}
+
+/* ---------- Single-pool query ----------
+ * `RESOURCE_POOL_QUERY` selects ONLY `datacenters` — the modal already
+ * has the pool's name from the list-row prop and does not need any
+ * other scalar. This keeps the lazy single-pool fetch as small as
+ * possible.
+ *
+ * `datacenters` is nullable to mirror the backend: an un-synced pool
+ * has no inventory persisted, so the field is `null` rather than `[]`. */
+export interface ResourcePoolInventoryNode {
+  datacenters: VsphereDataCenter[] | null
+}
+export interface ResourcePoolQueryVars {
+  id: string
+}
+export interface ResourcePoolQueryResult {
+  resourcePool: ResourcePoolInventoryNode
 }

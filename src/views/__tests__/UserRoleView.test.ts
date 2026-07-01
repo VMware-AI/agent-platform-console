@@ -334,7 +334,12 @@ describe('UserRoleView — Users tab states', () => {
 describe('UserRoleView — Users tab interactions (real ops mocked)', () => {
   function actionButton(rowIndex: number, label: string): HTMLElement {
     const row = userRows()[rowIndex]
-    return row.querySelector<HTMLElement>(`cds-button-action[aria-label="${label}"]`)!
+    // The UsersTab row actions are plain <button class="row-action"> elements
+    // (matched the ModelGatewayView row-action pattern after
+    // 9bbc6b1); they expose their action via `title`, not `aria-label`.
+    // Match by title attribute so tests stay stable across label/i18n
+    // changes as long as the i18n key is the same.
+    return row.querySelector<HTMLElement>(`button.row-action[title="${label}"]`)!
   }
 
   // UserFormDialog renders a <cds-modal> whose header shows the create title;
@@ -524,7 +529,7 @@ describe('UserRoleView — Roles tab', () => {
     // delete affordance was previously present but routed to the wrong
     // mutation (DELETE_USER_MUTATION on a role id); since the backend has
     // no deleteRole mutation, the buttons have been removed entirely.
-    const anyDelete = roleGrid()!.querySelector('cds-button-action[shape="trash"]')
+    const anyDelete = roleGrid()!.querySelector('button.row-action.danger')
     expect(anyDelete).toBeNull()
   })
 

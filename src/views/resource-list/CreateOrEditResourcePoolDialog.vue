@@ -406,10 +406,18 @@ function close() {
      ModelGatewayFormModal's .test-connection-row: the 测试连接 button
      should line up under the vCenter 密码 input column, not the modal edge. */
   margin-left: 24px;
+  /* Break out of the parent .resource-form { max-width: 70% } constraint
+     so the success/detail line in .resource-test-alert (e.g.
+     "vSphere 8.0.3 · 2 个内容库") has enough room to stay on one line.
+     We extend back to the form's full modal-content width and cap it so
+     very wide modals don't get a comically long alert. */
+  width: calc(100% / 0.7);
+  max-width: 720px;
+  min-width: 360px;
 }
 
 .resource-test-alert {
-  width: 100%;
+  align-self: stretch;
 }
 
 .resource-test-message {

@@ -95,9 +95,6 @@ function makePool(over: Partial<ResourcePool> = {}): ResourcePool {
     endpoint: 'https://vc.example.local/sdk',
     contentLibraryName: 'cl-vc-oc1',
     insecure: false,
-    connectionStatus: 'CONNECTED',
-    esxiHostCount: 4,
-    vmInstanceCount: 12,
     syncStatus: 'SYNCED',
     lastSyncedAt: '2026-06-26T03:00:00Z',
     createdAt: '2026-01-01T08:00:00Z',
@@ -349,7 +346,7 @@ describe('ResourcePoolListView — create / edit dialog wiring', () => {
     queryResult.value = makeResult([pool], 1)
     wrapper = mount(ResourcePoolListView, mountConfig)
 
-    await wrapper.find('cds-button-action[shape="pencil"]').trigger('click')
+    await rows()[0].findAll('.row-action')[1].trigger('click')
 
     const dialog = wrapper.findComponent(CreateOrEditResourcePoolDialog)
     expect(dialog.props('open')).toBe(true)
@@ -384,7 +381,7 @@ describe('ResourcePoolListView — create / edit dialog wiring', () => {
     wrapper = mount(ResourcePoolListView, mountConfig)
 
     // Open edit so editingPool is set, then emit the update submit.
-    await wrapper.find('cds-button-action[shape="pencil"]').trigger('click')
+    await rows()[0].findAll('.row-action')[1].trigger('click')
     const dialog = wrapper.findComponent(CreateOrEditResourcePoolDialog)
     const input = { name: 'New Name', endpoint: 'https://vc/sdk', contentLibraryName: 'cl-x' }
     dialog.vm.$emit('submit', { mode: 'update', input })
@@ -435,7 +432,7 @@ describe('ResourcePoolListView — sync & delete row actions', () => {
     })
     wrapper = mount(ResourcePoolListView, mountConfig)
 
-    await wrapper.find('cds-button-action[shape="sync"]').trigger('click')
+    await rows()[0].findAll('.row-action')[0].trigger('click')
     await flushPromises()
 
     expect(syncMutate).toHaveBeenCalledWith({ id: 'rp-3' })
@@ -448,7 +445,7 @@ describe('ResourcePoolListView — sync & delete row actions', () => {
     syncMutate.mockRejectedValue(new Error('sync failed'))
     wrapper = mount(ResourcePoolListView, mountConfig)
 
-    await wrapper.find('cds-button-action[shape="sync"]').trigger('click')
+    await rows()[0].findAll('.row-action')[0].trigger('click')
     await flushPromises()
 
     expect(syncMutate).toHaveBeenCalledTimes(1)
@@ -464,7 +461,7 @@ describe('ResourcePoolListView — sync & delete row actions', () => {
     const confirm = wrapper.findComponent(ConfirmDialog)
     expect(confirm.props('open')).toBe(false)
 
-    await wrapper.find('cds-button-action[shape="trash"]').trigger('click')
+    await rows()[0].findAll('.row-action')[2].trigger('click')
     expect(confirm.props('open')).toBe(true)
     // Body interpolates the pool name via the locale template.
     expect(confirm.props('body')).toContain('DeleteMe')
@@ -478,15 +475,21 @@ describe('ResourcePoolListView — sync & delete row actions', () => {
     })
     wrapper = mount(ResourcePoolListView, mountConfig)
 
-    await wrapper.find('cds-button-action[shape="trash"]').trigger('click')
-    const confirm = wrapper.findComponent(ConfirmDialog)
-    confirm.vm.$emit('confirm')
+    await rows()[0].findAll('.row-action')[2].trigger('click')
+    const confirms = wrapper.findAllComponents(ConfirmDialog)
+    // Two-step delete: step-1 confirm swaps the dialog into the
+    // type-to-confirm step-2 instance; emit `confirm` on both, in
+    // order, to walk the full flow.
+    confirms[0].vm.$emit('confirm')
+    await flushPromises()
+    const final = wrapper.findAllComponents(ConfirmDialog)[1]
+    final.vm.$emit('confirm')
     await flushPromises()
 
     expect(deleteMutate).toHaveBeenCalledWith({ id: 'rp-4' })
     expect(refetchSpy).toHaveBeenCalledTimes(1)
     // Dialog closes after confirm.
-    expect(confirm.props('open')).toBe(false)
+    expect(final.props('open')).toBe(false)
   })
 
   it('closes the confirm dialog without deleting on close', async () => {
@@ -494,7 +497,7 @@ describe('ResourcePoolListView — sync & delete row actions', () => {
     queryResult.value = makeResult([pool], 1)
     wrapper = mount(ResourcePoolListView, mountConfig)
 
-    await wrapper.find('cds-button-action[shape="trash"]').trigger('click')
+    await rows()[0].findAll('.row-action')[2].trigger('click')
     const confirm = wrapper.findComponent(ConfirmDialog)
     expect(confirm.props('open')).toBe(true)
 
