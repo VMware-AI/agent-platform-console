@@ -67,7 +67,8 @@ log "npm $(npm -v) OK"
 # ---- prereq 3: node_modules -----------------------------------------------
 if [[ ! -d node_modules ]]; then
   log "node_modules missing — running npm ci (first-run install)"
-  npm ci
+  NPM_REGISTRY=https://registry.npmmirror.com
+  npm ci --no-audit --no-fund --registry=${NPM_REGISTRY}
 else
   log "node_modules present"
 fi
@@ -120,4 +121,4 @@ fi
 # grabs the port between the check and vite's listen().
 log "starting vite dev server on port $PORT (strict), proxying /query -> $BACKEND"
 log "open the printed URL in your browser; Ctrl-C to stop."
-exec env BACKEND_BASE_URL="$BACKEND" npm run dev -- --port "$PORT" --strictPort
+exec env BACKEND_BASE_URL="$BACKEND" npm run dev -- --host 0.0.0.0 --port "$PORT" --strictPort

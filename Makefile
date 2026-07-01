@@ -9,9 +9,9 @@ PLATFORMS ?= linux/amd64,linux/arm64
 BUILDER   ?= agent-platform-builder
 # Defaults to the official npm registry; override with NPM_REGISTRY=https://registry.npmmirror.com
 # in environments where registry.npmjs.org is unreachable (e.g. cron in mainland China).
-NPM_REGISTRY ?= https://registry.npmjs.org
+NPM_REGISTRY ?= https://registry.npmmirror.com
 VERSION   := $(shell cat VERSION 2>/dev/null || echo "v0.0.0")
-TAG       := $(VERSION)-$(shell date -u +%Y%m%d)
+TAG       ?= $(VERSION)-$(shell date -u +%Y%m%d)
 IMAGE_TAG := $(TAG)
 
 LOCAL_CONTAINER_NAME ?= agent-platform-console
