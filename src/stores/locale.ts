@@ -411,6 +411,7 @@ export const STRINGS: Dict = {
   'resources.inventory.group.datastores': { zh: '数据存储', en: '' },
   'resources.inventory.group.networks': { zh: '网络', en: '' },
   'resources.inventory.group.folders': { zh: '文件夹', en: '' },
+  'resources.inventory.group.storagePolicies': { zh: '存储策略', en: '' },
   'resources.inventory.group.hosts': { zh: '主机', en: '' },
   'resources.inventory.group.resourcePools': { zh: '资源池', en: '' },
 

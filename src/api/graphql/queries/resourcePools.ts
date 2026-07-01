@@ -67,6 +67,10 @@ const RESOURCE_POOL_INVENTORY_FIELDS = /* GraphQL */ `
         name
         path
       }
+      storagePolicies {
+        name
+        path
+      }
     }
   }
 `

@@ -233,6 +233,22 @@ function close() {
             </cds-tree-item>
 
             <cds-tree-item
+              :expanded="isExpanded(`dc:${dc.path}#storagePolicies`)"
+              @expandedChange="toggle(`dc:${dc.path}#storagePolicies`)"
+            >
+              <cds-icon shape="shield-check" size="sm"></cds-icon>
+              {{ locale.t('resources.inventory.group.storagePolicies') }} ({{ dc.storagePolicies.length }})
+              <cds-tree-item
+                v-for="sp in dc.storagePolicies"
+                :key="`dc:${dc.path}/sp:${sp.path || sp.name}`"
+              >
+                <cds-icon shape="shield-check" size="sm"></cds-icon>
+                <span class="node-name">{{ sp.name }}</span>
+                <span class="node-path">{{ sp.path }}</span>
+              </cds-tree-item>
+            </cds-tree-item>
+
+            <cds-tree-item
               :expanded="isExpanded(`dc:${dc.path}#networks`)"
               @expandedChange="toggle(`dc:${dc.path}#networks`)"
             >
