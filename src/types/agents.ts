@@ -100,6 +100,14 @@ export interface AgentsQueryResult {
   agents: AgentConnection
 }
 
+export interface AgentQueryVars {
+  id: string
+}
+
+export interface AgentQueryResult {
+  agent: Agent
+}
+
 /* ---------- View-layer mappings ---------- */
 
 /** Lower-case status used in views / i18n keys. */
