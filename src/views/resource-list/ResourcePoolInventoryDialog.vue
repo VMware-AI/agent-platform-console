@@ -73,7 +73,15 @@ watch(
       loading.value = false
     }
   },
-  { immediate: false },
+  // `immediate: true` is REQUIRED: the parent mounts the dialog with
+  // `open=true` already on the first tick (`v-if` flips truthy and
+  // `:open="!!inventoryFor"` becomes true in the same render), so a
+  // watcher with `immediate: false` never observes the initial
+  // truthy value — the user clicks "查看", `inventoryFor` is set,
+  // and without `immediate: true` the watch callback never fires,
+  // which is why the modal shows the empty-state alert with NO
+  // network request ever leaving the browser.
+  { immediate: true },
 )
 
 function close() {
