@@ -403,6 +403,7 @@ export const STRINGS: Dict = {
   'resources.action.view': { zh: '查看', en: '' },
   'resources.inventory.title': { zh: '资源池资产', en: '' },
   'resources.inventory.viewTitle': { zh: '查看资源池资产', en: '' },
+  'resources.inventory.viewDisabledTitle': { zh: '资源池尚未同步,无法查看资产', en: '' },
   'resources.inventory.loadFail': { zh: '加载资源池资产失败', en: '' },
   'resources.inventory.empty': { zh: '尚未同步,无资产数据', en: '' },
   'resources.inventory.close': { zh: '关闭', en: '' },

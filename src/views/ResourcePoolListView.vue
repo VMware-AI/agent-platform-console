@@ -557,7 +557,9 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
             type="button"
             class="inventory-link"
             :disabled="!p.syncStatus || p.syncStatus === 'NEVER'"
-            :title="locale.t('resources.inventory.viewTitle')"
+            :title="p.syncStatus === 'NEVER'
+              ? locale.t('resources.inventory.viewDisabledTitle')
+              : locale.t('resources.inventory.viewTitle')"
             @click="openInventory(p)"
           >
             {{ locale.t('resources.action.view') }}
