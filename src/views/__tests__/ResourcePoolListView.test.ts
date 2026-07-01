@@ -476,14 +476,20 @@ describe('ResourcePoolListView — sync & delete row actions', () => {
     wrapper = mount(ResourcePoolListView, mountConfig)
 
     await rows()[0].findAll('.row-action')[2].trigger('click')
-    const confirm = wrapper.findComponent(ConfirmDialog)
-    confirm.vm.$emit('confirm')
+    const confirms = wrapper.findAllComponents(ConfirmDialog)
+    // Two-step delete: step-1 confirm swaps the dialog into the
+    // type-to-confirm step-2 instance; emit `confirm` on both, in
+    // order, to walk the full flow.
+    confirms[0].vm.$emit('confirm')
+    await flushPromises()
+    const final = wrapper.findAllComponents(ConfirmDialog)[1]
+    final.vm.$emit('confirm')
     await flushPromises()
 
     expect(deleteMutate).toHaveBeenCalledWith({ id: 'rp-4' })
     expect(refetchSpy).toHaveBeenCalledTimes(1)
     // Dialog closes after confirm.
-    expect(confirm.props('open')).toBe(false)
+    expect(final.props('open')).toBe(false)
   })
 
   it('closes the confirm dialog without deleting on close', async () => {
