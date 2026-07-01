@@ -355,7 +355,7 @@ const deleteFinalBodySegments = computed<
       aria-label="users"
     >
       <!-- Column: username -->
-      <cds-grid-column :width="'12%'">
+      <cds-grid-column :width="'11%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.username') }}</span>
           <span class="col-head-actions">
@@ -421,7 +421,7 @@ const deleteFinalBodySegments = computed<
       </cds-grid-column>
 
       <!-- Column: email -->
-      <cds-grid-column :width="'18%'">
+      <cds-grid-column :width="'16%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.email') }}</span>
           <span class="col-head-actions">
@@ -461,7 +461,7 @@ const deleteFinalBodySegments = computed<
       </cds-grid-column>
 
       <!-- Column: last login -->
-      <cds-grid-column :width="'15%'">
+      <cds-grid-column :width="'13%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.lastLogin') }}</span>
           <span class="col-head-actions">
@@ -487,7 +487,7 @@ const deleteFinalBodySegments = computed<
       </cds-grid-column>
 
       <!-- Column: createdAt -->
-      <cds-grid-column :width="'15%'">
+      <cds-grid-column :width="'13%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.createdAt') }}</span>
           <span class="col-head-actions">
@@ -513,7 +513,7 @@ const deleteFinalBodySegments = computed<
       </cds-grid-column>
 
       <!-- Column: updatedAt -->
-      <cds-grid-column :width="'14%'">
+      <cds-grid-column :width="'13%'">
         <div class="col-head">
           <span>{{ locale.t('users.col.updatedAt') }}</span>
           <span class="col-head-actions">
@@ -539,7 +539,7 @@ const deleteFinalBodySegments = computed<
       </cds-grid-column>
 
       <!-- Column: actions -->
-      <cds-grid-column :width="'10%'">
+      <cds-grid-column :width="'18%'">
         <div class="col-head col-actions">
           <span>{{ locale.t('users.col.actions') }}</span>
         </div>
