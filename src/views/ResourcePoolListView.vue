@@ -894,7 +894,7 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
 }
 
 .col-head.col-actions {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .endpoint-cell {
