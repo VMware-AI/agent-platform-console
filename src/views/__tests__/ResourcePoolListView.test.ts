@@ -346,7 +346,7 @@ describe('ResourcePoolListView — create / edit dialog wiring', () => {
     queryResult.value = makeResult([pool], 1)
     wrapper = mount(ResourcePoolListView, mountConfig)
 
-    await wrapper.find('cds-button-action[shape="pencil"]').trigger('click')
+    await rows()[0].findAll('.row-action')[1].trigger('click')
 
     const dialog = wrapper.findComponent(CreateOrEditResourcePoolDialog)
     expect(dialog.props('open')).toBe(true)
@@ -381,7 +381,7 @@ describe('ResourcePoolListView — create / edit dialog wiring', () => {
     wrapper = mount(ResourcePoolListView, mountConfig)
 
     // Open edit so editingPool is set, then emit the update submit.
-    await wrapper.find('cds-button-action[shape="pencil"]').trigger('click')
+    await rows()[0].findAll('.row-action')[1].trigger('click')
     const dialog = wrapper.findComponent(CreateOrEditResourcePoolDialog)
     const input = { name: 'New Name', endpoint: 'https://vc/sdk', contentLibraryName: 'cl-x' }
     dialog.vm.$emit('submit', { mode: 'update', input })
@@ -432,7 +432,7 @@ describe('ResourcePoolListView — sync & delete row actions', () => {
     })
     wrapper = mount(ResourcePoolListView, mountConfig)
 
-    await wrapper.find('cds-button-action[shape="sync"]').trigger('click')
+    await rows()[0].findAll('.row-action')[0].trigger('click')
     await flushPromises()
 
     expect(syncMutate).toHaveBeenCalledWith({ id: 'rp-3' })
@@ -445,7 +445,7 @@ describe('ResourcePoolListView — sync & delete row actions', () => {
     syncMutate.mockRejectedValue(new Error('sync failed'))
     wrapper = mount(ResourcePoolListView, mountConfig)
 
-    await wrapper.find('cds-button-action[shape="sync"]').trigger('click')
+    await rows()[0].findAll('.row-action')[0].trigger('click')
     await flushPromises()
 
     expect(syncMutate).toHaveBeenCalledTimes(1)
@@ -461,7 +461,7 @@ describe('ResourcePoolListView — sync & delete row actions', () => {
     const confirm = wrapper.findComponent(ConfirmDialog)
     expect(confirm.props('open')).toBe(false)
 
-    await wrapper.find('cds-button-action[shape="trash"]').trigger('click')
+    await rows()[0].findAll('.row-action')[2].trigger('click')
     expect(confirm.props('open')).toBe(true)
     // Body interpolates the pool name via the locale template.
     expect(confirm.props('body')).toContain('DeleteMe')
@@ -475,7 +475,7 @@ describe('ResourcePoolListView — sync & delete row actions', () => {
     })
     wrapper = mount(ResourcePoolListView, mountConfig)
 
-    await wrapper.find('cds-button-action[shape="trash"]').trigger('click')
+    await rows()[0].findAll('.row-action')[2].trigger('click')
     const confirm = wrapper.findComponent(ConfirmDialog)
     confirm.vm.$emit('confirm')
     await flushPromises()
@@ -491,7 +491,7 @@ describe('ResourcePoolListView — sync & delete row actions', () => {
     queryResult.value = makeResult([pool], 1)
     wrapper = mount(ResourcePoolListView, mountConfig)
 
-    await wrapper.find('cds-button-action[shape="trash"]').trigger('click')
+    await rows()[0].findAll('.row-action')[2].trigger('click')
     const confirm = wrapper.findComponent(ConfirmDialog)
     expect(confirm.props('open')).toBe(true)
 
