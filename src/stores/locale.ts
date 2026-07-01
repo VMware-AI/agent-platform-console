@@ -397,7 +397,8 @@ export const STRINGS: Dict = {
   'resources.confirm.finalDelete.inputPlaceholder': { zh: '输入资源池名称', en: 'Type the resource pool name' },
 
   // Inventory viewer (asset tree) modal — opened from the "资产" column's
-  // "查看" link. Lazy-loaded via RESOURCE_POOL_INVENTORY_QUERY.
+  // "查看" link. Lazy-loaded via RESOURCE_POOL_QUERY (single-pool variant
+  // that adds the `datacenters` subtree; the list query omits it).
   'resources.col.inventory': { zh: '资产', en: '' },
   'resources.action.view': { zh: '查看', en: '' },
   'resources.inventory.title': { zh: '资源池资产', en: '' },
@@ -409,7 +410,6 @@ export const STRINGS: Dict = {
   'resources.inventory.group.datastores': { zh: '数据存储', en: '' },
   'resources.inventory.group.networks': { zh: '网络', en: '' },
   'resources.inventory.group.folders': { zh: '文件夹', en: '' },
-  'resources.inventory.group.storagePolicies': { zh: '存储策略', en: '' },
   'resources.inventory.group.hosts': { zh: '主机', en: '' },
   'resources.inventory.group.resourcePools': { zh: '资源池', en: '' },
 

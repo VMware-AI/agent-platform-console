@@ -1,5 +1,23 @@
 import { gql } from '@apollo/client/core'
 
+/**
+ * Resource pool GraphQL operations.
+ *
+ * Two operations cover the resource-pool list page:
+ *
+ * 1. `RESOURCE_POOLS_QUERY` — drives the table. Selects ONLY scalar fields,
+ *    no inventory children, so the 30s poll stays cheap. Mirrors the
+ *    `query ResourcePools` definition in
+ *    `postman/agent-platform-backend.postman_collection.json` exactly.
+ *
+ * 2. `RESOURCE_POOL_QUERY` — fired lazily when the user clicks the row's
+ *    "查看" link. Returns the same scalars PLUS `datacenters`, so the
+ *    inventory viewer modal can render the vSphere tree.
+ *
+ * Field-set discipline: the two queries intentionally diverge — do NOT
+ * add `datacenters` to `RESOURCE_POOL_FIELDS`, or every list poll will
+ * haul the entire vSphere tree.
+ */
 const RESOURCE_POOL_FIELDS = /* GraphQL */ `
   fragment ResourcePoolFields on ResourcePool {
     id
@@ -7,13 +25,46 @@ const RESOURCE_POOL_FIELDS = /* GraphQL */ `
     endpoint
     contentLibraryName
     insecure
-    connectionStatus
-    esxiHostCount
-    vmInstanceCount
     syncStatus
     lastSyncedAt
     createdAt
     updatedAt
+  }
+`
+
+const RESOURCE_POOL_INVENTORY_FIELDS = /* GraphQL */ `
+  fragment ResourcePoolInventoryFields on ResourcePool {
+    id
+    name
+    endpoint
+    datacenters {
+      name
+      path
+      clusters {
+        name
+        path
+        esxiHosts {
+          name
+          path
+        }
+        resourcePools {
+          name
+          path
+        }
+      }
+      datastores {
+        name
+        path
+      }
+      networks {
+        name
+        path
+      }
+      folders {
+        name
+        path
+      }
+    }
   }
 `
 
@@ -38,11 +89,17 @@ export const RESOURCE_POOLS_QUERY = gql`
   }
 `
 
+/**
+ * Single-pool query — same API the list query uses, just selecting the
+ * one row by id and adding the `datacenters` subtree. The inventory viewer
+ * fires this lazily, only when the user opens the modal; it is NOT called
+ * during the list's 30s poll.
+ */
 export const RESOURCE_POOL_QUERY = gql`
-  ${RESOURCE_POOL_FIELDS}
+  ${RESOURCE_POOL_INVENTORY_FIELDS}
   query ResourcePool($id: ID!) {
     resourcePool(id: $id) {
-      ...ResourcePoolFields
+      ...ResourcePoolInventoryFields
     }
   }
 `
@@ -101,56 +158,6 @@ export const TEST_RESOURCE_POOL_CONNECTION_MUTATION = gql`
         vSphereVersion
         contentLibraries
       }
-    }
-  }
-`
-
-/* ---------- Inventory (lazy-loaded on demand) ----------
- * Pulled only when the user opens the "查看资产" modal; never embedded in the
- * list query to avoid hauling the entire vSphere tree on every poll.
- * Mirrors `ResourcePoolInventory` in `src/types/resource-pool.ts`. */
-const RESOURCE_POOL_INVENTORY_FIELDS = /* GraphQL */ `
-  fragment ResourcePoolInventoryFields on ResourcePoolInventory {
-    datacenters {
-      name
-      path
-      clusters {
-        name
-        path
-        esxiHosts {
-          name
-          path
-        }
-        resourcePools {
-          name
-          path
-        }
-      }
-      datastores {
-        name
-        path
-      }
-      networks {
-        name
-        path
-      }
-      folders {
-        name
-        path
-      }
-      storagePolicies {
-        name
-        path
-      }
-    }
-  }
-`
-
-export const RESOURCE_POOL_INVENTORY_QUERY = gql`
-  ${RESOURCE_POOL_INVENTORY_FIELDS}
-  query ResourcePoolInventory($id: ID!) {
-    resourcePoolInventory(id: $id) {
-      ...ResourcePoolInventoryFields
     }
   }
 `

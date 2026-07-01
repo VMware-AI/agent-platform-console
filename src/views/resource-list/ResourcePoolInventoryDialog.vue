@@ -2,25 +2,27 @@
 /**
  * Resource pool inventory viewer.
  *
- * Read-only modal that fetches a vCenter inventory tree for a given
- * resource pool via `RESOURCE_POOL_INVENTORY_QUERY` and renders it with
- * the Clarity `cds-tree` web component. Mirrors the left-pane
- * "Hosts and Clusters" view in vSphere Client — collapsible groups,
- * name + path on every node.
+ * Read-only modal that re-fetches a single resource pool via
+ * `RESOURCE_POOL_QUERY` — the same GraphQL operation the list query uses,
+ * but selected by `id` and including the `datacenters` subtree so the
+ * vSphere inventory can be rendered.
+ *
+ * Mirrors the left-pane "Hosts and Clusters" view in vSphere Client —
+ * collapsible groups, name + path on every node.
  *
  * The query is fired lazily, only when the modal opens; the result is
  * cached in-memory by `loadedForPoolId` so re-opening the same pool
  * does not refetch. Switching to a different pool forces a reload.
  */
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
 import { apolloClient } from '@/api/graphql/client'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
-import { RESOURCE_POOL_INVENTORY_QUERY } from '@/api/graphql/queries/resourcePools'
+import { RESOURCE_POOL_QUERY } from '@/api/graphql/queries/resourcePools'
 import type {
-  ResourcePoolInventory,
-  ResourcePoolInventoryQueryResult,
-  ResourcePoolInventoryQueryVars,
+  ResourcePool,
+  ResourcePoolQueryResult,
+  ResourcePoolQueryVars,
 } from '@/types/resource-pool'
 import '@/components/icons'
 
@@ -34,29 +36,34 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 
 const locale = useLocaleStore()
 
-const inventory = ref<ResourcePoolInventory | null>(null)
+const pool = ref<ResourcePool | null>(null)
 const loading = ref(false)
 const errorMsg = ref<string | null>(null)
 const loadedForPoolId = ref<string | null>(null)
+
+/** Datacenters are nullable — the single-pool query may return `null`
+ *  when the pool has never been synced. The empty-state alert renders
+ *  in that case. */
+const datacenters = computed(() => pool.value?.datacenters ?? null)
 
 watch(
   () => props.open,
   async (open) => {
     if (!open || !props.poolId) return
-    if (loadedForPoolId.value === props.poolId && inventory.value) return
-    inventory.value = null
+    if (loadedForPoolId.value === props.poolId && pool.value) return
+    pool.value = null
     errorMsg.value = null
     loading.value = true
     try {
       const { data } = await apolloClient.query<
-        ResourcePoolInventoryQueryResult,
-        ResourcePoolInventoryQueryVars
+        ResourcePoolQueryResult,
+        ResourcePoolQueryVars
       >({
-        query: RESOURCE_POOL_INVENTORY_QUERY,
+        query: RESOURCE_POOL_QUERY,
         variables: { id: props.poolId },
         fetchPolicy: 'network-only',
       })
-      inventory.value = data.resourcePoolInventory
+      pool.value = data.resourcePool
       loadedForPoolId.value = props.poolId
     } catch (err) {
       console.error('[resource-pool] load inventory failed', err)
@@ -97,7 +104,7 @@ function close() {
       </cds-alert>
 
       <cds-alert
-        v-else-if="!inventory || inventory.datacenters.length === 0"
+        v-else-if="!datacenters || datacenters.length === 0"
         status="info"
       >
         {{ locale.t('resources.inventory.empty') }}
@@ -106,7 +113,7 @@ function close() {
       <div v-else class="inventory-tree-wrap">
         <cds-tree>
           <cds-tree-item
-            v-for="dc in inventory.datacenters"
+            v-for="dc in datacenters"
             :key="dc.path"
             :expanded="true"
           >
@@ -190,19 +197,6 @@ function close() {
                 <cds-icon shape="folder" size="sm"></cds-icon>
                 <span class="node-name">{{ f.name }}</span>
                 <span class="node-path">{{ f.path }}</span>
-              </cds-tree-item>
-            </cds-tree-item>
-
-            <cds-tree-item>
-              <cds-icon shape="shield-check" size="sm"></cds-icon>
-              {{ locale.t('resources.inventory.group.storagePolicies') }} ({{ dc.storagePolicies.length }})
-              <cds-tree-item
-                v-for="sp in dc.storagePolicies"
-                :key="sp.path || sp.name"
-              >
-                <cds-icon shape="shield-check" size="sm"></cds-icon>
-                <span class="node-name">{{ sp.name }}</span>
-                <span class="node-path">{{ sp.path }}</span>
               </cds-tree-item>
             </cds-tree-item>
           </cds-tree-item>

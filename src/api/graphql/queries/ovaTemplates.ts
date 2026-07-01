@@ -131,9 +131,11 @@ export const DEPLOY_AGENT_MUTATION = gql`
         id
         name
         endpoint
-        connectionStatus
         syncStatus
         lastSyncedAt
+        datacenters {
+          name
+        }
       }
     }
   }
