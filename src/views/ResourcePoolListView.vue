@@ -557,12 +557,14 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
             type="button"
             class="inventory-link"
             :disabled="!p.syncStatus || p.syncStatus === 'NEVER'"
+            :aria-label="locale.t('resources.action.view')"
             :title="p.syncStatus === 'NEVER'
               ? locale.t('resources.inventory.viewDisabledTitle')
               : locale.t('resources.inventory.viewTitle')"
             @click="openInventory(p)"
           >
-            {{ locale.t('resources.action.view') }}
+            <cds-icon shape="eye" size="sm" aria-hidden="true"></cds-icon>
+            <span>{{ locale.t('resources.action.view') }}</span>
           </button>
         </cds-grid-cell>
         <cds-grid-cell class="muted">{{ fmtDateTime(p.createdAt) }}</cds-grid-cell>
@@ -972,33 +974,72 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
   color: var(--cds-alias-status-danger, #c92100);
 }
 
-/* Inventory "查看" link — chrome-free transparent button styled like a
-   link, sitting in the "资产" column. Mirrors the .user-count-link
-   pattern in RolesTab. */
+/* Inventory "查看" pill button.
+   Centred inside the cell (cds-grid-cell's private host is
+   display:flex with default justify-content:start, so a plain
+   `text-align:center` on the cell would NOT centre an inline
+   button — we set flex/center on the cell host itself via the
+   attribute selector that targets our class), pill-shaped with an
+   icon + label, primary info-blue background, and a clear disabled
+   state. Mirrors the visual weight of .row-action buttons in the
+   actions column without competing with them. */
 .inventory-cell {
-  text-align: center;
+  /* Override cds-grid-cell's default flex justification (start) so
+     the pill is centred horizontally inside the cell, matching the
+     column header's `.col-center` treatment. */
+  --justify-content: center;
 }
 .inventory-link {
+  /* Pill-shaped chrome: subtle background, info-blue tint, border
+     matching the colour family. */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   appearance: none;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  font: inherit;
+  margin: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--cds-alias-status-info, #0079ad);
+  border-radius: 999px;
+  background: var(--cds-alias-object-app-blue-50, rgba(0, 114, 163, 0.08));
   color: var(--cds-alias-status-info, #0079ad);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
   cursor: pointer;
-  text-decoration: none;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease,
+    transform 0.12s ease;
+  white-space: nowrap;
+}
+.inventory-link > cds-icon {
+  /* Clarity icons inherit currentColor — ensure the icon takes the
+     same colour as the surrounding text. */
+  color: inherit;
+  display: inline-flex;
 }
 .inventory-link:hover:not(:disabled) {
-  text-decoration: underline;
+  background: var(--cds-alias-status-info, #0079ad);
+  border-color: var(--cds-alias-status-info, #0079ad);
+  color: #fff;
+}
+.inventory-link:hover:not(:disabled) > cds-icon {
+  color: #fff;
+}
+.inventory-link:active:not(:disabled) {
+  transform: translateY(1px);
 }
 .inventory-link:disabled {
+  border-color: var(--cds-alias-object-border-color, #d6d6d6);
+  background: var(--cds-alias-object-app-background-shade, #f4f4f4);
   color: var(--cds-alias-typography-color-muted, #999);
   cursor: not-allowed;
 }
 .inventory-link:focus-visible {
   outline: 2px solid var(--cds-alias-status-info, #0079ad);
   outline-offset: 2px;
-  border-radius: 2px;
 }
 
 /* Centered column header for the inventory column. */
