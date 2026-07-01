@@ -10,7 +10,9 @@
  *
  * Per spec:
  *  - 6 visible columns (no esxi / vm counts)
- *  - 3 row icons (sync / pencil / trash) — sync/edit/delete hit real mutations
+ *  - 3 row actions (sync / edit / delete) — icon-above-text buttons styled
+ *    to match ModelGatewayView's `.row-action` pattern; sync spins
+ *    per-row while in flight
  *  - "当前同步状态" banner rendered inline above the grid (single cds-alert)
  *  - Sort / filter / pager work the same as AgentListView
  */
@@ -230,6 +232,13 @@ const editingPool = ref<ResourcePool | null>(null)
 const deletingPool = ref<ResourcePool | null>(null)
 const createDialogOpen = ref(false)
 
+// Per-row in-flight tracking for the sync action. Mirrors ModelGatewayView's
+// `testingIDs` Set so only the row being synced shows the spinning icon
+// and is disabled — the previous global `syncing` flag disabled every
+// row's sync button while any one of them was in flight, which was both
+// noisy and not what ModelGatewayView does for the same action.
+const syncingIDs = ref(new Set<string>())
+
 function openCreate() {
   editingPool.value = null
   createDialogOpen.value = true
@@ -293,6 +302,7 @@ async function refreshPools() {
 }
 
 async function onSync(p: ResourcePool) {
+  syncingIDs.value.add(p.id)
   try {
     const r = await syncPoolMutate({ id: p.id })
     const syncedAt = r?.data?.syncResourcePool.syncedAt
@@ -301,9 +311,15 @@ async function onSync(p: ResourcePool) {
       refetch()
     }
   } catch (err) {
-     
+
     console.error('[resources] sync failed', err)
     toast.error(graphqlErrorMessage(err, locale.t('resources.toast.syncFail')))
+  } finally {
+    syncingIDs.value.delete(p.id)
+    // Force reactivity: Set mutations don't trigger Vue's reactivity on .add/.delete
+    // for the in-place ref. Replace with a new Set so has(id) re-evaluates in the
+    // template.
+    syncingIDs.value = new Set(syncingIDs.value)
   }
 }
 
@@ -484,26 +500,40 @@ async function doDelete() {
         <cds-grid-cell class="muted">{{ fmtDateTime(p.updatedAt) }}</cds-grid-cell>
         <cds-grid-cell>
           <span class="actions-cell">
-            <cds-button-action
-              shape="sync"
+            <button
+              type="button"
+              class="row-action"
+              :disabled="syncingIDs.has(p.id)"
               :title="locale.t('resources.action.sync')"
-              :aria-label="locale.t('resources.action.sync')"
-              :disabled="syncing"
               @click="onSync(p)"
-            ></cds-button-action>
-            <cds-button-action
-              shape="pencil"
+            >
+              <cds-icon
+                shape="sync"
+                size="sm"
+                :class="{ spinning: syncingIDs.has(p.id) }"
+                aria-hidden="true"
+              ></cds-icon>
+              <span>{{ locale.t('resources.action.sync') }}</span>
+            </button>
+            <button
+              type="button"
+              class="row-action"
               :title="locale.t('resources.action.edit')"
-              :aria-label="locale.t('resources.action.edit')"
               @click="openEdit(p)"
-            ></cds-button-action>
-            <cds-button-action
-              shape="trash"
+            >
+              <cds-icon shape="pencil" size="sm" aria-hidden="true"></cds-icon>
+              <span>{{ locale.t('resources.action.edit') }}</span>
+            </button>
+            <button
+              type="button"
+              class="row-action danger"
               :title="locale.t('resources.action.delete')"
-              :aria-label="locale.t('resources.action.delete')"
-              :disabled="deleting"
+              :disabled="!!deletingPool"
               @click="openDelete(p)"
-            ></cds-button-action>
+            >
+              <cds-icon shape="trash" size="sm" aria-hidden="true"></cds-icon>
+              <span>{{ locale.t('resources.action.delete') }}</span>
+            </button>
           </span>
         </cds-grid-cell>
       </cds-grid-row>
@@ -810,12 +840,62 @@ async function doDelete() {
   border-radius: 12px;
 }
 
+/* Row action buttons mirror ModelGatewayView's `.row-action` pattern:
+   icon-above-text native buttons, info-blue by default and danger-red for
+   the trash action, with a per-row spinning sync icon. The previous
+   `<cds-button-action>` web component gave only icon-only chrome and a
+   global disable flag, which didn't match the rest of the list views. */
 .actions-cell {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+.row-action {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 40px;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cds-alias-object-interaction-color, #006e9c);
+  font: inherit;
+  cursor: pointer;
+}
+.row-action span {
+  font-size: 10px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.row-action:focus-visible {
+  outline: 2px solid var(--cds-alias-status-info, #0079ad);
+  outline-offset: 1px;
+}
+.row-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.row-action.danger {
+  color: var(--cds-alias-status-danger, #c92100);
+}
+.spinning {
+  animation: resources-spin 1s linear infinite;
+  transform-origin: center;
+}
+@keyframes resources-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinning {
+    animation: none;
+  }
 }
 
 .pager {
