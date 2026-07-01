@@ -50,13 +50,19 @@ watch(
     errorMsg.value = null
     loading.value = true
     try {
+      // `no-cache` (not `network-only`): the list query stores
+      // `ResourcePool{id=X}` entities with NO `datacenters` field, and
+      // Apollo's InMemoryCache normalizes by id — so a `network-only`
+      // call would merge the cached partial entity and silently drop
+      // `datacenters` from the response (and might even skip the network
+      // hop entirely). `no-cache` bypasses both read and write.
       const { data } = await apolloClient.query<
         ResourcePoolQueryResult,
         ResourcePoolQueryVars
       >({
         query: RESOURCE_POOL_QUERY,
         variables: { id: props.poolId },
-        fetchPolicy: 'network-only',
+        fetchPolicy: 'no-cache',
       })
       datacenters.value = data.resourcePool.datacenters
       loadedForPoolId.value = props.poolId
