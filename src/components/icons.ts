@@ -65,7 +65,10 @@ import {
   calendarIcon,
   timesIcon,
   timesCircleIcon,
-  ellipsisVerticalIcon
+  ellipsisVerticalIcon,
+  vmIcon,
+  hostIcon,
+  folderIcon,
 } from '@cds/core/icon'
 
 // Register once at module load. Idempotent — safe to import multiple times.
@@ -134,5 +137,8 @@ ClarityIcons.addIcons(
   calendarIcon,
   timesIcon,
   timesCircleIcon,
-  ellipsisVerticalIcon
+  ellipsisVerticalIcon,
+  vmIcon,
+  hostIcon,
+  folderIcon,
 )

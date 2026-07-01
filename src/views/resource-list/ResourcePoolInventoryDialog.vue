@@ -11,7 +11,7 @@
  * cached in-memory by `loadedForPoolId` so re-opening the same pool
  * does not refetch. Switching to a different pool forces a reload.
  */
-import { ref, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
 import { apolloClient } from '@/api/graphql/client'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
@@ -40,6 +40,46 @@ const datacenters = ref<VsphereDataCenter[] | null>(null)
 const loading = ref(false)
 const errorMsg = ref<string | null>(null)
 const loadedForPoolId = ref<string | null>(null)
+
+/* ---------- Tree expansion state ----------
+ * `cds-tree-item` is a CONTROLLED component: clicking the caret
+ * fires `expandedChange` but never mutates its own `expanded` prop
+ * (see `node_modules/@cds/core/tree-view/tree-item.element.js` —
+ * `toggleExpanded() { this.expandedChange.emit(!this.expanded) }`).
+ * We have to track the expanded set ourselves and bind `:expanded`
+ * to it; otherwise the caret click appears to do nothing.
+ *
+ * Keys are synthesized from the path segments so each node is
+ * unique within the tree (a cluster's path is unique inside a DC,
+ * a host's path is unique inside a cluster, etc.). */
+const expanded = reactive<Set<string>>(new Set())
+const isExpanded = (key: string) => expanded.has(key)
+function toggle(key: string) {
+  if (expanded.has(key)) expanded.delete(key)
+  else expanded.add(key)
+}
+
+// Reset the expansion set whenever a new pool is loaded, so the
+// tree starts in a deterministic state (DataCenter / Clusters /
+// Hosts / Resource Pools expanded, the rest collapsed).
+watch(
+  () => loadedForPoolId.value,
+  (poolId) => {
+    expanded.clear()
+    if (!poolId || !datacenters.value) return
+    for (const dc of datacenters.value) {
+      const dcKey = `dc:${dc.path}`
+      expanded.add(dcKey)
+      expanded.add(`${dcKey}#clusters`)
+      for (const cl of dc.clusters) {
+        const clKey = `${dcKey}/cluster:${cl.path}`
+        expanded.add(clKey)
+        expanded.add(`${clKey}#hosts`)
+        expanded.add(`${clKey}#rps`)
+      }
+    }
+  },
+)
 
 watch(
   () => props.open,
@@ -123,31 +163,39 @@ function close() {
         <cds-tree>
           <cds-tree-item
             v-for="dc in datacenters"
-            :key="dc.path"
-            :expanded="true"
+            :key="`dc:${dc.path}`"
+            :expanded="isExpanded(`dc:${dc.path}`)"
+            @expandedChange="toggle(`dc:${dc.path}`)"
           >
             <cds-icon shape="vm" size="sm"></cds-icon>
             <span class="node-name">{{ dc.name }}</span>
             <span class="node-path">{{ dc.path }}</span>
 
-            <cds-tree-item :expanded="true">
+            <cds-tree-item
+              :expanded="isExpanded(`dc:${dc.path}#clusters`)"
+              @expandedChange="toggle(`dc:${dc.path}#clusters`)"
+            >
               <cds-icon shape="blocks-group" size="sm"></cds-icon>
               {{ locale.t('resources.inventory.group.clusters') }} ({{ dc.clusters.length }})
               <cds-tree-item
                 v-for="cl in dc.clusters"
-                :key="cl.path"
-                :expanded="true"
+                :key="`dc:${dc.path}/cluster:${cl.path}`"
+                :expanded="isExpanded(`dc:${dc.path}/cluster:${cl.path}`)"
+                @expandedChange="toggle(`dc:${dc.path}/cluster:${cl.path}`)"
               >
                 <cds-icon shape="grid-view" size="sm"></cds-icon>
                 <span class="node-name">{{ cl.name }}</span>
                 <span class="node-path">{{ cl.path }}</span>
 
-                <cds-tree-item :expanded="true">
+                <cds-tree-item
+                  :expanded="isExpanded(`dc:${dc.path}/cluster:${cl.path}#hosts`)"
+                  @expandedChange="toggle(`dc:${dc.path}/cluster:${cl.path}#hosts`)"
+                >
                   <cds-icon shape="cpu" size="sm"></cds-icon>
                   {{ locale.t('resources.inventory.group.hosts') }} ({{ cl.esxiHosts.length }})
                   <cds-tree-item
                     v-for="h in cl.esxiHosts"
-                    :key="h.path || h.name"
+                    :key="`dc:${dc.path}/cluster:${cl.path}/host:${h.path || h.name}`"
                   >
                     <cds-icon shape="host" size="sm"></cds-icon>
                     <span class="node-name">{{ h.name }}</span>
@@ -155,12 +203,15 @@ function close() {
                   </cds-tree-item>
                 </cds-tree-item>
 
-                <cds-tree-item :expanded="true">
+                <cds-tree-item
+                  :expanded="isExpanded(`dc:${dc.path}/cluster:${cl.path}#rps`)"
+                  @expandedChange="toggle(`dc:${dc.path}/cluster:${cl.path}#rps`)"
+                >
                   <cds-icon shape="resource-pool" size="sm"></cds-icon>
                   {{ locale.t('resources.inventory.group.resourcePools') }} ({{ cl.resourcePools.length }})
                   <cds-tree-item
                     v-for="rp in cl.resourcePools"
-                    :key="rp.path || rp.name"
+                    :key="`dc:${dc.path}/cluster:${cl.path}/rp:${rp.path || rp.name}`"
                   >
                     <cds-icon shape="resource-pool" size="sm"></cds-icon>
                     <span class="node-name">{{ rp.name }}</span>
@@ -170,12 +221,15 @@ function close() {
               </cds-tree-item>
             </cds-tree-item>
 
-            <cds-tree-item>
+            <cds-tree-item
+              :expanded="isExpanded(`dc:${dc.path}#datastores`)"
+              @expandedChange="toggle(`dc:${dc.path}#datastores`)"
+            >
               <cds-icon shape="storage" size="sm"></cds-icon>
               {{ locale.t('resources.inventory.group.datastores') }} ({{ dc.datastores.length }})
               <cds-tree-item
                 v-for="d in dc.datastores"
-                :key="d.path || d.name"
+                :key="`dc:${dc.path}/ds:${d.path || d.name}`"
               >
                 <cds-icon shape="storage" size="sm"></cds-icon>
                 <span class="node-name">{{ d.name }}</span>
@@ -183,12 +237,15 @@ function close() {
               </cds-tree-item>
             </cds-tree-item>
 
-            <cds-tree-item>
+            <cds-tree-item
+              :expanded="isExpanded(`dc:${dc.path}#networks`)"
+              @expandedChange="toggle(`dc:${dc.path}#networks`)"
+            >
               <cds-icon shape="router" size="sm"></cds-icon>
               {{ locale.t('resources.inventory.group.networks') }} ({{ dc.networks.length }})
               <cds-tree-item
                 v-for="n in dc.networks"
-                :key="n.path || n.name"
+                :key="`dc:${dc.path}/net:${n.path || n.name}`"
               >
                 <cds-icon shape="router" size="sm"></cds-icon>
                 <span class="node-name">{{ n.name }}</span>
@@ -196,12 +253,15 @@ function close() {
               </cds-tree-item>
             </cds-tree-item>
 
-            <cds-tree-item>
+            <cds-tree-item
+              :expanded="isExpanded(`dc:${dc.path}#folders`)"
+              @expandedChange="toggle(`dc:${dc.path}#folders`)"
+            >
               <cds-icon shape="folder" size="sm"></cds-icon>
               {{ locale.t('resources.inventory.group.folders') }} ({{ dc.folders.length }})
               <cds-tree-item
                 v-for="f in dc.folders"
-                :key="f.path || f.name"
+                :key="`dc:${dc.path}/folder:${f.path || f.name}`"
               >
                 <cds-icon shape="folder" size="sm"></cds-icon>
                 <span class="node-name">{{ f.name }}</span>
