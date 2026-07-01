@@ -11,7 +11,7 @@ COPY package.json package-lock.json ./
 # NPM_REGISTRY defaults to the official npm registry. CI/cron in regions with
 # flaky access to registry.npmjs.org can override it via
 # `--build-arg NPM_REGISTRY=https://registry.npmmirror.com`.
-ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG NPM_REGISTRY=https://registry.npmmirror.com
 RUN npm ci --no-audit --no-fund --registry=${NPM_REGISTRY}
 
 # Bring in the rest of the source. node_modules and dist are excluded by
