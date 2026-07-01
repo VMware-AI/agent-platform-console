@@ -32,11 +32,14 @@ const RESOURCE_POOL_FIELDS = /* GraphQL */ `
   }
 `
 
+/**
+ * Inventory-only fragment: selects just the vSphere `datacenters` subtree.
+ * The inventory viewer modal uses this on the single-pool query, so it
+ * does not pay for scalar fields the modal does not need (the modal
+ * header shows the pool name from a list-row prop, not from the response).
+ */
 const RESOURCE_POOL_INVENTORY_FIELDS = /* GraphQL */ `
   fragment ResourcePoolInventoryFields on ResourcePool {
-    id
-    name
-    endpoint
     datacenters {
       name
       path

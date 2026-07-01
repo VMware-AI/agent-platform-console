@@ -183,10 +183,20 @@ export interface VsphereDataCenter {
   storagePolicies: PlacementRef[]
 }
 
-/* ---------- Single-pool query ---------- */
+/* ---------- Single-pool query ----------
+ * `RESOURCE_POOL_QUERY` selects ONLY `datacenters` — the modal already
+ * has the pool's name from the list-row prop and does not need any
+ * other scalar. This keeps the lazy single-pool fetch as small as
+ * possible.
+ *
+ * `datacenters` is nullable to mirror the backend: an un-synced pool
+ * has no inventory persisted, so the field is `null` rather than `[]`. */
+export interface ResourcePoolInventoryNode {
+  datacenters: VsphereDataCenter[] | null
+}
 export interface ResourcePoolQueryVars {
   id: string
 }
 export interface ResourcePoolQueryResult {
-  resourcePool: ResourcePool
+  resourcePool: ResourcePoolInventoryNode
 }

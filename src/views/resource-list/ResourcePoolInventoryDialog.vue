@@ -4,25 +4,22 @@
  *
  * Read-only modal that re-fetches a single resource pool via
  * `RESOURCE_POOL_QUERY` — the same GraphQL operation the list query uses,
- * but selected by `id` and including the `datacenters` subtree so the
- * vSphere inventory can be rendered.
- *
- * Mirrors the left-pane "Hosts and Clusters" view in vSphere Client —
- * collapsible groups, name + path on every node.
+ * but selected by `id` and constrained to just the `datacenters` subtree
+ * so the vSphere inventory can be rendered.
  *
  * The query is fired lazily, only when the modal opens; the result is
  * cached in-memory by `loadedForPoolId` so re-opening the same pool
  * does not refetch. Switching to a different pool forces a reload.
  */
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
 import { apolloClient } from '@/api/graphql/client'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
 import { RESOURCE_POOL_QUERY } from '@/api/graphql/queries/resourcePools'
 import type {
-  ResourcePool,
   ResourcePoolQueryResult,
   ResourcePoolQueryVars,
+  VsphereDataCenter,
 } from '@/types/resource-pool'
 import '@/components/icons'
 
@@ -36,22 +33,20 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 
 const locale = useLocaleStore()
 
-const pool = ref<ResourcePool | null>(null)
+/** Datacenters are nullable — the single-pool query returns `null`
+ *  when the pool has never been synced. The empty-state alert renders
+ *  in that case. */
+const datacenters = ref<VsphereDataCenter[] | null>(null)
 const loading = ref(false)
 const errorMsg = ref<string | null>(null)
 const loadedForPoolId = ref<string | null>(null)
-
-/** Datacenters are nullable — the single-pool query may return `null`
- *  when the pool has never been synced. The empty-state alert renders
- *  in that case. */
-const datacenters = computed(() => pool.value?.datacenters ?? null)
 
 watch(
   () => props.open,
   async (open) => {
     if (!open || !props.poolId) return
-    if (loadedForPoolId.value === props.poolId && pool.value) return
-    pool.value = null
+    if (loadedForPoolId.value === props.poolId && datacenters.value) return
+    datacenters.value = null
     errorMsg.value = null
     loading.value = true
     try {
@@ -63,7 +58,7 @@ watch(
         variables: { id: props.poolId },
         fetchPolicy: 'network-only',
       })
-      pool.value = data.resourcePool
+      datacenters.value = data.resourcePool.datacenters
       loadedForPoolId.value = props.poolId
     } catch (err) {
       console.error('[resource-pool] load inventory failed', err)
