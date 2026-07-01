@@ -215,18 +215,18 @@ function syncBadgeText(p: ResourcePool): string {
 }
 
 /* ---------- Mutations ---------- */
-const { mutate: createPoolMutate, loading: creating } = useMutation<CreateResourcePoolPayload, CreateResourcePoolVars>(
-  CREATE_RESOURCE_POOL_MUTATION,
-)
-const { mutate: updatePoolMutate } = useMutation<UpdateResourcePoolPayload, UpdateResourcePoolVars>(
-  UPDATE_RESOURCE_POOL_MUTATION,
-)
-const { mutate: deletePoolMutate } = useMutation<DeleteResourcePoolPayload, DeleteResourcePoolVars>(
-  DELETE_RESOURCE_POOL_MUTATION,
-)
-const { mutate: syncPoolMutate } = useMutation<SyncResourcePoolPayload, SyncResourcePoolVars>(
-  SYNC_RESOURCE_POOL_MUTATION,
-)
+const { mutate: createPoolMutate, loading: creating } = useMutation<{
+  createResourcePool: CreateResourcePoolPayload
+}, CreateResourcePoolVars>(CREATE_RESOURCE_POOL_MUTATION)
+const { mutate: updatePoolMutate } = useMutation<{
+  updateResourcePool: UpdateResourcePoolPayload
+}, UpdateResourcePoolVars>(UPDATE_RESOURCE_POOL_MUTATION)
+const { mutate: deletePoolMutate } = useMutation<{
+  deleteResourcePool: DeleteResourcePoolPayload
+}, DeleteResourcePoolVars>(DELETE_RESOURCE_POOL_MUTATION)
+const { mutate: syncPoolMutate } = useMutation<{
+  syncResourcePool: SyncResourcePoolPayload
+}, SyncResourcePoolVars>(SYNC_RESOURCE_POOL_MUTATION)
 
 /* ---------- Row action dialogs ---------- */
 const editingPool = ref<ResourcePool | null>(null)
