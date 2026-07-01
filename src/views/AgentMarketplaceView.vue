@@ -1080,20 +1080,4 @@ const typeFilterLabel = computed(() => {
 .modal-title {
   margin: 0;
 }
-
-/* ---- Icon color classes (light mode defaults, dark overrides below) ---- */
-.tpl-icon--blue   { background: #e3f0ff; color: #1e6fcc; }
-.tpl-icon--purple { background: #f0e6ff; color: #7c3aed; }
-.tpl-icon--orange { background: #fff2e0; color: #d97706; }
-.tpl-icon--green  { background: #e6f4ea; color: #1a8a4a; }
-.tpl-icon--red    { background: #ffeaea; color: #c2380f; }
-.tpl-icon--cyan   { background: #e0f7fa; color: #0891b2; }
-
-/* Dark-mode overrides: deep backgrounds + lighter, more vivid foregrounds. */
-:global([cds-theme='dark']) .tpl-icon--blue   { background: #0d2a4a; color: #5eaaff; }
-:global([cds-theme='dark']) .tpl-icon--purple { background: #2a1a4a; color: #c084fc; }
-:global([cds-theme='dark']) .tpl-icon--orange { background: #3a2000; color: #fbbf24; }
-:global([cds-theme='dark']) .tpl-icon--green  { background: #0d2a1a; color: #34d399; }
-:global([cds-theme='dark']) .tpl-icon--red    { background: #3a0d0d; color: #f87171; }
-:global([cds-theme='dark']) .tpl-icon--cyan   { background: #04282e; color: #22d3ee; }
 </style>
