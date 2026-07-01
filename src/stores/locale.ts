@@ -335,7 +335,6 @@ export const STRINGS: Dict = {
   'resources.status.neverSynced': { zh: '未同步', en: '' },
   'resources.status.syncedAgo': { zh: '{ago}已同步', en: '' },
 
-  'resources.action.manage': { zh: '管理', en: '' },
   'resources.action.sync': { zh: '同步数据', en: '' },
   'resources.action.edit': { zh: '编辑', en: '' },
   'resources.action.delete': { zh: '删除', en: '' },

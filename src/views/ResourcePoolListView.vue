@@ -10,8 +10,7 @@
  *
  * Per spec:
  *  - 6 visible columns (no esxi / vm counts)
- *  - 4 row icons (cog / sync / pencil / trash) — sync/edit/delete hit real
- *    mutations; manage is a placeholder toast
+ *  - 3 row icons (sync / pencil / trash) — sync/edit/delete hit real mutations
  *  - "当前同步状态" banner rendered inline above the grid (single cds-alert)
  *  - Sort / filter / pager work the same as AgentListView
  */
@@ -279,13 +278,6 @@ async function onSubmit(payload: {
   }
 }
 
-function onManage(p: ResourcePool) {
-  // "管理" is a navigation-style action — for now just toast a placeholder.
-
-  console.log('[resources] manage', { id: p.id })
-  toast.info(locale.t('resources.action.manage'))
-}
-
 /* 立即重新拉取资源池列表 — 复用视图已在用的 refetch 闭包,
    避免在别处再开一条查询。loading 守卫防止重复点击叠加请求。 */
 async function refreshPools() {
@@ -492,12 +484,6 @@ async function doDelete() {
         <cds-grid-cell class="muted">{{ fmtDateTime(p.updatedAt) }}</cds-grid-cell>
         <cds-grid-cell>
           <span class="actions-cell">
-            <cds-button-action
-              shape="cog"
-              :title="locale.t('resources.action.manage')"
-              :aria-label="locale.t('resources.action.manage')"
-              @click="onManage(p)"
-            ></cds-button-action>
             <cds-button-action
               shape="sync"
               :title="locale.t('resources.action.sync')"
