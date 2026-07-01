@@ -124,6 +124,11 @@ const showToggleConfirm = ref<AccountUser | null>(null)
    mutation fires. */
 const showDeleteConfirm = ref<AccountUser | null>(null)
 const showDeleteFinalConfirm = ref<AccountUser | null>(null)
+// Per-row in-flight tracking for the delete action, mirroring the
+// `testingIDs` pattern in ModelGatewayView and ResourcePoolListView.
+// While the row is mid-mutation its row-action stays disabled and the
+// trash icon spins.
+const deletingIDs = ref(new Set<string>())
 const revealPayload = ref<{ username: string; password: string } | null>(null)
 
 function openCreate() {
@@ -210,6 +215,7 @@ async function doDelete() {
   const target = showDeleteFinalConfirm.value
   if (!target) return
   showDeleteFinalConfirm.value = null
+  deletingIDs.value = new Set([...deletingIDs.value, target.id])
   try {
     await deleteMutate({ id: target.id })
     toast.success(locale.t('users.toast.deleteOk').replace('{name}', target.username))
@@ -218,6 +224,10 @@ async function doDelete() {
 
     console.error('[users] delete user failed', err)
     toast.error(graphqlErrorMessage(err, locale.t('users.toast.deleteFail')))
+  } finally {
+    const next = new Set(deletingIDs.value)
+    next.delete(target.id)
+    deletingIDs.value = next
   }
 }
 
@@ -554,30 +564,48 @@ const deleteFinalBodySegments = computed<
         <cds-grid-cell>{{ fmtDateTime(u.updatedAt) }}</cds-grid-cell>
         <cds-grid-cell>
           <span class="actions-cell">
-            <cds-button-action
-              shape="users"
+            <button
+              type="button"
+              class="row-action"
               :title="locale.t('users.action.changeRole')"
-              :aria-label="locale.t('users.action.changeRole')"
               @click="openEdit(u)"
-            ></cds-button-action>
-            <cds-button-action
-              shape="lock"
+            >
+              <cds-icon shape="users" size="sm" aria-hidden="true"></cds-icon>
+              <span>{{ locale.t('users.action.changeRole') }}</span>
+            </button>
+            <button
+              type="button"
+              class="row-action"
               :title="locale.t('users.action.resetPwd')"
-              :aria-label="locale.t('users.action.resetPwd')"
               @click="openReset(u)"
-            ></cds-button-action>
-            <cds-button-action
-              shape="ban"
+            >
+              <cds-icon shape="lock" size="sm" aria-hidden="true"></cds-icon>
+              <span>{{ locale.t('users.action.resetPwd') }}</span>
+            </button>
+            <button
+              type="button"
+              class="row-action"
               :title="u.enabled ? locale.t('users.action.disable') : locale.t('users.action.enable')"
-              :aria-label="u.enabled ? locale.t('users.action.disable') : locale.t('users.action.enable')"
               @click="openToggle(u)"
-            ></cds-button-action>
-            <cds-button-action
-              shape="trash"
+            >
+              <cds-icon shape="ban" size="sm" aria-hidden="true"></cds-icon>
+              <span>{{ u.enabled ? locale.t('users.action.disable') : locale.t('users.action.enable') }}</span>
+            </button>
+            <button
+              type="button"
+              class="row-action danger"
               :title="locale.t('users.action.delete')"
-              :aria-label="locale.t('users.action.delete')"
+              :disabled="deletingIDs.has(u.id)"
               @click="openDelete(u)"
-            ></cds-button-action>
+            >
+              <cds-icon
+                shape="trash"
+                size="sm"
+                :class="{ spinning: deletingIDs.has(u.id) }"
+                aria-hidden="true"
+              ></cds-icon>
+              <span>{{ locale.t('users.action.delete') }}</span>
+            </button>
           </span>
         </cds-grid-cell>
       </cds-grid-row>
@@ -818,17 +846,61 @@ const deleteFinalBodySegments = computed<
   justify-content: flex-start;
 }
 
-/* Row action icons live in a tight 操作 column; the four buttons (更换角色 /
-   重置密码 / 启禁用 / 删除) at the default 4-6px gap are easy to mis-click
-   on because neighbouring targets almost touch each other. Bumping to 12px
-   puts each icon in its own hit zone. flex-wrap: wrap is kept so the row
-   gracefully drops to a second line on narrow viewports rather than
-   clipping. */
+/* Row action buttons mirror ModelGatewayView's `.row-action` pattern:
+   icon-above-text native buttons, info-blue by default and danger-red for
+   the trash action, with a per-row spinning delete icon. The previous
+   `<cds-button-action>` web component gave only icon-only chrome and no
+   per-row busy indicator, which didn't match the rest of the list views. */
 .actions-cell {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
+}
+.row-action {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 40px;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cds-alias-object-interaction-color, #006e9c);
+  font: inherit;
+  cursor: pointer;
+}
+.row-action span {
+  font-size: 10px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.row-action:focus-visible {
+  outline: 2px solid var(--cds-alias-status-info, #0079ad);
+  outline-offset: 1px;
+}
+.row-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.row-action.danger {
+  color: var(--cds-alias-status-danger, #c92100);
+}
+.spinning {
+  animation: users-spin 1s linear infinite;
+  transform-origin: center;
+}
+@keyframes users-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinning {
+    animation: none;
+  }
 }
 
 /* Pill-shaped badge inside a grid cell so the enabled column reads at a
