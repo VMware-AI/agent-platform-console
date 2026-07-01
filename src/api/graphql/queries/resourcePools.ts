@@ -105,4 +105,54 @@ export const TEST_RESOURCE_POOL_CONNECTION_MUTATION = gql`
   }
 `
 
-export { RESOURCE_POOL_FIELDS }
+/* ---------- Inventory (lazy-loaded on demand) ----------
+ * Pulled only when the user opens the "查看资产" modal; never embedded in the
+ * list query to avoid hauling the entire vSphere tree on every poll.
+ * Mirrors `ResourcePoolInventory` in `src/types/resource-pool.ts`. */
+const RESOURCE_POOL_INVENTORY_FIELDS = /* GraphQL */ `
+  fragment ResourcePoolInventoryFields on ResourcePoolInventory {
+    datacenters {
+      name
+      path
+      clusters {
+        name
+        path
+        esxiHosts {
+          name
+          path
+        }
+        resourcePools {
+          name
+          path
+        }
+      }
+      datastores {
+        name
+        path
+      }
+      networks {
+        name
+        path
+      }
+      folders {
+        name
+        path
+      }
+      storagePolicies {
+        name
+        path
+      }
+    }
+  }
+`
+
+export const RESOURCE_POOL_INVENTORY_QUERY = gql`
+  ${RESOURCE_POOL_INVENTORY_FIELDS}
+  query ResourcePoolInventory($id: ID!) {
+    resourcePoolInventory(id: $id) {
+      ...ResourcePoolInventoryFields
+    }
+  }
+`
+
+export { RESOURCE_POOL_FIELDS, RESOURCE_POOL_INVENTORY_FIELDS }

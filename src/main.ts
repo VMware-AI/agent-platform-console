@@ -35,6 +35,7 @@ import '@cds/core/password/register.js'
 import '@cds/core/progress-circle/register.js'
 import '@cds/core/select/register.js'
 import '@cds/core/toggle/register.js'
+import '@cds/core/tree-view/register.js'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'

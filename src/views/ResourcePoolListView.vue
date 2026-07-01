@@ -47,6 +47,7 @@ import type {
 import '@/components/icons'
 
 import CreateOrEditResourcePoolDialog from './resource-list/CreateOrEditResourcePoolDialog.vue'
+import ResourcePoolInventoryDialog from './resource-list/ResourcePoolInventoryDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 const locale = useLocaleStore()
@@ -254,6 +255,20 @@ function closeCreateDialog() {
   editingPool.value = null
 }
 
+/* ---------- Inventory view modal ----------
+ * The "查看" link per row opens a modal that lazily fetches the vSphere
+ * inventory tree for the given pool. While the underlying `syncStatus` is
+ * `NEVER` the backend has no inventory to return, so the row's link is
+ * disabled; the modal still gracefully renders an empty-state alert when
+ * the response carries no datacenters. */
+const inventoryFor = ref<ResourcePool | null>(null)
+function openInventory(p: ResourcePool) {
+  inventoryFor.value = p
+}
+function closeInventory() {
+  inventoryFor.value = null
+}
+
 async function onSubmit(payload: {
   mode: 'create' | 'update'
   input: CreateResourcePoolVars['input'] | UpdateResourcePoolVars['input']
@@ -456,7 +471,7 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
         </div>
       </cds-grid-column>
 
-      <cds-grid-column :width="'18%'">
+      <cds-grid-column :width="'16%'">
         <div class="col-head">
           <span>{{ locale.t('resources.col.endpoint') }}</span>
         </div>
@@ -468,7 +483,7 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
         </div>
       </cds-grid-column>
 
-      <cds-grid-column :width="'16%'">
+      <cds-grid-column :width="'14%'">
         <div class="col-head">
           <span>{{ locale.t('resources.col.contentLibrary') }}</span>
           <span class="col-head-actions">
@@ -488,15 +503,22 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
         </div>
       </cds-grid-column>
 
-      <!-- 创建时间列 -->
+      <!-- 资产(Inventory)列 -->
       <cds-grid-column :width="'10%'">
+        <div class="col-head col-center">
+          <span>{{ locale.t('resources.col.inventory') }}</span>
+        </div>
+      </cds-grid-column>
+
+      <!-- 创建时间列 -->
+      <cds-grid-column :width="'12%'">
         <div class="col-head">
           <span>{{ locale.t('resources.col.createdAt') }}</span>
         </div>
       </cds-grid-column>
 
       <!-- 更新时间列 -->
-      <cds-grid-column :width="'10%'">
+      <cds-grid-column :width="'12%'">
         <div class="col-head">
           <span>{{ locale.t('resources.col.updatedAt') }}</span>
         </div>
@@ -529,6 +551,17 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
         </cds-grid-cell>
         <cds-grid-cell class="content-library-cell" :title="p.contentLibraryName">
           {{ p.contentLibraryName }}
+        </cds-grid-cell>
+        <cds-grid-cell class="inventory-cell">
+          <button
+            type="button"
+            class="inventory-link"
+            :disabled="!p.syncStatus || p.syncStatus === 'NEVER'"
+            :title="locale.t('resources.inventory.viewTitle')"
+            @click="openInventory(p)"
+          >
+            {{ locale.t('resources.action.view') }}
+          </button>
         </cds-grid-cell>
         <cds-grid-cell class="muted">{{ fmtDateTime(p.createdAt) }}</cds-grid-cell>
         <cds-grid-cell class="muted">{{ fmtDateTime(p.updatedAt) }}</cds-grid-cell>
@@ -698,6 +731,14 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
       danger
       @close="finalDeletingPool = null"
       @confirm="doDelete"
+    />
+
+    <ResourcePoolInventoryDialog
+      v-if="inventoryFor"
+      :open="!!inventoryFor"
+      :pool-id="inventoryFor?.id ?? null"
+      :pool-name="inventoryFor?.name ?? ''"
+      @close="closeInventory"
     />
   </section>
 </template>
@@ -927,6 +968,40 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
 }
 .row-action.danger {
   color: var(--cds-alias-status-danger, #c92100);
+}
+
+/* Inventory "查看" link — chrome-free transparent button styled like a
+   link, sitting in the "资产" column. Mirrors the .user-count-link
+   pattern in RolesTab. */
+.inventory-cell {
+  text-align: center;
+}
+.inventory-link {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--cds-alias-status-info, #0079ad);
+  cursor: pointer;
+  text-decoration: none;
+}
+.inventory-link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.inventory-link:disabled {
+  color: var(--cds-alias-typography-color-muted, #999);
+  cursor: not-allowed;
+}
+.inventory-link:focus-visible {
+  outline: 2px solid var(--cds-alias-status-info, #0079ad);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Centered column header for the inventory column. */
+.col-center {
+  justify-content: center;
 }
 .spinning {
   animation: resources-spin 1s linear infinite;

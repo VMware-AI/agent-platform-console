@@ -396,6 +396,23 @@ export const STRINGS: Dict = {
   },
   'resources.confirm.finalDelete.inputPlaceholder': { zh: '输入资源池名称', en: 'Type the resource pool name' },
 
+  // Inventory viewer (asset tree) modal — opened from the "资产" column's
+  // "查看" link. Lazy-loaded via RESOURCE_POOL_INVENTORY_QUERY.
+  'resources.col.inventory': { zh: '资产', en: '' },
+  'resources.action.view': { zh: '查看', en: '' },
+  'resources.inventory.title': { zh: '资源池资产', en: '' },
+  'resources.inventory.viewTitle': { zh: '查看资源池资产', en: '' },
+  'resources.inventory.loadFail': { zh: '加载资源池资产失败', en: '' },
+  'resources.inventory.empty': { zh: '尚未同步,无资产数据', en: '' },
+  'resources.inventory.close': { zh: '关闭', en: '' },
+  'resources.inventory.group.clusters': { zh: '集群', en: '' },
+  'resources.inventory.group.datastores': { zh: '数据存储', en: '' },
+  'resources.inventory.group.networks': { zh: '网络', en: '' },
+  'resources.inventory.group.folders': { zh: '文件夹', en: '' },
+  'resources.inventory.group.storagePolicies': { zh: '存储策略', en: '' },
+  'resources.inventory.group.hosts': { zh: '主机', en: '' },
+  'resources.inventory.group.resourcePools': { zh: '资源池', en: '' },
+
   // platform settings — user/role management (UserRoleView)
 
   'gateway.breadcrumb.label': { zh: '面包屑导航', en: 'Breadcrumb' },

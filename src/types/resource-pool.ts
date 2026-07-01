@@ -155,3 +155,41 @@ export interface TestResourcePoolConnectionVars {
 export interface TestResourcePoolConnectionResult {
   testResourcePoolConnection: ResourcePoolConnectionTest
 }
+
+/* ---------- Inventory (read-only vSphere topology) ----------
+ * Mirrors the backend `agent-platform-backend` schema additions for
+ * `ResourcePool.inventory`. The backend currently only persists scalar
+ * counts (`esxiHostCount`, `vmInstanceCount`); once the schema is extended
+ * with nested types, the inventory query (see
+ * `src/api/graphql/queries/resourcePools.ts`) returns this structure.
+ *
+ * `inventory` on a `ResourcePool` may be `null` when the pool has never been
+ * synced; treat absence as "no data" in the UI. */
+export interface PlacementRef {
+  name: string
+  path?: string | null
+}
+export interface VsphereCluster {
+  name: string
+  path: string
+  esxiHosts: PlacementRef[]
+  resourcePools: PlacementRef[]
+}
+export interface VsphereDataCenter {
+  name: string
+  path: string
+  clusters: VsphereCluster[]
+  datastores: PlacementRef[]
+  networks: PlacementRef[]
+  folders: PlacementRef[]
+  storagePolicies: PlacementRef[]
+}
+export interface ResourcePoolInventory {
+  datacenters: VsphereDataCenter[]
+}
+export interface ResourcePoolInventoryQueryVars {
+  id: string
+}
+export interface ResourcePoolInventoryQueryResult {
+  resourcePoolInventory: ResourcePoolInventory
+}
