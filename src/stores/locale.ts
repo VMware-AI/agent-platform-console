@@ -710,6 +710,9 @@ export const STRINGS: Dict = {
     en: 'Budget cap must be a non-negative number',
   },
 
+  'marketplace.detail.versions': { zh: '版本历史', en: 'Version History' },
+  'marketplace.detail.close': { zh: '关闭', en: 'Close' },
+
   // Model routing
   'modelRoute.title': { zh: '模型路由配置', en: 'Model Route Configuration' },
   'modelRoute.toast.actionFailed': { zh: '操作失败', en: 'Action failed' },
@@ -1311,6 +1314,23 @@ export const STRINGS: Dict = {
     zh: '当前后端尚未提供删除智能体配置接口：{name}',
     en: 'The backend does not expose a delete operation for this config yet: {name}',
   },
+
+  // agent-detail (AgentDetailView — /agents/:id)
+  'agentDetail.title': { zh: '智能体详情', en: 'Agent Detail' },
+  'agentDetail.backToList': { zh: '返回智能体列表', en: 'Back to Agent List' },
+  'agentDetail.loading': { zh: '加载中…', en: 'Loading…' },
+  'agentDetail.error': { zh: '加载失败，请稍后重试', en: 'Failed to load agent detail' },
+  'agentDetail.notFound': { zh: '智能体不存在或无权访问', en: 'Agent not found or access denied' },
+  'agentDetail.name': { zh: '名称', en: 'Name' },
+  'agentDetail.type': { zh: '类型', en: 'Type' },
+  'agentDetail.status': { zh: '状态', en: 'Status' },
+  'agentDetail.endpoint': { zh: 'VM 端点', en: 'VM Endpoint' },
+  'agentDetail.credentials': { zh: '运行账号', en: 'Run-as User' },
+  'agentDetail.apiKey': { zh: '网关密钥', en: 'Gateway Key' },
+  'agentDetail.template': { zh: '来源模板', en: 'Source Template' },
+  'agentDetail.resourcePoolId': { zh: '资源池', en: 'Resource Pool' },
+  'agentDetail.createdAt': { zh: '创建时间', en: 'Created At' },
+  'agentDetail.updatedAt': { zh: '更新时间', en: 'Updated At' },
 
   /* ============================================================
    * Change Password (forced modal — see plan/spec)

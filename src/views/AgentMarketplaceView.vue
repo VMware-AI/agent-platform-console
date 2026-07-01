@@ -188,9 +188,19 @@ const deployingTemplate = ref<OvaTemplateFamily | null>(null)
 /* ---- One-time virtual-key secret reveal (after a successful deploy) ---- */
 const secretDialogOpen = ref(false)
 const issuedSecret = ref('')
+const deployedAgentId = ref<string | null>(null)
 
-function onViewDetails() {
-  toast.info(locale.t('marketplace.toast.viewPlaceholder'))
+/* ---- Template detail modal ---- */
+const detailOpen = ref(false)
+const detailTemplate = ref<OvaTemplateFamily | null>(null)
+
+function onViewDetails(t: OvaTemplateFamily) {
+  detailTemplate.value = t
+  detailOpen.value = true
+}
+function closeDetail() {
+  detailOpen.value = false
+  detailTemplate.value = null
 }
 function onCreateAgent(t: OvaTemplateFamily) {
   if (pools.value.length === 0) {
@@ -219,6 +229,7 @@ async function onSubmitDeploy(payload: DeployAgentInput) {
       closeDeployDialog()
       // Surface the issued gateway key ONCE — the backend never returns it again.
       issuedSecret.value = virtualKeySecret
+      deployedAgentId.value = agent.id
       secretDialogOpen.value = true
     }
   } catch (err) {
@@ -228,11 +239,18 @@ async function onSubmitDeploy(payload: DeployAgentInput) {
   }
 }
 
-// Dismissing the secret reveal navigates to the agent list (the deploy is done).
+// Dismissing the secret reveal navigates to the deployed agent's detail page
+// so the user can verify all provisioning details immediately.
 async function onSecretDialogClose() {
   secretDialogOpen.value = false
   issuedSecret.value = ''
-  await router.push({ name: 'agents.list' })
+  const aid = deployedAgentId.value
+  deployedAgentId.value = null
+  if (aid) {
+    await router.push({ name: 'agents.detail', params: { id: aid } })
+  } else {
+    await router.push({ name: 'agents.list' })
+  }
 }
 
 /* ---- Card icon styling ---- */
@@ -450,7 +468,7 @@ const typeFilterLabel = computed(() => {
               </select>
             </cds-select>
             <div class="tpl-actions-buttons">
-              <cds-button action="outline" @click="onViewDetails()">
+              <cds-button action="outline" @click="onViewDetails(tpl)">
                 {{ locale.t('marketplace.card.action.view') }}
               </cds-button>
               <cds-button action="outline" status="primary" @click="onCreateAgent(tpl)">
@@ -537,6 +555,81 @@ const typeFilterLabel = computed(() => {
       :secret="issuedSecret"
       @close="onSecretDialogClose"
     />
+
+    <!-- Template family detail modal -->
+    <cds-modal
+      :hidden="!detailOpen"
+      :closable="true"
+      size="lg"
+      @closeChange="closeDetail"
+    >
+      <cds-modal-header>
+        <h2 cds-text="title" class="modal-title">
+          {{ detailTemplate?.name ?? '' }}
+        </h2>
+      </cds-modal-header>
+      <cds-modal-content>
+        <div v-if="detailTemplate" class="detail-body">
+          <!-- meta row -->
+          <div class="detail-meta">
+            <cds-badge
+              v-if="detailTemplate.latestVersion"
+              status="info"
+            >v{{ detailTemplate.latestVersion }}</cds-badge>
+            <span cds-text="body" class="muted">
+              {{ locale.t(`marketplace.type.${TYPE_KEY_BY_GQL[detailTemplate.type]}`) }}
+            </span>
+          </div>
+
+          <p cds-text="body" class="detail-desc">{{ detailTemplate.description }}</p>
+
+          <!-- versions -->
+          <section class="detail-section">
+            <h3 cds-text="subsection">{{ locale.t('marketplace.detail.versions') }}</h3>
+            <div class="detail-versions">
+              <div
+                v-for="v in [...detailTemplate.versions].reverse()"
+                :key="v.id"
+                class="detail-version-row"
+              >
+                <span class="version-label">{{ v.version }}</span>
+                <span v-if="v.notes" cds-text="body" class="muted version-desc">{{ v.notes }}</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- 3-column lists (full, not capped) -->
+          <div class="detail-lists">
+            <section class="detail-section">
+              <h3 cds-text="subsection">{{ locale.t('marketplace.card.tools') }}</h3>
+              <ul class="detail-bullets">
+                <li v-for="tool in detailTemplate.tools" :key="tool">{{ tool }}</li>
+                <li v-if="detailTemplate.tools.length === 0" class="muted">—</li>
+              </ul>
+            </section>
+            <section class="detail-section">
+              <h3 cds-text="subsection">{{ locale.t('marketplace.card.skills') }}</h3>
+              <ul class="detail-bullets">
+                <li v-for="skill in detailTemplate.skills" :key="skill">{{ skill }}</li>
+                <li v-if="detailTemplate.skills.length === 0" class="muted">—</li>
+              </ul>
+            </section>
+            <section class="detail-section">
+              <h3 cds-text="subsection">{{ locale.t('marketplace.card.scenarios') }}</h3>
+              <ul class="detail-bullets">
+                <li v-for="s in detailTemplate.scenarios" :key="s">{{ s }}</li>
+                <li v-if="detailTemplate.scenarios.length === 0" class="muted">—</li>
+              </ul>
+            </section>
+          </div>
+        </div>
+      </cds-modal-content>
+      <cds-modal-actions>
+        <cds-button action="outline" @click="closeDetail">
+          {{ locale.t('marketplace.detail.close') }}
+        </cds-button>
+      </cds-modal-actions>
+    </cds-modal>
 
     <!-- Toolbar "按类型筛选" dropdown (anchored to the toolbar button). -->
     <cds-dropdown
@@ -918,5 +1011,62 @@ const typeFilterLabel = computed(() => {
 }
 .muted {
   color: var(--cds-alias-typography-color-300, #565656);
+}
+
+/* ---- Template detail modal ---- */
+.detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.detail-desc {
+  margin: 0;
+  line-height: 1.6;
+}
+.detail-section h3 {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+.detail-versions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.detail-version-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--cds-alias-object-border-color, #eee);
+}
+.detail-version-row:last-child {
+  border-bottom: 0;
+}
+.version-label {
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.version-desc {
+  font-size: 12px;
+}
+.detail-lists {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.detail-bullets {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.modal-title {
+  margin: 0;
 }
 </style>
