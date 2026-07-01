@@ -59,24 +59,19 @@ function toggle(key: string) {
   else expanded.add(key)
 }
 
-// Reset the expansion set whenever a new pool is loaded, so the
-// tree starts in a deterministic state (DataCenter / Clusters /
-// Hosts / Resource Pools expanded, the rest collapsed).
+// Reset the expansion set whenever a new pool is loaded. Default
+// state matches the vSphere Client "Hosts and Clusters" pane out of
+// the box: only the top-level DataCenter row is open, every group
+// (Clusters / Datastores / Networks / Folders) underneath is
+// collapsed so the user sees the four group headers + counts and
+// drills in from there.
 watch(
   () => loadedForPoolId.value,
   (poolId) => {
     expanded.clear()
     if (!poolId || !datacenters.value) return
     for (const dc of datacenters.value) {
-      const dcKey = `dc:${dc.path}`
-      expanded.add(dcKey)
-      expanded.add(`${dcKey}#clusters`)
-      for (const cl of dc.clusters) {
-        const clKey = `${dcKey}/cluster:${cl.path}`
-        expanded.add(clKey)
-        expanded.add(`${clKey}#hosts`)
-        expanded.add(`${clKey}#rps`)
-      }
+      expanded.add(`dc:${dc.path}`)
     }
   },
 )
