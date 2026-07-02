@@ -6,6 +6,7 @@ import AppDropdown from '@/components/AppDropdown.vue'
 import ModelRouteFormModal from '@/components/ModelRouteFormModal.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useLocaleStore } from '@/stores/locale'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
 import type {
@@ -36,6 +37,7 @@ import { MODEL_GATEWAYS_QUERY } from '@/api/graphql/queries/model-gateways'
 import '@/components/icons'
 
 const locale = useLocaleStore()
+const auth = useAuthStore()
 const toast = useToast()
 
 // The backend denormalizes the gateway onto each route as `backendGatewayId` +
@@ -464,12 +466,12 @@ function goToPage(page: number) {
     </header>
 
     <div class="toolbar">
-      <cds-button action="outline" status="primary" @click="openCreate">
+      <cds-button v-if="auth.role === 'admin'" action="outline" status="primary" @click="openCreate">
         <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
         {{ locale.t('modelRoute.action.create') }}
       </cds-button>
 
-      <AppDropdown align="start" :disabled="selectedCount === 0">
+      <AppDropdown v-if="auth.role === 'admin'" align="start" :disabled="selectedCount === 0">
         <template #trigger>
           <cds-button
             action="outline"
@@ -778,6 +780,7 @@ function goToPage(page: number) {
         <cds-grid-cell>
           <div class="row-actions">
             <button
+              v-if="auth.role === 'admin'"
               type="button"
               class="row-action"
               :title="
@@ -791,6 +794,7 @@ function goToPage(page: number) {
               }}</span>
             </button>
             <button
+              v-if="auth.role === 'admin'"
               type="button"
               class="row-action"
               :title="locale.t('modelRoute.action.edit')"
@@ -809,6 +813,7 @@ function goToPage(page: number) {
               <span>{{ locale.t('modelRoute.action.manage') }}</span>
             </button>
             <button
+              v-if="auth.role === 'admin'"
               type="button"
               class="row-action danger"
               :title="locale.t('modelRoute.action.delete')"

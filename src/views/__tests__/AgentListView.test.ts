@@ -292,7 +292,7 @@ describe('AgentListView', () => {
 
     expect(capturedVariables!.value.sort).toBeNull()
 
-    const sortBtn = wrapper.find('cds-button-action[aria-label="sort 名称"]')
+    const sortBtn = wrapper.find('cds-button-action[aria-label="排序：名称"]')
     await sortBtn.trigger('click')
     expect(capturedVariables!.value.sort).toMatchObject({ field: 'NAME', direction: 'ASC' })
 

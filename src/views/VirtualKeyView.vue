@@ -7,6 +7,7 @@ import VirtualKeyFormModal from '@/components/VirtualKeyFormModal.vue'
 import VirtualKeySecretDialog from '@/components/VirtualKeySecretDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useLocaleStore } from '@/stores/locale'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
 import type {
@@ -40,6 +41,7 @@ import {
 import '@/components/icons'
 
 const locale = useLocaleStore()
+const auth = useAuthStore()
 const toast = useToast()
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const
@@ -718,7 +720,7 @@ function goToPage(page: number) {
                 </button>
               </template>
               <template #default="{ close }">
-                <button class="menu-option" type="button" @click="regenerate(keyItem, close)">
+                <button v-if="auth.role === 'admin'" class="menu-option" type="button" @click="regenerate(keyItem, close)">
                   <cds-icon shape="refresh" size="sm"></cds-icon>
                   {{ locale.t('virtualKey.action.regenerate') }}
                 </button>
@@ -726,7 +728,7 @@ function goToPage(page: number) {
                   <cds-icon :shape="keyItem.status === 'active' ? 'ban' : 'check-circle'" size="sm"></cds-icon>
                   {{ locale.t(keyItem.status === 'active' ? 'virtualKey.action.disable' : 'virtualKey.action.enable') }}
                 </button>
-                <button class="menu-option danger" type="button" @click="requestDelete(keyItem, close)">
+                <button v-if="auth.role === 'admin'" class="menu-option danger" type="button" @click="requestDelete(keyItem, close)">
                   <cds-icon shape="trash" size="sm"></cds-icon>
                   {{ locale.t('virtualKey.action.delete') }}
                 </button>

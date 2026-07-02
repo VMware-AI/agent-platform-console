@@ -6,6 +6,7 @@ import AppDropdown from '@/components/AppDropdown.vue'
 import RateLimitPolicyFormModal from '@/components/RateLimitPolicyFormModal.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useLocaleStore } from '@/stores/locale'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
 import type { RateLimitPolicy, RateLimitPolicyDraft, RateLimitType } from '@/types/rate-limit-policy'
@@ -26,6 +27,7 @@ import {
 import '@/components/icons'
 
 const locale = useLocaleStore()
+const auth = useAuthStore()
 const toast = useToast()
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const
@@ -325,10 +327,6 @@ async function confirmDelete() {
   if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
 }
 
-function applyPolicy(policy: RateLimitPolicy) {
-  toast.info(locale.t('rateLimit.toast.apply').replace('{name}', policy.name))
-}
-
 async function refreshPolicies() {
   if (loading.value) return
   try {
@@ -361,12 +359,21 @@ function goToPage(page: number) {
 
     <div class="content-card">
       <div class="toolbar">
-        <cds-button action="outline" status="primary" @click="openCreate">
+        <cds-button
+          v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+          action="outline"
+          status="primary"
+          @click="openCreate"
+        >
           <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
           {{ locale.t('rateLimit.action.create') }}
         </cds-button>
 
-        <AppDropdown align="start" :disabled="selectedCount === 0">
+        <AppDropdown
+          v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+          align="start"
+          :disabled="selectedCount === 0"
+        >
           <template #trigger>
             <cds-button
               action="outline"
@@ -510,19 +517,40 @@ function goToPage(page: number) {
           </cds-grid-cell>
           <cds-grid-cell>
             <div class="row-actions">
-              <button type="button" class="row-action" @click="openEdit(policy)">
+              <button
+                v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+                type="button"
+                class="row-action"
+                @click="openEdit(policy)"
+              >
                 <cds-icon shape="pencil" size="sm"></cds-icon>
                 <span>{{ locale.t('rateLimit.action.edit') }}</span>
               </button>
-              <button type="button" class="row-action" @click="applyPolicy(policy)">
+              <button
+                type="button"
+                class="row-action"
+                disabled
+                :title="locale.t('common.noPermission')"
+                @click.prevent
+              >
                 <cds-icon shape="users" size="sm"></cds-icon>
                 <span>{{ locale.t('rateLimit.action.apply') }}</span>
               </button>
-              <button type="button" class="row-action" @click="toggleEnabled(policy)">
+              <button
+                v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+                type="button"
+                class="row-action"
+                @click="toggleEnabled(policy)"
+              >
                 <cds-icon :shape="policy.enabled ? 'ban' : 'check-circle'" size="sm"></cds-icon>
                 <span>{{ locale.t(policy.enabled ? 'rateLimit.action.disable' : 'rateLimit.action.enable') }}</span>
               </button>
-              <button type="button" class="row-action danger" @click="requestDelete(policy)">
+              <button
+                v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+                type="button"
+                class="row-action danger"
+                @click="requestDelete(policy)"
+              >
                 <cds-icon shape="trash" size="sm"></cds-icon>
                 <span>{{ locale.t('rateLimit.action.delete') }}</span>
               </button>

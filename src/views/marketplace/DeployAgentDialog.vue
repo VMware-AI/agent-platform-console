@@ -161,7 +161,7 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
         <cds-alert v-if="props.template" status="info" class="deploy-info">
           <cds-alert-content>
             {{ props.template.name }} ·
-            {{ props.template.versions.length }} 个版本可选
+            {{ locale.t('marketplace.deploy.versionCount').replace('{n}', String(props.template.versions.length)) }}
           </cds-alert-content>
         </cds-alert>
 

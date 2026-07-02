@@ -202,7 +202,7 @@ function close() {
             v-if="attempted && !typeValid"
             status="error"
           >
-            {{ locale.t('marketplace.form.error.name') }}
+            {{ locale.t('marketplace.form.error.type') }}
           </cds-control-message>
         </cds-select>
 
@@ -255,7 +255,7 @@ function close() {
             v-if="attempted && !descValid"
             status="error"
           >
-            {{ locale.t('marketplace.form.error.name') }}
+            {{ locale.t('marketplace.form.error.description') }}
           </cds-control-message>
         </cds-input>
 
@@ -273,7 +273,7 @@ function close() {
             v-if="attempted && !toolsValid"
             status="error"
           >
-            {{ locale.t('marketplace.form.error.name') }}
+            {{ locale.t('marketplace.form.error.tools') }}
           </cds-control-message>
         </cds-input>
 
@@ -291,7 +291,7 @@ function close() {
             v-if="attempted && !scenariosValid"
             status="error"
           >
-            {{ locale.t('marketplace.form.error.name') }}
+            {{ locale.t('marketplace.form.error.scenarios') }}
           </cds-control-message>
         </cds-input>
 
@@ -303,14 +303,14 @@ function close() {
           <textarea
             :value="skillsText"
             rows="4"
-            placeholder="一行一条"
+            :placeholder="locale.t('marketplace.form.skillsPlaceholder')"
             @input="(e: Event) => (skillsText = (e.target as HTMLTextAreaElement).value)"
           ></textarea>
           <cds-control-message
             v-if="attempted && !skillsValid"
             status="error"
           >
-            {{ locale.t('marketplace.form.error.name') }}
+            {{ locale.t('marketplace.form.error.skills') }}
           </cds-control-message>
         </cds-input>
       </form>

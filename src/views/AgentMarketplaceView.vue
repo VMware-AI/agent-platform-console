@@ -8,7 +8,7 @@
  * and a vSphere placement pool. The backend creates + provisions the agent
  * and issues its gateway key, whose secret is shown once after deploy.
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useMutation, useQuery } from '@vue/apollo-composable'
 import { useRouter } from 'vue-router'
 import { useLocaleStore } from '@/stores/locale'
@@ -37,7 +37,6 @@ import type {
   DeployAgentInput,
   DeployAgentPayload,
   DeployAgentVars,
-  OvaTemplateColor,
 } from '@/types/marketplace'
 import '@/components/icons'
 import AddOvaTemplateDialog from './marketplace/AddOvaTemplateDialog.vue'
@@ -56,6 +55,11 @@ const typeFilterAnchor = ref<HTMLElement | null>(null)
 const currentPage = ref(1)
 type PageSize = 6 | 12 | 18 | 24
 const pageSize = ref<PageSize>(6)
+/* Track the user's per-card version selection so it isn't silently discarded.
+   Keyed by OvaTemplateFamily.id; value is the selected OvaTemplateVersion.id.
+   Initialised lazily: when families load, seed any unset entry with the
+   newest version (index 0 = newest per backend convention). */
+const selectedVersionId = ref<Record<string, string>>({})
 
 const filter = computed<OvaTemplateFamilyFilter | null>(() => {
   const f: OvaTemplateFamilyFilter = {}
@@ -79,6 +83,17 @@ const { result, loading, error, refetch } = useQuery<OvaTemplateFamiliesQueryRes
 const families = computed<OvaTemplateFamily[]>(
   () => result.value?.ovaTemplateFamilies.nodes ?? [],
 )
+
+/* Seed selectedVersionId for newly fetched families (newest version = index 0). */
+watch(families, (list) => {
+  const next = { ...selectedVersionId.value }
+  for (const fam of list) {
+    if (!next[fam.id] && fam.versions.length > 0) {
+      next[fam.id] = fam.versions[0].id
+    }
+  }
+  selectedVersionId.value = next
+}, { immediate: true })
 const totalCount = computed(() => result.value?.ovaTemplateFamilies.totalCount ?? 0)
 const totalPages = computed(() => {
   const t = totalCount.value
@@ -236,17 +251,11 @@ async function onSecretDialogClose() {
 }
 
 /* ---- Card icon styling ---- */
-const ICON_COLORS: Record<OvaTemplateColor, { bg: string; fg: string }> = {
-  BLUE:   { bg: '#e3f0ff', fg: '#1e6fcc' },
-  PURPLE: { bg: '#f0e6ff', fg: '#7c3aed' },
-  ORANGE: { bg: '#fff2e0', fg: '#d97706' },
-  GREEN:  { bg: '#e6f4ea', fg: '#1a8a4a' },
-  RED:    { bg: '#ffeaea', fg: '#c2380f' },
-  CYAN:   { bg: '#e0f7fa', fg: '#0891b2' },
-}
-function iconStyleFor(t: OvaTemplateFamily): Record<string, string> {
-  const c = ICON_COLORS[t.iconColor] ?? ICON_COLORS.BLUE
-  return { background: c.bg, color: c.fg }
+/** Returns a CSS class name for the icon container; colors are defined
+ *  in <style scoped> with dark-mode overrides so they adapt to the theme. */
+function iconClassFor(t: OvaTemplateFamily): string {
+  const color = t.iconColor ?? 'BLUE'
+  return `tpl-icon--${color.toLowerCase()}`
 }
 
 const ICON_SHAPE_TO_CLARITY: Record<string, string> = {
@@ -383,11 +392,11 @@ const typeFilterLabel = computed(() => {
             v-if="tpl.latestVersion"
             status="info"
             class="tpl-version-badge"
-            :aria-label="`latest version ${tpl.latestVersion}`"
+            :aria-label="locale.t('marketplace.card.latestVersionAria').replace('{version}', String(tpl.latestVersion))"
           >{{ tpl.latestVersion }}</cds-badge>
           <div class="tpl-head">
             <div class="tpl-head-left">
-              <span class="tpl-icon" :style="iconStyleFor(tpl)">
+              <span class="tpl-icon" :class="iconClassFor(tpl)">
                 <cds-icon
                   :shape="ICON_SHAPE_TO_CLARITY[tpl.iconShape] || 'info-standard'"
                   size="md"
@@ -438,7 +447,10 @@ const typeFilterLabel = computed(() => {
               control-width="shrink"
             >
               <label>{{ locale.t('marketplace.card.versionSelect') }}</label>
-              <select>
+              <select
+                :value="selectedVersionId[tpl.id]"
+                @change="(e) => selectedVersionId[tpl.id] = (e.target as HTMLSelectElement).value"
+              >
                 <option
                   v-for="v in [...tpl.versions].reverse()"
                   :key="v.id"
@@ -915,4 +927,20 @@ const typeFilterLabel = computed(() => {
 .muted {
   color: var(--cds-alias-typography-color-300, #565656);
 }
+
+/* ---- Icon color classes (light mode defaults, dark overrides below) ---- */
+.tpl-icon--blue   { background: #e3f0ff; color: #1e6fcc; }
+.tpl-icon--purple { background: #f0e6ff; color: #7c3aed; }
+.tpl-icon--orange { background: #fff2e0; color: #d97706; }
+.tpl-icon--green  { background: #e6f4ea; color: #1a8a4a; }
+.tpl-icon--red    { background: #ffeaea; color: #c2380f; }
+.tpl-icon--cyan   { background: #e0f7fa; color: #0891b2; }
+
+/* Dark-mode overrides: deep backgrounds + lighter, more vivid foregrounds. */
+:global([cds-theme='dark']) .tpl-icon--blue   { background: #0d2a4a; color: #5eaaff; }
+:global([cds-theme='dark']) .tpl-icon--purple { background: #2a1a4a; color: #c084fc; }
+:global([cds-theme='dark']) .tpl-icon--orange { background: #3a2000; color: #fbbf24; }
+:global([cds-theme='dark']) .tpl-icon--green  { background: #0d2a1a; color: #34d399; }
+:global([cds-theme='dark']) .tpl-icon--red    { background: #3a0d0d; color: #f87171; }
+:global([cds-theme='dark']) .tpl-icon--cyan   { background: #04282e; color: #22d3ee; }
 </style>
