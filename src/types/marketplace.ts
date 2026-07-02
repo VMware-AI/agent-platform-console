@@ -20,6 +20,7 @@ export interface OvaTemplateVersion {
   ovaIdentifier: string
   notes: string | null
   createdAt: string
+  ovfProperties: OVFProperty[]
 }
 
 export interface OvaTemplateFamily {
@@ -122,6 +123,30 @@ export interface AddOvaTemplateVersionVars {
   input: AddOvaTemplateVersionInput
 }
 
+
+/* ============================================================
+ * OVF / vApp Properties (dynamic deploy form from template vAppConfig)
+ * ============================================================ */
+
+export interface OVFProperty {
+  key: string
+  label: string
+  type: string         // "string" | "password" | "boolean" | "int" | "real" | "ip"
+  defaultValue?: string | null
+  description: string
+  required: boolean
+  password: boolean
+  values: string[]      // enum choices, empty for non-enum
+  category: string
+}
+
+export interface OVFPropertyInput {
+  key: string
+  value: string
+}
+
+export type KeySource = 'new' | 'existing'
+
 /* ============================================================
  * Content Library Items (OVA template picker in Add OVA Template dialog)
  * ============================================================ */
@@ -179,6 +204,16 @@ export interface DeployAgentInput {
   maxBudget?: number | null
   /** Optional target portgroup path for the agent VM's NIC (VsphereNetwork.path). */
   targetNetwork?: string | null
+  /** Department whose gateway issues the key. */
+  departmentId?: string | null
+  /** OVF/vApp properties from the template, keyed by property id. */
+  ovfProperties?: OVFPropertyInput[] | null
+  /** Key source: "new" issues a fresh key; "existing" binds an unbound key. */
+  keySource?: KeySource | null
+  /** Required when keySource=existing — the unbound virtual key id to reuse. */
+  existingKeyId?: string | null
+  /** Optional free-text deploy notes. */
+  notes?: string | null
 }
 
 export interface DeployAgentPayload {

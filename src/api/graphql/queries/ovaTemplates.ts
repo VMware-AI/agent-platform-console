@@ -21,6 +21,17 @@ const FAMILY_FIELDS = /* GraphQL */ `
       ovaIdentifier
       notes
       createdAt
+      ovfProperties {
+        key
+        label
+        type
+        defaultValue
+        description
+        required
+        password
+        values
+        category
+      }
     }
   }
 `
@@ -33,6 +44,17 @@ const VERSION_FIELDS = /* GraphQL */ `
     ovaIdentifier
     notes
     createdAt
+    ovfProperties {
+      key
+      label
+      type
+      defaultValue
+      description
+      required
+      password
+      values
+      category
+    }
   }
 `
 
@@ -139,7 +161,4 @@ export const DEPLOY_AGENT_MUTATION = gql`
   }
 `
 
-export {
-  FAMILY_FIELDS,
-  VERSION_FIELDS,
-}
+export { FAMILY_FIELDS, VERSION_FIELDS }

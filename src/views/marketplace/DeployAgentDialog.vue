@@ -43,16 +43,17 @@ const locale = useLocaleStore()
 
 const templateVersionId = ref<string>('')
 const resourcePoolId = ref<string>('')
+const departmentId = ref<string>('')
 const name = ref('')
-// The selected vSphere placement pool's inventory PATH (sent as targetResourcePool).
 const targetResourcePool = ref('')
-// The selected vSphere portgroup PATH (sent as targetNetwork; '' = inherit template NIC).
 const targetNetwork = ref('')
 const hostname = ref('')
-// Bound to a <input type="number"> whose v-model coerces a typed value to a JS
-// number, so the runtime type is string | number ('' when blank). Normalize via
-// String(...) before any string op (see budgetValid / submit).
 const maxBudget = ref<string | number>('')
+const keySource = ref<'new' | 'existing'>('new')
+const existingKeyId = ref<string>('')
+const ovfPropertyValues = ref<Record<string, string>>({})
+const ovfPasswordConfirm = ref<Record<string, string>>({})
+const deployNotes = ref('')
 const attempted = ref(false)
 
 watch(
@@ -63,12 +64,17 @@ watch(
       const latest = props.template.versions[0]
       templateVersionId.value = latest?.id ?? ''
       resourcePoolId.value = props.pools[0]?.id ?? ''
+      departmentId.value = ''
       name.value = `${props.template.name}_${Date.now() % 100000}`
       targetResourcePool.value = ''
       targetNetwork.value = ''
       hostname.value = ''
       maxBudget.value = ''
-      attempted.value = false
+      keySource.value = 'new'
+      existingKeyId.value = ''
+      ovfPropertyValues.value = {}
+      ovfPasswordConfirm.value = {}
+      deployNotes.value = ''
     }
   },
   { immediate: true },
@@ -158,24 +164,36 @@ function submit() {
   if (!formValid()) return
   const rawBudget = String(maxBudget.value).trim()
   const budget = rawBudget ? Number(rawBudget) : null
+  // Build OVF properties from the dynamic form values.
+  const ovfProps = Object.entries(ovfPropertyValues.value)
+    .filter(([, v]) => v !== '')
+    .map(([key, value]) => ({ key, value }))
   emit('submit', {
     name: name.value.trim(),
     templateFamilyId: props.template?.id ?? '',
     templateVersionId: templateVersionId.value,
     resourcePoolId: resourcePoolId.value,
-    // The picked vSphere pool's inventory PATH. A true OVA template has no source
-    // resource pool, so a real deploy must place the clone here; empty inherits
-    // the source's pool (only valid for regular-VM sources, e.g. vcsim).
     targetResourcePool: targetResourcePool.value || null,
     targetNetwork: targetNetwork.value || null,
     hostname: hostname.value.trim() || null,
     maxBudget: budget,
+    departmentId: departmentId.value || null,
+    keySource: keySource.value,
+    existingKeyId: keySource.value === 'existing' ? (existingKeyId.value || null) : null,
+    ovfProperties: ovfProps.length > 0 ? ovfProps : null,
+    notes: deployNotes.value.trim() || null,
   })
 }
 
 function close() {
   emit('close')
 }
+
+// The currently selected OVA version (for OVF property rendering).
+const selectedVersion = computed<OvaTemplateVersion | null>(() => {
+  const v = props.template?.versions?.find(v => v.id === templateVersionId.value)
+  return v ?? null
+})
 
 function fmtVersionRow(v: OvaTemplateVersion): string {
   const isLatest = v.version === props.template?.latestVersion
@@ -266,7 +284,65 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
           />
         </cds-input>
 
-        <!-- vSphere 放置资源池：真实 OVA 模板无源资源池，部署必须指定一个放置池。
+        
+        <!-- vApp / OVF 属性（来自模板，动态渲染） -->
+        <template v-if="template && template.versions.length > 0">
+          <div v-if="selectedVersion?.ovfProperties?.length" class="full-row vapp-section">
+            <cds-alert status="info" class="vapp-header">
+              <cds-alert-content>vApp 属性（来自模板 {{ selectedVersion?.ovaIdentifier }}）</cds-alert-content>
+            </cds-alert>
+            <template v-for="prop in selectedVersion!.ovfProperties" :key="prop.key">
+              <!-- IP Mode: DHCP vs Static radio -->
+              <div v-if="prop.key === 'guestinfo.ip_mode' && prop.type?.startsWith('string')" class="vapp-field">
+                <label class="vapp-label">{{ prop.label }}</label>
+                <div class="vapp-radio-group">
+                  <label class="vapp-radio">
+                    <input type="radio" v-model="ovfPropertyValues['guestinfo.ip_mode']" value="dhcp" />
+                    DHCP
+                  </label>
+                  <label class="vapp-radio">
+                    <input type="radio" v-model="ovfPropertyValues['guestinfo.ip_mode']" value="static" />
+                    静态IP
+                  </label>
+                </div>
+              </div>
+
+              <!-- Static IP fields: only visible when ip_mode === 'static' -->
+              <template v-if="ovfPropertyValues['guestinfo.ip_mode'] === 'static'">
+                <cds-input v-if="['guestinfo.static_ip','guestinfo.netmask','guestinfo.gateway','guestinfo.dns'].includes(prop.key)">
+                  <label>{{ prop.label }}</label>
+                  <input v-model="ovfPropertyValues[prop.key]" :placeholder="prop.defaultValue || ''" />
+                </cds-input>
+              </template>
+
+              <!-- Password fields with confirmation -->
+              <div v-if="prop.type?.startsWith('password')" class="vapp-field full-row">
+                <cds-input>
+                  <label>{{ prop.label }} <span v-if="prop.required" class="required">*</span></label>
+                  <input type="password" v-model="ovfPropertyValues[prop.key]" :placeholder="prop.description || ''" />
+                </cds-input>
+                <cds-input>
+                  <label>确认{{ prop.label }}</label>
+                  <input type="password" v-model="ovfPasswordConfirm[prop.key]" :placeholder="prop.description || ''" />
+                </cds-input>
+              </div>
+
+              <!-- Boolean: checkbox -->
+              <cds-checkbox v-else-if="prop.type === 'boolean'" class="full-row">
+                <label>{{ prop.label }}</label>
+                <input type="checkbox" v-model="ovfPropertyValues[prop.key]" true-value="True" false-value="False" />
+              </cds-checkbox>
+
+              <!-- Other string/int types -->
+              <cds-input v-else-if="!['guestinfo.ip_mode','guestinfo.static_ip','guestinfo.netmask','guestinfo.gateway','guestinfo.dns'].includes(prop.key) && !prop.type?.startsWith('password')">
+                <label>{{ prop.label }} <span v-if="prop.required" class="required">*</span></label>
+                <input v-model="ovfPropertyValues[prop.key]" :placeholder="prop.defaultValue || prop.description || ''" />
+              </cds-input>
+            </template>
+          </div>
+        </template>
+
+        <!-- <!-- vSphere 放置资源池：真实 OVA 模板无源资源池，部署必须指定一个放置池。
              列表来自所选平台资源池对应 vCenter 的实时枚举；为空（vcsim/常规 VM）时
              允许不选，克隆继承源模板所在池。 -->
         <cds-select
@@ -344,6 +420,15 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
             {{ locale.t('marketplace.deploy.error.maxBudget') }}
           </cds-control-message>
         </cds-input>
+
+        <!-- 部署说明（可选） -->
+        <cds-input class="full-row">
+          <label>{{ locale.t('marketplace.deploy.notes') }}</label>
+          <input
+            v-model="deployNotes"
+            :placeholder="locale.t('marketplace.deploy.notesPlaceholder')"
+          />
+        </cds-input>
       </form>
     </cds-modal-content>
     <cds-modal-actions>
@@ -375,5 +460,41 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
 }
 .modal-title {
   margin: 0;
+}
+.vapp-section {
+  border: 1px solid var(--cds-border-subtle);
+  border-radius: 6px;
+  padding: 12px;
+  margin: 4px 0;
+}
+.vapp-header {
+  margin: -12px -12px 8px -12px;
+  border-radius: 6px 6px 0 0;
+}
+.vapp-field {
+  grid-column: 1 / -1;
+  margin-bottom: 8px;
+}
+.vapp-label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 6px;
+  font-size: 0.875rem;
+}
+.vapp-radio-group {
+  display: flex;
+  gap: 16px;
+}
+.vapp-radio {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.vapp-radio input[type="radio"] {
+  accent-color: var(--cds-primary);
+}
+.required {
+  color: var(--cds-danger);
 }
 </style>
