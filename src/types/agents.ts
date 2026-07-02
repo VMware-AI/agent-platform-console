@@ -148,3 +148,24 @@ export const TYPE_FROM_GQL: Record<AgentType, TypeKey> = {
   QCODER: 'qcoder',
   OPENCODE: 'opencode',
 }
+
+/* ---- Agent row mutations (list page actions) ---- */
+
+export interface SetAgentStatusVars {
+  id: string
+  status: AgentStatus
+}
+export interface SetAgentStatusResult {
+  setAgentStatus: Pick<Agent, 'id' | 'status' | 'updatedAt'>
+}
+
+export interface RecycleAgentVars {
+  input: {
+    agentId: string
+    /** Destructive op double-confirm — the backend rejects false. */
+    confirm: boolean
+  }
+}
+export interface RecycleAgentResult {
+  recycleAgent: Pick<Agent, 'id' | 'status' | 'updatedAt'>
+}
