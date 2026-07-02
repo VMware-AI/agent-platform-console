@@ -162,7 +162,14 @@ const versionValid = computed(() => version.value.trim().length > 0)
 const poolValid = computed(() => !!resourcePoolId.value)
 // Library only required in custom mode (and only when vCenter is reachable).
 const libraryValid = computed(() => !customMode.value || !!libsError.value || !!contentLibraryName.value)
-const ovaIdValid = computed(() => ovaIdentifier.value.trim().length > 0)
+// Manual input must stay within the vCenter-safe identifier charset; custom mode
+// selects a real library item name from the backend list, so non-empty suffices.
+const ovaIdentifierPattern = /^[a-zA-Z0-9._-]+$/
+const ovaIdValid = computed(() => {
+  const v = ovaIdentifier.value.trim()
+  if (v.length === 0) return false
+  return customMode.value || ovaIdentifierPattern.test(v)
+})
 const descValid = computed(() => description.value.trim().length > 0)
 const toolsValid = computed(
   () => toolsText.value.split('\n').map((s) => s.trim()).filter(Boolean).length > 0,
@@ -262,7 +269,7 @@ function close() {
               {{ locale.t(`marketplace.type.${opt.key}`) }}
             </option>
           </select>
-<cds-control-message
+          <cds-control-message
             v-if="attempted && !typeValid"
             status="error"
           >
@@ -320,7 +327,14 @@ function close() {
             @input="(e: Event) => (ovaIdentifier = (e.target as HTMLInputElement).value)"
           />
           <cds-control-message v-if="attempted && !ovaIdValid" status="error">
-            {{ locale.t('marketplace.form.error.ovaIdentifier') }}
+            {{
+              ovaIdentifier.trim().length > 0
+                ? locale.t('marketplace.form.error.ovaIdentifierFormat')
+                : locale.t('marketplace.form.error.ovaIdentifier')
+            }}
+          </cds-control-message>
+          <cds-control-message v-else>
+            {{ locale.t('marketplace.form.ovaIdentifierHint') }}
           </cds-control-message>
         </cds-input>
 
@@ -424,7 +438,7 @@ function close() {
             rows="3"
             @input="(e: Event) => (description = (e.target as HTMLTextAreaElement).value)"
           ></textarea>
-<cds-control-message
+          <cds-control-message
             v-if="attempted && !descValid"
             status="error"
           >
@@ -443,7 +457,7 @@ function close() {
             rows="4"
             @input="(e: Event) => (toolsText = (e.target as HTMLTextAreaElement).value)"
           ></textarea>
-<cds-control-message
+          <cds-control-message
             v-if="attempted && !toolsValid"
             status="error"
           >
@@ -462,7 +476,7 @@ function close() {
             rows="4"
             @input="(e: Event) => (scenariosText = (e.target as HTMLTextAreaElement).value)"
           ></textarea>
-<cds-control-message
+          <cds-control-message
             v-if="attempted && !scenariosValid"
             status="error"
           >
@@ -482,7 +496,7 @@ function close() {
             :placeholder="locale.t('marketplace.form.skillsPlaceholder')"
             @input="(e: Event) => (skillsText = (e.target as HTMLTextAreaElement).value)"
           ></textarea>
-<cds-control-message
+          <cds-control-message
             v-if="attempted && !skillsValid"
             status="error"
           >

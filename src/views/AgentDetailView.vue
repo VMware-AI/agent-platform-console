@@ -33,13 +33,13 @@ const agent = computed(() => result.value?.agent ?? null)
 const statusLabel = computed(() => {
   if (!agent.value) return ''
   const key = STATUS_FROM_GQL[agent.value.status]
-  return locale.t(`agentList.status.${key}`)
+  return locale.t(`agents.status.${key}`)
 })
 
 const typeLabel = computed(() => {
   if (!agent.value) return ''
   const key = TYPE_FROM_GQL[agent.value.type]
-  return key ? locale.t(`agentList.type.${key}`) : agent.value.type
+  return key ? locale.t(`agents.type.${key}`) : agent.value.type
 })
 
 function backToList() {
