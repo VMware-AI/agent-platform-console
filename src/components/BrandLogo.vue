@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import { useLocaleStore } from '@/stores/locale'
+
 defineProps<{
   size?: number
 }>()
+
+const locale = useLocaleStore()
 </script>
 
 <template>
@@ -11,7 +15,7 @@ defineProps<{
     viewBox="0 0 32 32"
     xmlns="http://www.w3.org/2000/svg"
     role="img"
-    aria-label="智能体管理平台"
+    :aria-label="locale.t('app.brand')"
     class="brand-logo"
   >
     <defs>

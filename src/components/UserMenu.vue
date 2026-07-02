@@ -118,5 +118,5 @@ async function goProfile(close: () => void) {
   width: 100%;
 }
 .opt:hover { background: var(--cds-alias-object-app-background, #f4f4f4); }
-.opt.danger { color: #c92100; }
+.opt.danger { color: var(--cds-alias-status-danger, #c92100); }
 </style>

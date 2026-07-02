@@ -124,7 +124,7 @@ function onBackdropClick(e: MouseEvent) {
   font-size: 13px;
   line-height: 1.6;
   color: var(--cds-alias-status-warning, #ffa600);
-  background: var(--cds-alias-object-app-background, #fff8e6);
+  background: var(--cds-alias-status-warning-tint, #fff3cd);
   border-radius: 6px;
   padding: 8px 12px;
 }

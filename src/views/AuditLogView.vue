@@ -210,7 +210,7 @@ function shortId(value: string | null | undefined, keep = 8): string {
 
 function actorLabel(actorUserId: string | null): string {
   if (!actorUserId) return locale.t('auditLog.value.system')
-  return `User ${shortId(actorUserId)}`
+  return locale.t('auditLog.value.user').replace('{id}', shortId(actorUserId))
 }
 
 function isSuccess(value: string): boolean {
@@ -594,10 +594,10 @@ async function copyResourceId(value: string | null) {
   border-radius: 0;
 }
 .refresh-button:hover:not(:disabled) {
-  color: var(--cds-alias-object-app-blue, #0072a3);
+  color: var(--cds-alias-object-interaction-color, #0072a3);
 }
 .refresh-button:focus-visible {
-  outline: 2px solid var(--cds-alias-object-app-blue, #0072a3);
+  outline: 2px solid var(--cds-alias-object-interaction-color, #0072a3);
   outline-offset: 2px;
 }
 .refresh-button:disabled {

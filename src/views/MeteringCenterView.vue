@@ -394,8 +394,8 @@ const rankingBars = computed<RankingBar[]>(() => {
           >
             <defs>
               <linearGradient id="meteringArea" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stop-color="#4b76bd" stop-opacity="0.32" />
-                <stop offset="100%" stop-color="#4b76bd" stop-opacity="0.04" />
+                <stop offset="0%" stop-color="var(--chart-color-input, #4b76bd)" stop-opacity="0.32" />
+                <stop offset="100%" stop-color="var(--chart-color-input, #4b76bd)" stop-opacity="0.04" />
               </linearGradient>
             </defs>
             <g class="grid-lines">
@@ -604,6 +604,15 @@ const rankingBars = computed<RankingBar[]>(() => {
 </template>
 
 <style scoped>
+:root,
+[cds-theme] {
+  --chart-color-input: #4b76bd;
+  --chart-color-output: #9aa8bb;
+}
+:global([cds-theme='dark']) {
+  --chart-color-input: #7aaee8;
+  --chart-color-output: #b0bec5;
+}
 .metering-page {
   height: 100%;
   min-height: 0;
@@ -754,8 +763,8 @@ const rankingBars = computed<RankingBar[]>(() => {
   display: inline-block;
   border-radius: 50%;
 }
-.legend-mark.input { background: #4b76bd; }
-.legend-mark.output { background: #9aa8bb; }
+.legend-mark.input { background: var(--chart-color-input, #4b76bd); }
+.legend-mark.output { background: var(--chart-color-output, #9aa8bb); }
 .line-chart,
 .bar-chart {
   width: 100%;
@@ -794,10 +803,10 @@ const rankingBars = computed<RankingBar[]>(() => {
   stroke-linejoin: round;
   stroke-linecap: round;
 }
-.input-line { stroke: #4b76bd; }
-.output-line { stroke: #9aa8bb; }
+.input-line { stroke: var(--chart-color-input, #4b76bd); }
+.output-line { stroke: var(--chart-color-output, #9aa8bb); }
 .bars rect {
-  fill: #4f78bd;
+  fill: var(--chart-color-input, #4f78bd);
 }
 .table-grid {
   min-height: 168px;

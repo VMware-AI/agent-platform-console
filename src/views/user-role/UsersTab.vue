@@ -13,6 +13,7 @@
 import { computed, ref } from 'vue'
 import { useMutation, useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
 import {
@@ -41,6 +42,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import PasswordRevealDialog from './PasswordRevealDialog.vue'
 
 const locale = useLocaleStore()
+const auth = useAuthStore()
 const toast = useToast()
 
 /* ---------- Reactive filter / sort / pagination state ---------- */
@@ -287,7 +289,7 @@ const summaryText = computed(() => {
 function fmtDateTime(iso: string | null): string {
   if (!iso) return '—'
   try {
-    return new Intl.DateTimeFormat('zh-CN', {
+    return new Intl.DateTimeFormat(locale.locale === 'zh' ? 'zh-CN' : 'en-US', {
       dateStyle: 'medium',
       timeStyle: 'short',
     }).format(new Date(iso))
@@ -338,7 +340,12 @@ const deleteFinalBodySegments = computed<
   <section class="users-tab">
     <!-- Toolbar -->
     <div class="toolbar">
-      <cds-button action="outline" status="primary" @click="openCreate">
+      <cds-button
+        v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+        action="outline"
+        status="primary"
+        @click="openCreate"
+      >
         <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
         {{ locale.t('users.toolbar.create') }}
       </cds-button>
@@ -563,7 +570,7 @@ const deleteFinalBodySegments = computed<
         <cds-grid-cell>{{ fmtDateTime(u.createdAt) }}</cds-grid-cell>
         <cds-grid-cell>{{ fmtDateTime(u.updatedAt) }}</cds-grid-cell>
         <cds-grid-cell>
-          <span class="actions-cell">
+          <span class="actions-cell" v-if="['admin','tenant_admin'].includes(auth.role ?? '')">
             <button
               type="button"
               class="row-action"

@@ -111,6 +111,7 @@ function close() {
   <cds-modal
     closable
     size="md"
+    :hidden="!open"
     @closeChange="close"
   >
     <cds-modal-header>

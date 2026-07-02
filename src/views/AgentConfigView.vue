@@ -11,6 +11,7 @@ import { computed, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { apolloClient } from '@/api/graphql/client'
 import { useLocaleStore } from '@/stores/locale'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
 import AgentConfigKnowledgeDialog from '@/views/AgentConfigKnowledgeDialog.vue'
@@ -30,6 +31,7 @@ import type {
 import '@/components/icons'
 
 const locale = useLocaleStore()
+const auth = useAuthStore()
 const toast = useToast()
 
 const PAGE_SIZE_OPTIONS = [5, 10, 20] as const
@@ -178,6 +180,10 @@ function closeDetails() {
 }
 
 function openEditor(config: AgentConfigNode) {
+  if (!['admin', 'tenant_admin'].includes(auth.role ?? '')) {
+    toast.warning(locale.t('common.noPermission'))
+    return
+  }
   selectedConfigId.value = config.id
   dialogOpen.value = true
 }
@@ -323,10 +329,20 @@ function formatTimestamp(value: string): string {
               <button type="button" class="row-action solid" @click="openDetails(config)">
                 {{ locale.t('agentConfig.action.view') }}
               </button>
-              <button type="button" class="row-action solid" @click="openEditor(config)">
+              <button
+                v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+                type="button"
+                class="row-action solid"
+                @click="openEditor(config)"
+              >
                 {{ locale.t('agentConfig.action.edit') }}
               </button>
-              <button type="button" class="row-action solid" @click="unavailableDelete(config)">
+              <button
+                v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+                type="button"
+                class="row-action solid"
+                @click="unavailableDelete(config)"
+              >
                 {{ locale.t('agentConfig.action.delete') }}
               </button>
             </div>
@@ -466,7 +482,12 @@ function formatTimestamp(value: string): string {
                 {{ locale.t('agentConfig.knowledge.sectionTitle') }}
                 <span class="knowledge-count muted">({{ selectedConfig.knowledge.length }})</span>
               </h3>
-              <cds-button action="outline" size="sm" @click="openEditor(selectedConfig)">
+              <cds-button
+                v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+                action="outline"
+                size="sm"
+                @click="openEditor(selectedConfig)"
+              >
                 <cds-icon shape="pencil" size="sm" aria-hidden="true"></cds-icon>
                 {{ locale.t('agentConfig.knowledge.edit') }}
               </cds-button>

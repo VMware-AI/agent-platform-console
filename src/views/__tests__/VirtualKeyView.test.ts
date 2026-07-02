@@ -98,6 +98,7 @@ vi.mock('@/api/graphql/client', () => ({
 
 import VirtualKeyView from '@/views/VirtualKeyView.vue'
 import { useLocaleStore } from '@/stores/locale'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 
 // Toasts live in module-scoped state in useToast; read them via a fresh call.
@@ -189,6 +190,9 @@ async function rowMenuOptions(rowIndex: number): Promise<HTMLElement[]> {
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  // revoke/regenerate buttons are guarded by v-if="auth.role==='admin'"; set admin
+  // so these controls are visible in all tests that exercise those paths.
+  useAuthStore().role = 'admin'
   locale = useLocaleStore()
   keysSlot = makeSlot()
   usersSlot = makeSlot()

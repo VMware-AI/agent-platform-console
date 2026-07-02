@@ -95,6 +95,7 @@ vi.mock('@/api/graphql/client', () => ({
 }))
 
 import UserRoleView from '@/views/UserRoleView.vue'
+import { useAuthStore } from '@/stores/auth'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 
@@ -221,6 +222,7 @@ async function switchTab(index: number) {
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  useAuthStore().role = 'admin'
   locale = useLocaleStore()
   querySlots = {
     Users: makeSlot(),
