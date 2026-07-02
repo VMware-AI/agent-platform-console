@@ -671,6 +671,8 @@ export const STRINGS: Dict = {
   },
   'marketplace.deploy.hostname': { zh: '主机名（可选）', en: 'Hostname (optional)' },
   'marketplace.deploy.hostnamePlaceholder': { zh: '如 agent-vm-01', en: 'e.g. agent-vm-01' },
+  'marketplace.deploy.notes': { zh: '部署说明（可选）', en: 'Deploy notes (optional)' },
+  'marketplace.deploy.notesPlaceholder': { zh: '如 用于生产环境 Web 服务', en: 'e.g. production web service' },
   'marketplace.deploy.targetPool': { zh: 'vSphere 放置资源池', en: 'vSphere placement pool' },
   'marketplace.deploy.targetPoolPlaceholder': {
     zh: '请选择放置资源池',

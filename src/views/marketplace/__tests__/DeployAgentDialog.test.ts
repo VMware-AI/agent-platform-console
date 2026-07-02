@@ -370,6 +370,11 @@ describe('DeployAgentDialog — submit emits deploy input', () => {
       targetNetwork: null, // empty selection → null (inherit source NIC)
       hostname: 'agent-vm-01', // trimmed
       maxBudget: null, // blank budget → null
+      departmentId: null,
+      keySource: 'new',
+      existingKeyId: null,
+      ovfProperties: null,
+      notes: null,
     })
   })
 
