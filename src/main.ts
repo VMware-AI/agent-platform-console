@@ -42,7 +42,7 @@ import { createPinia } from 'pinia'
 import { provideApolloClient } from '@vue/apollo-composable'
 import App from './App.vue'
 import router from './router'
-import { apolloClient } from './api/graphql/client'
+import { apolloClient, onSessionExpired } from './api/graphql/client'
 import { useAuthStore } from './stores/auth'
 import { useThemeStore } from './stores/theme'
 import { useLocaleStore } from './stores/locale'
@@ -51,19 +51,32 @@ import './styles/global.css'
 const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
-app.use(router)
 
 // Provide the Apollo client to @vue/apollo-composable so `useQuery`/`useMutation`
 // can find it inside any component without prop drilling.
 provideApolloClient(apolloClient)
 
-// Rehydrate UI state synchronously, then the session (token → `me`)
-// asynchronously, before mounting — so the router's first guard sees the correct
-// auth state and a logged-in reload doesn't bounce to /login.
+// Rehydrate UI state synchronously, then START the session rehydration (`me`
+// round-trip) BEFORE the router installs: Vue Router 4 fires the initial
+// navigation inside app.use(router), and the guard awaits auth.whenReady() —
+// restore() must already be in flight by then or the guard would judge the
+// stale localStorage copy (issue #31).
 useThemeStore().init()
 useLocaleStore().init()
-useAuthStore()
-  .restore()
-  .finally(() => {
-    app.mount('#app')
-  })
+const auth = useAuthStore()
+const restored = auth.restore()
+
+// Session expired mid-use: any non-`Me` operation answered UNAUTHENTICATED
+// drops local auth state and lands on /login (registered here, not in
+// client.ts, to avoid the client ⇄ store import cycle).
+onSessionExpired(() => {
+  auth.sessionExpired()
+  if (router.currentRoute.value.name !== 'login') {
+    router.replace({ name: 'login' })
+  }
+})
+
+app.use(router)
+restored.finally(() => {
+  app.mount('#app')
+})
