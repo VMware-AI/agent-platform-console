@@ -191,8 +191,13 @@ export function resolveGuard(
   return true
 }
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
+  // The first navigation races the boot-time `me` round-trip (Vue Router fires
+  // it inside app.use(router)); wait for the server-confirmed session so a
+  // stale localStorage copy can't let an expired session through (issue #31).
+  // After boot this resolves instantly.
+  await auth.whenReady()
   return resolveGuard(to.meta as GuardRouteMeta, typeof to.name === 'string' ? to.name : null, {
     isAuthenticated: auth.isAuthenticated,
     role: auth.role,
