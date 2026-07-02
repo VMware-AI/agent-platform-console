@@ -219,6 +219,7 @@ function close() {
   <cds-modal
     closable
     size="md"
+    :hidden="!open"
     @closeChange="close"
   >
     <cds-modal-header>
@@ -370,7 +371,7 @@ function close() {
             v-if="customPassword.length > 0 && complexity.reasons.length > 0"
             class="user-form-error"
             data-testid="password-complexity-errors"
-          >{{ complexity.reasons.join('，') }}</div>
+          >{{ complexity.reasons.join(locale.locale === 'zh' ? '，' : ', ') }}</div>
 
           <cds-control>
             <cds-password>

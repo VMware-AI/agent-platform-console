@@ -101,7 +101,7 @@ const donutGradient = computed(() => {
   const stopped = running + stoppedPercent.value
   return (
     `var(--cds-alias-status-success, #1b8a4b) 0 ${running}%,` +
-    `#e6a700 ${running}% ${stopped}%,` +
+    `var(--cds-alias-status-warning, #e6a700) ${running}% ${stopped}%,` +
     `var(--cds-alias-status-danger, #c92100) ${stopped}% 100%`
   )
 })
@@ -457,7 +457,7 @@ function statusLabel(status: DashboardAgentStatus): string {
   border-radius: 50%;
   background: conic-gradient(
     var(--cds-alias-status-success, #1b8a4b) 0 30%,
-    #e6a700 30% 80%,
+    var(--cds-alias-status-warning, #e6a700) 30% 80%,
     var(--cds-alias-status-danger, #c92100) 80% 100%
   );
   box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 12%, transparent);
@@ -535,7 +535,7 @@ function statusLabel(status: DashboardAgentStatus): string {
 }
 .legend-dot.stopped,
 .status-label.stopped .status-dot {
-  background: #e6a700;
+  background: var(--cds-alias-status-warning, #e6a700);
 }
 .legend-dot.exception,
 .status-label.exception .status-dot {
@@ -615,7 +615,7 @@ function statusLabel(status: DashboardAgentStatus): string {
   height: 10px;
 }
 .notice-dot.success { background: var(--cds-alias-status-success, #1b8a4b); }
-.notice-dot.warning { background: #e6a700; }
+.notice-dot.warning { background: var(--cds-alias-status-warning, #e6a700); }
 .notice-dot.danger { background: var(--cds-alias-status-danger, #c92100); }
 .notice-text {
   overflow: hidden;

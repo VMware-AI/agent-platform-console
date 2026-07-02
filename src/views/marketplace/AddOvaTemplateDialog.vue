@@ -262,8 +262,11 @@ function close() {
               {{ locale.t(`marketplace.type.${opt.key}`) }}
             </option>
           </select>
-          <cds-control-message v-if="attempted && !typeValid" status="error">
-            {{ locale.t('marketplace.form.error.name') }}
+<cds-control-message
+            v-if="attempted && !typeValid"
+            status="error"
+          >
+            {{ locale.t('marketplace.form.error.type') }}
           </cds-control-message>
         </cds-select>
 
@@ -421,8 +424,11 @@ function close() {
             rows="3"
             @input="(e: Event) => (description = (e.target as HTMLTextAreaElement).value)"
           ></textarea>
-          <cds-control-message v-if="attempted && !descValid" status="error">
-            {{ locale.t('marketplace.form.error.name') }}
+<cds-control-message
+            v-if="attempted && !descValid"
+            status="error"
+          >
+            {{ locale.t('marketplace.form.error.description') }}
           </cds-control-message>
         </cds-input>
 
@@ -437,8 +443,11 @@ function close() {
             rows="4"
             @input="(e: Event) => (toolsText = (e.target as HTMLTextAreaElement).value)"
           ></textarea>
-          <cds-control-message v-if="attempted && !toolsValid" status="error">
-            {{ locale.t('marketplace.form.error.name') }}
+<cds-control-message
+            v-if="attempted && !toolsValid"
+            status="error"
+          >
+            {{ locale.t('marketplace.form.error.tools') }}
           </cds-control-message>
         </cds-input>
 
@@ -453,8 +462,11 @@ function close() {
             rows="4"
             @input="(e: Event) => (scenariosText = (e.target as HTMLTextAreaElement).value)"
           ></textarea>
-          <cds-control-message v-if="attempted && !scenariosValid" status="error">
-            {{ locale.t('marketplace.form.error.name') }}
+<cds-control-message
+            v-if="attempted && !scenariosValid"
+            status="error"
+          >
+            {{ locale.t('marketplace.form.error.scenarios') }}
           </cds-control-message>
         </cds-input>
 
@@ -467,11 +479,14 @@ function close() {
           <textarea
             :value="skillsText"
             rows="4"
-            placeholder="一行一条"
+            :placeholder="locale.t('marketplace.form.skillsPlaceholder')"
             @input="(e: Event) => (skillsText = (e.target as HTMLTextAreaElement).value)"
           ></textarea>
-          <cds-control-message v-if="attempted && !skillsValid" status="error">
-            {{ locale.t('marketplace.form.error.name') }}
+<cds-control-message
+            v-if="attempted && !skillsValid"
+            status="error"
+          >
+            {{ locale.t('marketplace.form.error.skills') }}
           </cds-control-message>
         </cds-input>
       </form>

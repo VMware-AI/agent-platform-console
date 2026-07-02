@@ -69,7 +69,7 @@ const mustChangeLabel = computed(() =>
 
 function fmtDateTime(iso: string): string {
   try {
-    return new Intl.DateTimeFormat('zh-CN', {
+    return new Intl.DateTimeFormat(locale.locale === 'zh' ? 'zh-CN' : 'en-US', {
       dateStyle: 'medium',
       timeStyle: 'short',
     }).format(new Date(iso))
@@ -92,8 +92,8 @@ function fmtDateTime(iso: string): string {
         <button
           type="button"
           class="profile-close-x"
-          :aria-label="locale.t('about.close')"
-          :title="locale.t('about.close')"
+          :aria-label="locale.t('common.close')"
+          :title="locale.t('common.close')"
           @click="close"
         >
           <cds-icon shape="times" size="md"></cds-icon>

@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import '@/components/icons'
+import { useLocaleStore } from '@/stores/locale'
 
 defineProps<{ title: string }>()
+
+const locale = useLocaleStore()
 </script>
 
 <template>
@@ -10,8 +13,8 @@ defineProps<{ title: string }>()
     <cds-card>
       <div cds-layout="vertical p:xl gap:sm align:horizontal-center" class="empty">
         <cds-icon shape="history" size="xxl"></cds-icon>
-        <p cds-text="section" class="title">即将推出</p>
-        <p cds-text="body" class="muted">该模块正在建设中，请稍后查看。</p>
+        <p cds-text="section" class="title">{{ locale.t('coming.soon') }}</p>
+        <p cds-text="body" class="muted">{{ locale.t('coming.soon.desc') }}</p>
       </div>
     </cds-card>
   </section>

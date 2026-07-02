@@ -174,7 +174,7 @@ function isClickableEndpoint(value: string): boolean {
 
 function fmtDateTime(iso: string): string {
   try {
-    return new Intl.DateTimeFormat('zh-CN', {
+    return new Intl.DateTimeFormat(locale.locale === 'zh' ? 'zh-CN' : 'en-US', {
       dateStyle: 'medium',
       timeStyle: 'short',
     }).format(new Date(iso))
@@ -189,13 +189,13 @@ function fmtSyncAgo(iso: string | null | undefined, nowMs: number = Date.now()):
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return '—'
   const diffSec = Math.max(0, Math.round((nowMs - then) / 1000))
-  if (diffSec < 60) return '刚刚'
+  if (diffSec < 60) return locale.t('common.time.justNow')
   const diffMin = Math.round(diffSec / 60)
-  if (diffMin < 60) return `${diffMin} 分钟前`
+  if (diffMin < 60) return locale.t('common.time.minutesAgo').replace('{n}', String(diffMin))
   const diffHr = Math.round(diffMin / 60)
-  if (diffHr < 24) return `${diffHr} 小时前`
+  if (diffHr < 24) return locale.t('common.time.hoursAgo').replace('{n}', String(diffHr))
   const diffDay = Math.round(diffHr / 24)
-  if (diffDay < 30) return `${diffDay} 天前`
+  if (diffDay < 30) return locale.t('common.time.daysAgo').replace('{n}', String(diffDay))
   return fmtDateTime(iso)
 }
 
@@ -441,7 +441,7 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
       {{ locale.t('resources.error') }}
     </cds-alert>
 
-    <cds-grid :border="'row'" :column-layout="'flex'" role="grid" aria-label="resource-pools">
+    <cds-grid :border="'row'" :column-layout="'flex'" role="grid" :aria-label="locale.t('resources.title')">
       <!-- 7 columns; widths sum to 100% -->
       <cds-grid-column :width="'12%'">
         <div class="col-head">

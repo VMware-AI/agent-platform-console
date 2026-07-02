@@ -88,6 +88,7 @@ vi.mock('@/api/graphql/client', () => ({
 
 import ModelRouteView from '@/views/ModelRouteView.vue'
 import { useLocaleStore } from '@/stores/locale'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 
 // Toasts live in module-scoped state; read them via a fresh call.
@@ -177,6 +178,7 @@ function clickToolbarCreate() {
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  useAuthStore().role = 'admin'
   locale = useLocaleStore()
   routesSlot = makeSlot()
   gatewaysSlot = makeSlot()

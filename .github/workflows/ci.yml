@@ -6,9 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Merge gate only: lint + type-check + build. Per CLAUDE.md §2 this is the
+# only thing that must be green before merging. Tests are NOT run on push/PR
+# — they run weekly + on demand via test.yml, per CLAUDE.md §1.
 jobs:
-  build:
-    name: Lint, type-check, test & build
+  gate:
+    name: Lint, type-check & build
     runs-on: ubuntu-latest
 
     steps:
@@ -29,9 +32,6 @@ jobs:
 
       - name: Type check
         run: npm run type-check
-
-      - name: Test
-        run: npm run test:run
 
       - name: Build
         run: npm run build

@@ -1,0 +1,33 @@
+name: Test (weekly)
+
+# Tests are NOT part of the merge gate (CLAUDE.md §1: not actively maintained
+# during dev). They do not run on push/PR — nobody spends CI minutes on them
+# per commit and nothing is blocked. Instead they run:
+#   - weekly, so the maintainer's test round has fresh results, and
+#   - on demand via the "Run workflow" button (workflow_dispatch).
+# Scheduled runs execute against the default branch (main).
+on:
+  schedule:
+    - cron: '0 1 * * 1' # Mondays 01:00 UTC
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: vitest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm run test:run

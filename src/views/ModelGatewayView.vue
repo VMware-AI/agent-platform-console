@@ -142,19 +142,19 @@ function formatGatewayTime(value: string | null | undefined): string {
   )
 }
 
-/** "刚刚" / "X 分钟前" / "X 小时前" / "X 天前" — 同步状态列的相对时间文案。 */
+/** relative time label for the sync status column. */
 function fmtSyncAgo(iso: string | null | undefined, nowMs: number = Date.now()): string {
   if (!iso) return '—'
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return '—'
   const diffSec = Math.max(0, Math.round((nowMs - then) / 1000))
-  if (diffSec < 60) return '刚刚'
+  if (diffSec < 60) return locale.t('common.time.justNow')
   const diffMin = Math.round(diffSec / 60)
-  if (diffMin < 60) return `${diffMin} 分钟前`
+  if (diffMin < 60) return locale.t('common.time.minutesAgo').replace('{n}', String(diffMin))
   const diffHr = Math.round(diffMin / 60)
-  if (diffHr < 24) return `${diffHr} 小时前`
+  if (diffHr < 24) return locale.t('common.time.hoursAgo').replace('{n}', String(diffHr))
   const diffDay = Math.round(diffHr / 24)
-  if (diffDay < 30) return `${diffDay} 天前`
+  if (diffDay < 30) return locale.t('common.time.daysAgo').replace('{n}', String(diffDay))
   return formatGatewayTime(iso)
 }
 
@@ -410,7 +410,7 @@ const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
             <span class="col-head-actions">
               <cds-button-action
                 id="gateway-sort-name"
-                :aria-label="`sort ${locale.t('gateway.col.name')}`"
+                :aria-label="locale.t('gateway.sort').replace('{column}', locale.t('gateway.col.name'))"
                 @click="onSortClick('NAME')"
               >
                 <cds-icon
@@ -424,7 +424,7 @@ const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
               <cds-button-action
                 id="gateway-filter-name-input"
                 shape="filter"
-                :aria-label="`filter ${locale.t('gateway.col.name')}`"
+                :aria-label="locale.t('gateway.filter').replace('{column}', locale.t('gateway.col.name'))"
                 :expanded="!!nameKeyword"
                 @click="(e: MouseEvent) => openFilter('nameKeyword', e.target)"
               ></cds-button-action>

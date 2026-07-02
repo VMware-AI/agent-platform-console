@@ -187,7 +187,7 @@ function close() {
 </script>
 
 <template>
-  <cds-modal size="md" @closeChange="close">
+  <cds-modal size="md" :hidden="!open" @closeChange="close">
     <cds-modal-header>
       <h3 cds-text="title">
         {{ locale.t('gateway.form.createTitle') }}

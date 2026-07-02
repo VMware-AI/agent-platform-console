@@ -151,7 +151,7 @@ onMounted(() => {
         <circle cx="700"  cy="820" r="0.9" fill="rgba(125,211,252,0.4)" />
       </g>
     </svg>
-    <div class="login-card" role="region" aria-label="Sign in">
+    <div class="login-card" role="region" :aria-label="locale.t('login.heading')">
       <aside class="login-brand">
         <div>
           <h1 class="login-brand-title">{{ locale.t('app.title') }}</h1>
@@ -180,7 +180,7 @@ onMounted(() => {
           <input
             type="email"
             autocomplete="email"
-            placeholder="you@example.com"
+            :placeholder="locale.t('login.email.placeholder')"
             :value="email"
             @input="onEmailInput"
             :disabled="auth.isLoading"
@@ -200,7 +200,7 @@ onMounted(() => {
             slot="input"
             :type="showPassword ? 'text' : 'password'"
             autocomplete="current-password"
-            :placeholder="locale.locale === 'zh' ? '您的密码' : 'Your password'"
+            :placeholder="locale.t('login.password.placeholder')"
             :value="password"
             @input="onPasswordInput"
             :disabled="auth.isLoading"
@@ -210,7 +210,7 @@ onMounted(() => {
             slot="suffix"
             type="button"
             class="pwd-toggle"
-            :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+            :aria-label="locale.t(showPassword ? 'login.password.hide' : 'login.password.show')"
             :disabled="auth.isLoading"
             @click="showPassword = !showPassword"
           >
