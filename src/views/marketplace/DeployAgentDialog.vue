@@ -342,7 +342,7 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
           </div>
         </template>
 
-        <!-- <!-- vSphere 放置资源池：真实 OVA 模板无源资源池，部署必须指定一个放置池。
+        <!-- vSphere 放置资源池：真实 OVA 模板无源资源池，部署必须指定一个放置池。
              列表来自所选平台资源池对应 vCenter 的实时枚举；为空（vcsim/常规 VM）时
              允许不选，克隆继承源模板所在池。 -->
         <cds-select
