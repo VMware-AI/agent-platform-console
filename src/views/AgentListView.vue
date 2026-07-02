@@ -3,16 +3,27 @@ import '@/components/icons'
 import { computed, ref, watch } from 'vue'
 import { useToast } from '@/composables/useToast'
 import { useAgentExport } from '@/composables/useAgentExport'
-import { useQuery } from '@vue/apollo-composable'
+import { useMutation, useQuery } from '@vue/apollo-composable'
+import { useRouter } from 'vue-router'
 import { useLocaleStore } from '@/stores/locale'
 import AppDropdown from '@/components/AppDropdown.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
-import { AGENTS_QUERY } from '@/api/graphql/queries/agents'
+import {
+  AGENTS_QUERY,
+  RECYCLE_AGENT_MUTATION,
+  SET_AGENT_STATUS_MUTATION,
+} from '@/api/graphql/queries/agents'
 import type {
   Agent,
   AgentSortField,
+  AgentStatus,
   AgentsQueryResult,
   AgentsQueryVars,
+  RecycleAgentResult,
+  RecycleAgentVars,
+  SetAgentStatusResult,
+  SetAgentStatusVars,
   SortDirection,
   StatusKey,
   TypeKey,
@@ -283,25 +294,82 @@ function badgeStatusFor(status: Agent['status']): 'success' | 'neutral' | 'dange
   return 'neutral'
 }
 
-/* Stub handlers — these row/batch actions have no backend mutation yet. Rather
- * than silently doing nothing (a dead click, which reads to the user as
- * "clicking does nothing"), surface a clear "not available yet" toast. Wire
- * them to real mutations once the backend exposes the ops. */
+/* ---------- Row / batch actions (real mutations) ----------
+ * stop/restart → setAgentStatus; delete → recycleAgent (double-confirm);
+ * visit → the agent's endpoint; configure → the detail page. rotateKey and
+ * update still have no backend op — those keep the honest "not yet" toast. */
+
+const router = useRouter()
+const { mutate: setStatusMutate } = useMutation<SetAgentStatusResult, SetAgentStatusVars>(
+  SET_AGENT_STATUS_MUTATION,
+)
+const { mutate: recycleMutate } = useMutation<RecycleAgentResult, RecycleAgentVars>(
+  RECYCLE_AGENT_MUTATION,
+)
+
 function notReady() {
   toast.info(locale.t('agents.action.notReady'))
 }
 
-function onVisit() {
-  notReady()
+function onVisit(agent: Agent) {
+  if (!agent.endpoint) {
+    toast.info(locale.t('agents.action.noEndpoint'))
+    return
+  }
+  window.open(agent.endpoint, '_blank', 'noopener')
 }
 
-function onConfigure() {
-  notReady()
+function onConfigure(agent: Agent) {
+  router.push({ name: 'agents.detail', params: { id: agent.id } })
 }
 
-function onRowAction() {
-  notReady()
+/** Set one agent's status; returns success. The mutation selects id+status, so
+ *  the normalized Apollo cache patches the row badge in place — no refetch. */
+async function setStatus(agent: Agent, status: AgentStatus, okKey: string): Promise<boolean> {
+  try {
+    await setStatusMutate({ id: agent.id, status })
+    toast.success(locale.t(okKey).replace('{name}', agent.name))
+    return true
+  } catch (e) {
+    toast.error(graphqlErrorMessage(e, locale.t('agents.action.failed')))
+    return false
+  }
+}
+
+const deleteTarget = ref<Agent | null>(null)
+const batchDeleteOpen = ref(false)
+
+async function doDelete() {
+  const target = deleteTarget.value
+  deleteTarget.value = null
+  if (!target) return
+  try {
+    await recycleMutate({ input: { agentId: target.id, confirm: true } })
+    toast.success(locale.t('agents.action.deletedOk').replace('{name}', target.name))
+  } catch (e) {
+    toast.error(graphqlErrorMessage(e, locale.t('agents.action.failed')))
+  }
+  await refetch()
+}
+
+function onRowAction(key: RowActionKey) {
+  const target = rowActionsTarget.value
   closeRowActions()
+  if (!target) return
+  switch (key) {
+    case 'stop':
+      void setStatus(target, 'STOPPED', 'agents.action.stoppedOk')
+      break
+    case 'restart':
+      void setStatus(target, 'RUNNING', 'agents.action.restartedOk')
+      break
+    case 'delete':
+      deleteTarget.value = target
+      break
+    default:
+      // rotateKey / update — no backend op yet.
+      notReady()
+  }
 }
 
 /* Anchors for the cds-dropdown row-actions popup (per row). */
@@ -372,13 +440,48 @@ const BATCH_ICON_FOR_KEY: Record<(typeof BATCH_KEYS)[number], string> = {
   delete: 'trash',                // matches the more-menu `delete` icon
 }
 
-function onBatch(close: () => void) {
+/** Run one mutation per selected id, then summarize, clear selection, refetch. */
+async function runBatch(ids: string[], run: (id: string) => Promise<unknown>) {
+  const results = await Promise.allSettled(ids.map(run))
+  const ok = results.filter((r) => r.status === 'fulfilled').length
+  const fail = results.length - ok
+  const summary = locale
+    .t('agents.batch.done')
+    .replace('{ok}', String(ok))
+    .replace('{fail}', String(fail))
+  if (fail > 0) toast.error(summary)
+  else toast.success(summary)
+  selectedIds.value = new Set()
+  await refetch()
+}
+
+function onBatch(key: (typeof BATCH_KEYS)[number], close: () => void) {
+  close()
   if (selectedIds.value.size === 0) {
-    close()
+    toast.info(locale.t('agents.batch.disabled'))
     return
   }
-  notReady()
-  close()
+  const ids = [...selectedIds.value]
+  switch (key) {
+    case 'start':
+      void runBatch(ids, (id) => setStatusMutate({ id, status: 'RUNNING' }))
+      break
+    case 'stop':
+      void runBatch(ids, (id) => setStatusMutate({ id, status: 'STOPPED' }))
+      break
+    case 'delete':
+      batchDeleteOpen.value = true
+      break
+    default:
+      // update — no backend op yet.
+      notReady()
+  }
+}
+
+async function doBatchDelete() {
+  batchDeleteOpen.value = false
+  const ids = [...selectedIds.value]
+  await runBatch(ids, (id) => recycleMutate({ input: { agentId: id, confirm: true } }))
 }
 
 function onExport() {
@@ -467,7 +570,7 @@ const summaryText = computed(() => {
             class="menu-opt"
             :class="{ danger: key === 'delete' }"
             :aria-label="locale.t(`agents.batch.${key}`)"
-            @click="onBatch(close)"
+            @click="onBatch(key, close)"
           >
             <cds-icon :shape="BATCH_ICON_FOR_KEY[key]" size="sm" aria-hidden="true"></cds-icon>
             <span>{{ locale.t(`agents.batch.${key}`) }}</span>
@@ -811,11 +914,11 @@ const summaryText = computed(() => {
           <cds-grid-cell class="muted time-cell">{{ fmtDateTime(agent.updatedAt) }}</cds-grid-cell>
           <cds-grid-cell>
             <span class="actions-cell">
-              <cds-button action="outline" size="sm" @click="onVisit()">
+              <cds-button action="outline" size="sm" @click="onVisit(agent)">
                 <cds-icon shape="eye" size="sm" aria-hidden="true"></cds-icon>
                 {{ locale.t('agents.action.visit') }}
               </cds-button>
-              <cds-button action="outline" size="sm" @click="onConfigure()">
+              <cds-button action="outline" size="sm" @click="onConfigure(agent)">
                 <cds-icon shape="cog" size="sm" aria-hidden="true"></cds-icon>
                 {{ locale.t('agents.action.configure') }}
               </cds-button>
@@ -1054,13 +1157,30 @@ const summaryText = computed(() => {
           class="menu-opt"
           :class="{ danger: key === 'delete' }"
           :aria-label="locale.t(`agents.action.${key}`)"
-          @click="rowActionsTarget && onRowAction()"
+          @click="onRowAction(key)"
         >
           <cds-icon :shape="ICON_FOR_ACTION[key]" size="sm" aria-hidden="true"></cds-icon>
           <span>{{ locale.t(`agents.action.${key}`) }}</span>
         </button>
       </div>
     </cds-dropdown>
+
+    <ConfirmDialog
+      :open="!!deleteTarget"
+      :title="locale.t('agents.confirm.deleteTitle')"
+      :body="locale.t('agents.confirm.deleteBody').replace('{name}', deleteTarget?.name ?? '')"
+      danger
+      @close="deleteTarget = null"
+      @confirm="doDelete"
+    />
+    <ConfirmDialog
+      :open="batchDeleteOpen"
+      :title="locale.t('agents.confirm.deleteTitle')"
+      :body="locale.t('agents.confirm.batchDeleteBody').replace('{count}', String(selectedCount))"
+      danger
+      @close="batchDeleteOpen = false"
+      @confirm="doBatchDelete"
+    />
   </section>
 </template>
 

@@ -60,3 +60,23 @@ export const AGENTS_QUERY = gql`
     }
   }
 `
+
+export const SET_AGENT_STATUS_MUTATION = gql`
+  mutation SetAgentStatus($id: ID!, $status: AgentStatus!) {
+    setAgentStatus(id: $id, status: $status) {
+      id
+      status
+      updatedAt
+    }
+  }
+`
+
+export const RECYCLE_AGENT_MUTATION = gql`
+  mutation RecycleAgent($input: RecycleAgentInput!) {
+    recycleAgent(input: $input) {
+      id
+      status
+      updatedAt
+    }
+  }
+`
