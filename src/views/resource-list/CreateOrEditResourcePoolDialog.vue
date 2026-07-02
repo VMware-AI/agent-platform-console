@@ -168,7 +168,7 @@ async function onTestConnection() {
     }
   } catch (err) {
     console.error('[resources] test connection failed', err)
-    testResult.value = { ok: false, message: '请求失败，请重试', detail: null }
+    testResult.value = { ok: false, message: locale.t('resources.form.testConnectionFail'), detail: null }
   }
 }
 
@@ -225,7 +225,7 @@ function close() {
               slot="input"
               type="text"
               :value="form.endpoint"
-              placeholder="https://vc.example.local/sdk"
+              :placeholder="locale.t('resources.form.endpointPlaceholder')"
               @input="(e: Event) => form.endpoint = (e.target as HTMLInputElement).value"
             />
           </cds-input>
@@ -309,7 +309,7 @@ function close() {
               v-if="testResult.detail && testResult.detail.vSphereVersion"
               class="resource-test-detail"
             >
-              vSphere {{ testResult.detail.vSphereVersion }} · {{ testResult.detail.contentLibraries.length }} 个内容库
+              {{ locale.t('resources.form.testDetail').replace('{version}', String(testResult.detail.vSphereVersion)).replace('{count}', String(testResult.detail.contentLibraries.length)) }}
             </div>
             <cds-button-action
               shape="times"

@@ -72,6 +72,7 @@ vi.mock('@/api/graphql/client', () => ({
 
 import RateLimitPolicyView from '@/views/RateLimitPolicyView.vue'
 import { useLocaleStore } from '@/stores/locale'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 
 // Toasts live in module-scoped state in useToast; read them via a fresh call.
@@ -143,6 +144,9 @@ function checkboxes(): HTMLInputElement[] {
 beforeEach(() => {
   setActivePinia(createPinia())
   locale = useLocaleStore()
+  // Set admin role so v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+  // guards pass and create/edit/delete/toggle buttons are rendered.
+  useAuthStore().role = 'admin'
   listSlot = makeSlot()
   mutateMock.mockReset()
   // Toast state is module-scoped and shared across tests; reset it so

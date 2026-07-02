@@ -282,21 +282,24 @@ function badgeStatusFor(status: Agent['status']): 'success' | 'neutral' | 'dange
   return 'neutral'
 }
 
-/* Stub handlers — wired to a real backend mutation later. */
-function noop(label: string, payload?: unknown) {
-  console.log(`[agents] ${label}`, payload)
+/* Stub handlers — these row/batch actions have no backend mutation yet. Rather
+ * than silently doing nothing (a dead click, which reads to the user as
+ * "clicking does nothing"), surface a clear "not available yet" toast. Wire
+ * them to real mutations once the backend exposes the ops. */
+function notReady() {
+  toast.info(locale.t('agents.action.notReady'))
 }
 
-function onVisit(agent: Agent) {
-  noop('visit', { id: agent.id, endpoint: agent.endpoint })
+function onVisit() {
+  notReady()
 }
 
-function onConfigure(agent: Agent) {
-  noop('configure', { id: agent.id })
+function onConfigure() {
+  notReady()
 }
 
-function onRowAction(agent: Agent, key: RowActionKey) {
-  noop(`row:${key}`, { id: agent.id })
+function onRowAction() {
+  notReady()
   closeRowActions()
 }
 
@@ -367,15 +370,13 @@ const BATCH_ICON_FOR_KEY: Record<(typeof BATCH_KEYS)[number], string> = {
   update: ICON_FOR_ACTION.update, // update
   delete: 'trash',                // matches the more-menu `delete` icon
 }
-type BatchKey = (typeof BATCH_KEYS)[number]
 
-function onBatch(key: BatchKey, close: () => void) {
+function onBatch(close: () => void) {
   if (selectedIds.value.size === 0) {
-    noop('batch:disabled', key)
     close()
     return
   }
-  noop(`batch:${key}`, { ids: [...selectedIds.value] })
+  notReady()
   close()
 }
 
@@ -391,7 +392,7 @@ function onRefresh() {
  *  so all "创建时间/更新时间" cells in the console look the same. */
 function fmtDateTime(iso: string): string {
   try {
-    return new Intl.DateTimeFormat('zh-CN', {
+    return new Intl.DateTimeFormat(locale.locale === 'zh' ? 'zh-CN' : 'en-US', {
       dateStyle: 'medium',
       timeStyle: 'short',
     }).format(new Date(iso))
@@ -465,7 +466,7 @@ const summaryText = computed(() => {
             class="menu-opt"
             :class="{ danger: key === 'delete' }"
             :aria-label="locale.t(`agents.batch.${key}`)"
-            @click="onBatch(key, close)"
+            @click="onBatch(close)"
           >
             <cds-icon :shape="BATCH_ICON_FOR_KEY[key]" size="sm" aria-hidden="true"></cds-icon>
             <span>{{ locale.t(`agents.batch.${key}`) }}</span>
@@ -504,7 +505,7 @@ const summaryText = computed(() => {
       :column-layout="'flex'"
       :selectable="null"
       role="grid"
-      aria-label="agents"
+      :aria-label="locale.t('agents.list.title')"
       scroll-lock
     >
         <!-- Column definitions -->
@@ -522,7 +523,7 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.name') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="`sort ${locale.t('agents.col.name')}`"
+              :aria-label="locale.t('agents.aria.sort').replace('{column}', locale.t('agents.col.name'))"
               @click="(e: MouseEvent) => onSortClick('NAME')"
             >
               <cds-icon
@@ -547,7 +548,7 @@ const summaryText = computed(() => {
             <cds-button-action
               shape="filter"
               aria-controls="filter-NAME"
-              :aria-label="`filter ${locale.t('agents.col.name')}`"
+              :aria-label="locale.t('agents.aria.filter').replace('{column}', locale.t('agents.col.name'))"
               :expanded="columnFilters.nameKeyword.length > 0"
               @click="(e: MouseEvent) => openColumnFilter('nameKeyword', e.target)"
             ></cds-button-action>
@@ -558,7 +559,7 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.type') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="`sort ${locale.t('agents.col.type')}`"
+              :aria-label="locale.t('agents.aria.sort').replace('{column}', locale.t('agents.col.type'))"
               @click="(e: MouseEvent) => onSortClick('TYPE')"
             >
               <cds-icon
@@ -583,7 +584,7 @@ const summaryText = computed(() => {
             <cds-button-action
               shape="filter"
               aria-controls="filter-TYPE"
-              :aria-label="`filter ${locale.t('agents.col.type')}`"
+              :aria-label="locale.t('agents.aria.filter').replace('{column}', locale.t('agents.col.type'))"
               :expanded="typeFilter !== 'all'"
               @click="(e: MouseEvent) => openFilter('TYPE', e.target)"
             ></cds-button-action>
@@ -594,7 +595,7 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.status') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="`sort ${locale.t('agents.col.status')}`"
+              :aria-label="locale.t('agents.aria.sort').replace('{column}', locale.t('agents.col.status'))"
               @click="(e: MouseEvent) => onSortClick('STATUS')"
             >
               <cds-icon
@@ -619,7 +620,7 @@ const summaryText = computed(() => {
             <cds-button-action
               shape="filter"
               aria-controls="filter-STATUS"
-              :aria-label="`filter ${locale.t('agents.col.status')}`"
+              :aria-label="locale.t('agents.aria.filter').replace('{column}', locale.t('agents.col.status'))"
               :expanded="statusFilter !== 'all'"
               @click="(e: MouseEvent) => openFilter('STATUS', e.target)"
             ></cds-button-action>
@@ -630,7 +631,7 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.key') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="`sort ${locale.t('agents.col.key')}`"
+              :aria-label="locale.t('agents.aria.sort').replace('{column}', locale.t('agents.col.key'))"
               @click="(e: MouseEvent) => onSortClick('API_KEY_NAME')"
             >
               <cds-icon
@@ -655,7 +656,7 @@ const summaryText = computed(() => {
             <cds-button-action
               shape="filter"
               aria-controls="filter-KEY"
-              :aria-label="`filter ${locale.t('agents.col.key')}`"
+              :aria-label="locale.t('agents.aria.filter').replace('{column}', locale.t('agents.col.key'))"
               :expanded="columnFilters.keyKeyword.length > 0"
               @click="(e: MouseEvent) => openColumnFilter('keyKeyword', e.target)"
             ></cds-button-action>
@@ -666,7 +667,7 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.username') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="`sort ${locale.t('agents.col.username')}`"
+              :aria-label="locale.t('agents.aria.sort').replace('{column}', locale.t('agents.col.username'))"
               @click="(e: MouseEvent) => onSortClick('USERNAME')"
             >
               <cds-icon
@@ -691,7 +692,7 @@ const summaryText = computed(() => {
             <cds-button-action
               shape="filter"
               aria-controls="filter-USERNAME"
-              :aria-label="`filter ${locale.t('agents.col.username')}`"
+              :aria-label="locale.t('agents.aria.filter').replace('{column}', locale.t('agents.col.username'))"
               :expanded="columnFilters.usernameKeyword.length > 0"
               @click="(e: MouseEvent) => openColumnFilter('usernameKeyword', e.target)"
             ></cds-button-action>
@@ -702,7 +703,7 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.createdAt') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="`sort ${locale.t('agents.col.createdAt')}`"
+              :aria-label="locale.t('agents.aria.sort').replace('{column}', locale.t('agents.col.createdAt'))"
               @click="(e: MouseEvent) => onSortClick('CREATED_AT')"
             >
               <cds-icon
@@ -731,7 +732,7 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.updatedAt') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="`sort ${locale.t('agents.col.updatedAt')}`"
+              :aria-label="locale.t('agents.aria.sort').replace('{column}', locale.t('agents.col.updatedAt'))"
               @click="(e: MouseEvent) => onSortClick('UPDATED_AT')"
             >
               <cds-icon
@@ -806,11 +807,11 @@ const summaryText = computed(() => {
           <cds-grid-cell class="muted time-cell">{{ fmtDateTime(agent.updatedAt) }}</cds-grid-cell>
           <cds-grid-cell>
             <span class="actions-cell">
-              <cds-button action="outline" size="sm" @click="onVisit(agent)">
+              <cds-button action="outline" size="sm" @click="onVisit()">
                 <cds-icon shape="eye" size="sm" aria-hidden="true"></cds-icon>
                 {{ locale.t('agents.action.visit') }}
               </cds-button>
-              <cds-button action="outline" size="sm" @click="onConfigure(agent)">
+              <cds-button action="outline" size="sm" @click="onConfigure()">
                 <cds-icon shape="cog" size="sm" aria-hidden="true"></cds-icon>
                 {{ locale.t('agents.action.configure') }}
               </cds-button>
@@ -1049,7 +1050,7 @@ const summaryText = computed(() => {
           class="menu-opt"
           :class="{ danger: key === 'delete' }"
           :aria-label="locale.t(`agents.action.${key}`)"
-          @click="rowActionsTarget && onRowAction(rowActionsTarget, key)"
+          @click="rowActionsTarget && onRowAction()"
         >
           <cds-icon :shape="ICON_FOR_ACTION[key]" size="sm" aria-hidden="true"></cds-icon>
           <span>{{ locale.t(`agents.action.${key}`) }}</span>

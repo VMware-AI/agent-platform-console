@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import type { ToastStatus } from '@/composables/useToast'
 import { useToast } from '@/composables/useToast'
+import { useLocaleStore } from '@/stores/locale'
 
 const { toasts, dismiss } = useToast()
+const locale = useLocaleStore()
 
 /** Map toast status → cds icon shape. We re-use the cds icons that
  * cds-alert would have used internally so the visual still matches. */
@@ -46,7 +48,7 @@ const ICON_FOR_STATUS: Record<ToastStatus, string> = {
         <button
           type="button"
           class="toast-close"
-          aria-label="关闭"
+          :aria-label="locale.t('common.close')"
           @click="dismiss(toast.id)"
         >
           ×
@@ -82,7 +84,7 @@ const ICON_FOR_STATUS: Record<ToastStatus, string> = {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
   font-size: 14px;
   line-height: 1.5;
-  color: #fff;
+  color: var(--cds-global-typography-color-100, #fff);
   /* Solid background (no opacity tricks) — the four status variants below
      override --background so each toast is fully opaque. */
   background: var(--toast-bg, #565656);

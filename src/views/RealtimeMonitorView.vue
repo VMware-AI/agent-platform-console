@@ -426,7 +426,7 @@ const chartSpecs = computed<ChartSpec[]>(() => {
       yMax: 100,
       yTicks: [100, 80, 60, 40, 20, 0],
       xLabels: labels,
-      series: [{ key: 'cpu', label: 'CPU', color: '#5f7fb8', mode: 'line', values: cpu }],
+      series: [{ key: 'cpu', label: locale.t('monitor.series.cpu'), color: '#5f7fb8', mode: 'line', values: cpu }],
       formatY: (value: number) => formatNumber(Math.round(value)),
     },
     {
@@ -608,7 +608,7 @@ function toggleFocus(key: string) {
           <div class="chart-title-row">
             <h2>{{ chart.title }}</h2>
             <div class="chart-actions">
-              <span>Zoom</span>
+              <span>{{ locale.t('monitor.action.zoom') }}</span>
               <button
                 type="button"
                 class="icon-button"

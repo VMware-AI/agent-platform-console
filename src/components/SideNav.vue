@@ -1,18 +1,21 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useLocaleStore } from '@/stores/locale'
+import { useAuthStore } from '@/stores/auth'
 import './icons'
 
 interface ChildItem {
   name: string
-  label: string
+  labelKey: string
   icon: string
   to: string
 }
 
 interface Group {
-  parent: string
-  parentIcon: string
+  key: string
+  titleKey: string
+  icon: string
   children: ChildItem[]
 }
 
@@ -29,62 +32,95 @@ const emit = defineEmits<{
 }>()
 
 const route = useRoute()
+const router = useRouter()
+const locale = useLocaleStore()
+const auth = useAuthStore()
 
 const groups: Group[] = [
   {
-    parent: '智能体中心',
-    parentIcon: 'blocks-group',
+    key: 'agents',
+    titleKey: 'nav.group.agents',
+    icon: 'blocks-group',
     children: [
-      { name: 'agents.list',        label: '智能体列表',   icon: 'atom',    to: '/agents/list' },
-      { name: 'agents.config',      label: '智能体配置',   icon: 'details', to: '/agents/config' },
-      { name: 'agents.marketplace', label: '智能体市场',   icon: 'store',   to: '/agents/marketplace' },
+      { name: 'agents.list',        labelKey: 'nav.agents.list',        icon: 'atom',    to: '/agents/list' },
+      { name: 'agents.config',      labelKey: 'nav.agents.config',      icon: 'details', to: '/agents/config' },
+      { name: 'agents.marketplace', labelKey: 'nav.agents.marketplace', icon: 'store',   to: '/agents/marketplace' },
     ],
   },
   {
-    parent: '模型网关配置',
-    parentIcon: 'internet-of-things',
+    key: 'gateway',
+    titleKey: 'nav.group.gateway',
+    icon: 'internet-of-things',
     children: [
-      { name: 'mg.route', label: '模型路由', icon: 'forking', to: '/model-gateway/route' },
-      { name: 'mg.key',   label: '虚拟密钥', icon: 'key',     to: '/model-gateway/key' },
-      { name: 'mg.policy', label: '网关策略', icon: 'filter',  to: '/model-gateway/policy' },
+      { name: 'mg.route',  labelKey: 'nav.gateway.route',  icon: 'forking', to: '/model-gateway/route' },
+      { name: 'mg.key',    labelKey: 'nav.gateway.key',    icon: 'key',     to: '/model-gateway/key' },
+      { name: 'mg.policy', labelKey: 'nav.gateway.policy', icon: 'filter',  to: '/model-gateway/policy' },
     ],
   },
   {
-    parent: '可观测性',
-    parentIcon: 'eye',
+    key: 'observability',
+    titleKey: 'nav.group.observability',
+    icon: 'eye',
     children: [
-      { name: 'obs.metering', label: '计量中心', icon: 'bar-chart',    to: '/observability/metering' },
-      { name: 'obs.monitor',  label: '实时监控', icon: 'dashboard',    to: '/observability/monitor' },
-      { name: 'obs.requests', label: '请求日志', icon: 'list',         to: '/observability/requests' },
-      { name: 'obs.audit',    label: '审计日志', icon: 'shield-check', to: '/observability/audit' },
+      { name: 'obs.metering', labelKey: 'nav.obs.metering', icon: 'bar-chart',    to: '/observability/metering' },
+      { name: 'obs.monitor',  labelKey: 'nav.obs.monitor',  icon: 'dashboard',    to: '/observability/monitor' },
+      { name: 'obs.requests', labelKey: 'nav.obs.requests', icon: 'list',         to: '/observability/requests' },
+      { name: 'obs.audit',    labelKey: 'nav.obs.audit',    icon: 'shield-check', to: '/observability/audit' },
     ],
   },
   {
-    parent: '系统配置',
-    parentIcon: 'cog',
+    key: 'system',
+    titleKey: 'nav.group.system',
+    icon: 'cog',
     children: [
-      { name: 'platform.resources', label: '资源池接入', icon: 'resource-pool', to: '/platform/resources' },
-      { name: 'platform.gateway', label: '模型网关接入',   icon: 'router', to: '/platform/gateway' },
-      { name: 'platform.users',   label: '用户与权限', icon: 'users',  to: '/platform/users' },
+      { name: 'platform.resources', labelKey: 'nav.system.resources', icon: 'resource-pool', to: '/platform/resources' },
+      { name: 'platform.gateway',   labelKey: 'nav.system.gateway',   icon: 'router',        to: '/platform/gateway' },
+      { name: 'platform.users',     labelKey: 'nav.system.users',     icon: 'users',         to: '/platform/users' },
     ],
   },
 ]
 
+// Visibility mirrors the router guard: a menu item is shown only when the
+// current role is allowed to open its route. Each route's `meta` is read from
+// the router (the single source of truth used by `resolveGuard`), so the menu
+// and the guard can never drift. Without this, a non-admin would see
+// admin-only items, click them, and be bounced back to the overview — which
+// reads to the user as "clicking does nothing" (issue #29).
+function canSee(name: string): boolean {
+  const rec = router.getRoutes().find((r) => r.name === name)
+  const meta = (rec?.meta ?? {}) as { admin?: boolean; roles?: readonly string[] }
+  if (meta.admin && auth.role !== 'admin') return false
+  if (meta.roles && !meta.roles.includes(auth.role ?? '')) return false
+  return true
+}
+
+// Recomputes when the role changes (e.g. after login). Groups whose children
+// are all hidden for the current role collapse away entirely.
+const visibleGroups = computed<Group[]>(() =>
+  groups
+    .map((g) => ({ ...g, children: g.children.filter((c) => canSee(c.name)) }))
+    .filter((g) => g.children.length > 0),
+)
+
+const visibleChildren = computed<ChildItem[]>(() =>
+  visibleGroups.value.flatMap((g) => g.children),
+)
+
 // Per-group expand/collapse state (orthogonal to the global sidebar collapse).
 const groupCollapsed = ref<Set<string>>(new Set())
 
-function toggleGroup(name: string) {
+function toggleGroup(key: string) {
   const next = new Set(groupCollapsed.value)
-  if (next.has(name)) {
-    next.delete(name)
+  if (next.has(key)) {
+    next.delete(key)
   } else {
-    next.add(name)
+    next.add(key)
   }
   groupCollapsed.value = next
 }
 
-function isGroupCollapsed(name: string): boolean {
-  return groupCollapsed.value.has(name)
+function isGroupCollapsed(key: string): boolean {
+  return groupCollapsed.value.has(key)
 }
 
 function isActive(name: string): boolean {
@@ -99,8 +135,8 @@ function isActive(name: string): boolean {
       <button
         type="button"
         class="sidebar-toggle"
-        :aria-label="props.collapsed ? '展开侧栏' : '折叠侧栏'"
-        :title="props.collapsed ? '展开侧栏' : '折叠侧栏'"
+        :aria-label="locale.t(props.collapsed ? 'nav.expand' : 'nav.collapse')"
+        :title="locale.t(props.collapsed ? 'nav.expand' : 'nav.collapse')"
         :aria-expanded="!props.collapsed"
         @click="emit('toggle')"
       >
@@ -120,26 +156,26 @@ function isActive(name: string): boolean {
         to="/overview"
       >
         <cds-icon class="item-icon" shape="grid-view" size="md"></cds-icon>
-        <span class="item-label">总览</span>
+        <span class="item-label">{{ locale.t('nav.overview') }}</span>
       </RouterLink>
 
-      <div v-for="g in groups" :key="g.parent" class="group">
+      <div v-for="g in visibleGroups" :key="g.key" class="group">
         <button
           type="button"
           class="parent"
-          :aria-expanded="!isGroupCollapsed(g.parent)"
-          @click="toggleGroup(g.parent)"
+          :aria-expanded="!isGroupCollapsed(g.key)"
+          @click="toggleGroup(g.key)"
         >
-          <cds-icon class="item-icon" :shape="g.parentIcon" size="md"></cds-icon>
-          <span class="parent-label">{{ g.parent }}</span>
+          <cds-icon class="item-icon" :shape="g.icon" size="md"></cds-icon>
+          <span class="parent-label">{{ locale.t(g.titleKey) }}</span>
           <cds-icon
             class="caret"
             shape="angle"
-            :direction="isGroupCollapsed(g.parent) ? 'right' : 'down'"
+            :direction="isGroupCollapsed(g.key) ? 'right' : 'down'"
             size="sm"
           ></cds-icon>
         </button>
-        <div v-show="!isGroupCollapsed(g.parent)" class="children">
+        <div v-show="!isGroupCollapsed(g.key)" class="children">
           <RouterLink
             v-for="c in g.children"
             :key="c.name"
@@ -148,7 +184,7 @@ function isActive(name: string): boolean {
             :to="c.to"
           >
             <cds-icon class="item-icon" :shape="c.icon" size="sm"></cds-icon>
-            <span class="item-label">{{ c.label }}</span>
+            <span class="item-label">{{ locale.t(c.labelKey) }}</span>
           </RouterLink>
         </div>
       </div>
@@ -160,20 +196,20 @@ function isActive(name: string): boolean {
         class="icon-item"
         :class="{ active: isActive('overview') }"
         to="/overview"
-        title="总览"
-        aria-label="总览"
+        :title="locale.t('nav.overview')"
+        :aria-label="locale.t('nav.overview')"
       >
         <cds-icon shape="grid-view" size="md"></cds-icon>
       </RouterLink>
 
       <RouterLink
-        v-for="c in groups.flatMap(g => g.children)"
+        v-for="c in visibleChildren"
         :key="c.name"
         class="icon-item"
         :class="{ active: isActive(c.name) }"
         :to="c.to"
-        :title="c.label"
-        :aria-label="c.label"
+        :title="locale.t(c.labelKey)"
+        :aria-label="locale.t(c.labelKey)"
       >
         <cds-icon :shape="c.icon" size="md"></cds-icon>
       </RouterLink>

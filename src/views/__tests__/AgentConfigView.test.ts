@@ -26,6 +26,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { ref } from 'vue'
 
 import { useToast } from '@/composables/useToast'
+import { useAuthStore } from '@/stores/auth'
 import type {
   AgentConfigNode,
   KnowledgeArtifactNode,
@@ -144,6 +145,10 @@ let wrapper: VueWrapper | null = null
 
 beforeEach(() => {
   setActivePinia(createPinia())
+
+  // Set auth role to admin so permission-guarded buttons (edit/delete/knowledge edit)
+  // are rendered. The v-if guard checks ['admin','tenant_admin'].includes(auth.role).
+  useAuthStore().role = 'admin'
 
   // Toast state is module-scoped (shared across useToast() callers); start clean.
   useToast().clear()

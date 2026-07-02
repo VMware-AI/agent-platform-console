@@ -118,7 +118,7 @@ function onBackdropClick(e: MouseEvent) {
             </cds-button>
             <cds-button
               type="button"
-              :action="danger ? 'solid' : 'solid'"
+              action="solid"
               :status="danger ? 'danger' : 'primary'"
               :disabled="confirmDisabled"
               @click="confirm"
