@@ -421,7 +421,7 @@ describe('AgentMarketplaceView', () => {
     expect(toast.toasts.value.some((t) => t.message === okMsg)).toBe(true)
   })
 
-  it('dismissing the secret reveal dialog navigates to the agent list', async () => {
+  it('dismissing the secret reveal dialog navigates to the deployed agent detail', async () => {
     const SECRET = 'sk-gw-secret'
     setFamilies([makeFamily({ id: 'f1' })])
     setPools([makePool({ id: 'p1' })])
@@ -474,7 +474,7 @@ describe('AgentMarketplaceView', () => {
     doneBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
-    expect(pushSpy).toHaveBeenCalledWith({ name: 'agents.list' })
+    expect(pushSpy).toHaveBeenCalledWith({ name: 'agents.detail', params: { id: 'a1' } })
   })
 
   it('shows the backend GraphQL error message (graphqlErrorMessage) when deploy fails', async () => {
@@ -511,6 +511,9 @@ describe('AgentMarketplaceView', () => {
 
   it('create-family submit calls CREATE_OVA_TEMPLATE_FAMILY and toasts success with the new family name', async () => {
     setFamilies([])
+    // The AddOvaTemplateDialog requires a non-empty resource pool to pass
+    // validation (poolValid), so seed one before opening it.
+    setPools([makePool({ id: 'p1' })])
     mutateFns.CreateOvaTemplateFamily.mockResolvedValue({
       data: { createOvaTemplateFamily: { family: makeFamily({ id: 'fNew', name: 'BrandNew' }) } },
     })
@@ -578,6 +581,10 @@ describe('AgentMarketplaceView', () => {
 
   it('create-family failure surfaces the backend message via graphqlErrorMessage', async () => {
     setFamilies([])
+    // AddOvaTemplateDialog needs at least one pool to pass validation
+    // (poolValid); seed one so the submit path actually emits the event
+    // and the parent's catch handler runs.
+    setPools([makePool({ id: 'p1' })])
     mutateFns.CreateOvaTemplateFamily.mockRejectedValue({
       graphQLErrors: [{ message: 'admin role required' }],
     })
@@ -623,8 +630,9 @@ describe('AgentMarketplaceView', () => {
     expect(toast.toasts.value.some((t) => t.message === 'admin role required' && t.status === 'danger')).toBe(true)
   })
 
-  it('"view details" action surfaces the placeholder toast (info)', async () => {
-    setFamilies([makeFamily()])
+  it('"view details" action opens the template-family detail modal (not a placeholder toast)', async () => {
+    const fam = makeFamily({ name: 'OpenClaw Pro' })
+    setFamilies([fam])
     setPools([makePool()])
     wrapper = mount(AgentMarketplaceView, mountConfig)
 
@@ -635,12 +643,14 @@ describe('AgentMarketplaceView', () => {
     await viewBtn.trigger('click')
     await flushPromises()
 
-    const { useToast } = await import('@/composables/useToast')
-    const toast = useToast()
-    expect(
-      toast.toasts.value.some(
-        (t) => t.message === locale.t('marketplace.toast.viewPlaceholder') && t.status === 'info',
-      ),
-    ).toBe(true)
+    // The detail modal renders the family's name as its title — confirm
+    // it's visible in the DOM (no toast equivalent any more).
+    const modals = Array.from(wrapper.element.querySelectorAll('cds-modal'))
+    const detailModal = modals.find(
+      (m) => m.querySelector('.modal-title')?.textContent?.trim() === 'OpenClaw Pro',
+    )
+    expect(detailModal).toBeTruthy()
+    // The detail modal is visible (hidden = false).
+    expect(detailModal?.hasAttribute('hidden')).toBe(false)
   })
 })

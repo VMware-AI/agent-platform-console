@@ -6,6 +6,7 @@ import { useAgentExport } from '@/composables/useAgentExport'
 import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import AppDropdown from '@/components/AppDropdown.vue'
+
 import { AGENTS_QUERY } from '@/api/graphql/queries/agents'
 import type {
   Agent,
@@ -775,7 +776,10 @@ const summaryText = computed(() => {
             />
           </cds-grid-cell>
           <cds-grid-cell>
-            <span class="cell-name">{{ agent.name }}</span>
+            <router-link
+              :to="{ name: 'agents.detail', params: { id: agent.id } }"
+              class="cell-name-link"
+            >{{ agent.name }}</router-link>
           </cds-grid-cell>
           <cds-grid-cell>
             <span class="muted">{{ locale.t(`agents.type.${TYPE_FROM_GQL[agent.type]}`) }}</span>
@@ -1288,6 +1292,17 @@ const summaryText = computed(() => {
 .cell-name {
   font-weight: 500;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
+}
+
+.cell-name-link {
+  font-weight: 500;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  text-decoration: none;
+}
+
+.cell-name-link:hover {
+  color: var(--cds-alias-status-info, #0072a3);
+  text-decoration: underline;
 }
 
 /* 创建时间 / 更新时间 列: 数字等宽 + 灰字色 + 不换行,

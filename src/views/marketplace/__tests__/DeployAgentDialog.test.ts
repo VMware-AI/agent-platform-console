@@ -190,20 +190,24 @@ function setValue(el: HTMLInputElement | HTMLSelectElement, v: string) {
 }
 function clickSubmit() {
   // Last action button is the Deploy/submit button.
-  const buttons = Array.from(wrapper!.element.querySelectorAll<HTMLElement>('cds-modal-actions cds-button'))
+  const buttons = Array.from(
+    wrapper!.element.querySelectorAll<HTMLElement>('cds-modal-actions cds-button'),
+  )
   buttons[buttons.length - 1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
 }
 function clickCancel() {
-  const buttons = Array.from(wrapper!.element.querySelectorAll<HTMLElement>('cds-modal-actions cds-button'))
+  const buttons = Array.from(
+    wrapper!.element.querySelectorAll<HTMLElement>('cds-modal-actions cds-button'),
+  )
   buttons[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
 }
 function submitEvents(): DeployAgentInput[] {
   return (wrapper!.emitted('submit') ?? []).map((e) => e[0] as DeployAgentInput)
 }
 function controlMessages(): string[] {
-  return Array.from(
-    wrapper!.element.querySelectorAll<HTMLElement>('cds-control-message'),
-  ).map((m) => m.textContent?.trim() ?? '')
+  return Array.from(wrapper!.element.querySelectorAll<HTMLElement>('cds-control-message')).map(
+    (m) => m.textContent?.trim() ?? '',
+  )
 }
 
 beforeEach(() => {
@@ -361,6 +365,7 @@ describe('DeployAgentDialog — submit emits deploy input', () => {
       templateVersionId: 'ver-old',
       resourcePoolId: 'pool-b',
       targetResourcePool: null, // empty selection → null (inherit source pool)
+      targetNetwork: null, // empty selection → null (inherit source NIC)
       hostname: 'agent-vm-01', // trimmed
       maxBudget: null, // blank budget → null
     })

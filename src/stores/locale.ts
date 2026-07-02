@@ -698,6 +698,46 @@ export const STRINGS: Dict = {
   'marketplace.form.cancel': { zh: '取消', en: 'Cancel' },
   'marketplace.form.error.name': { zh: '名称不能为空', en: 'Name is required' },
   'marketplace.form.error.version': { zh: '版本号不能为空', en: 'Version is required' },
+  'marketplace.form.resourcePool': { zh: '资源池', en: 'Resource pool' },
+  'marketplace.form.contentLibrary': { zh: '内容库', en: 'Content library' },
+  'marketplace.form.contentLibrarySelectPool': {
+    zh: '请先选择资源池',
+    en: 'Select a resource pool first',
+  },
+  'marketplace.form.contentLibraryLoading': { zh: '加载中…', en: 'Loading…' },
+  'marketplace.form.contentLibraryEmpty': {
+    zh: '该 vCenter 暂无内容库',
+    en: 'No content libraries on this vCenter',
+  },
+  'marketplace.form.contentLibraryError': {
+    zh: 'vCenter 连接失败，请先更新资源池凭据',
+    en: 'vCenter connection failed, please update resource pool credentials',
+  },
+  'marketplace.form.contentLibraryPlaceholder': {
+    zh: '请选择内容库',
+    en: 'Select content library',
+  },
+  'marketplace.form.ovaTemplate': { zh: 'OVA 模板', en: 'OVA template' },
+  'marketplace.form.ovaTemplateSelectPool': {
+    zh: '请先选择资源池',
+    en: 'Select a resource pool first',
+  },
+  'marketplace.form.ovaTemplateSelectLibrary': {
+    zh: '请先选择内容库',
+    en: 'Select a content library first',
+  },
+  'marketplace.form.ovaTemplateLoading': { zh: '加载中…', en: 'Loading…' },
+  'marketplace.form.ovaTemplateEmpty': {
+    zh: '内容库暂无 OVA 模板',
+    en: 'No OVA templates in content library',
+  },
+  'marketplace.form.ovaTemplatePlaceholder': { zh: '请选择 OVA 模板', en: 'Select OVA template' },
+  'marketplace.form.error.contentLibrary': {
+    zh: '请选择内容库',
+    en: 'Content library is required',
+  },
+  'marketplace.form.error.pool': { zh: '请选择资源池', en: 'Resource pool is required' },
+  'marketplace.form.error.ovaTemplate': { zh: '请选择 OVA 模板', en: 'OVA template is required' },
   'marketplace.form.error.ovaIdentifier': {
     zh: 'OVA 标识符不能为空',
     en: 'OVA identifier is required',
@@ -706,6 +746,8 @@ export const STRINGS: Dict = {
     zh: '标识符只能包含字母、数字、连字符、下划线和点',
     en: 'Identifier may only contain letters, digits, hyphens, underscores and dots',
   },
+  'marketplace.form.switchToCustom': { zh: '自定义', en: 'Advanced' },
+  'marketplace.form.switchToDefault': { zh: '返回默认', en: 'Default' },
 
   // 部署 Dialog (create-from-OVA)
   'marketplace.deploy.title': { zh: '从模板部署智能体', en: 'Deploy Agent from Template' },
@@ -733,6 +775,16 @@ export const STRINGS: Dict = {
     zh: '请选择 vSphere 放置资源池',
     en: 'Please select a vSphere placement pool',
   },
+  'marketplace.deploy.targetNetwork': {
+    zh: '目标网络/端口组（可选）',
+    en: 'Target network / portgroup (optional)',
+  },
+  'marketplace.deploy.targetNetworkPlaceholder': { zh: '请选择端口组', en: 'Select a portgroup' },
+  'marketplace.deploy.targetNetworkLoading': { zh: '正在加载网络…', en: 'Loading networks…' },
+  'marketplace.deploy.targetNetworkEmpty': {
+    zh: '该 vCenter 无可用网络（将继承源模板网卡）',
+    en: 'No networks available (clone inherits the source template NIC)',
+  },
   'marketplace.deploy.maxBudget': { zh: '预算上限（可选）', en: 'Budget cap (optional)' },
   'marketplace.deploy.maxBudgetPlaceholder': { zh: '如 100', en: 'e.g. 100' },
   'marketplace.deploy.submit': { zh: '开始部署', en: 'Deploy' },
@@ -747,6 +799,9 @@ export const STRINGS: Dict = {
     zh: '预算上限须为非负数字',
     en: 'Budget cap must be a non-negative number',
   },
+
+  'marketplace.detail.versions': { zh: '版本历史', en: 'Version History' },
+  'marketplace.detail.close': { zh: '关闭', en: 'Close' },
 
   // Model routing
   'modelRoute.title': { zh: '模型路由配置', en: 'Model Route Configuration' },
@@ -1361,6 +1416,23 @@ export const STRINGS: Dict = {
     zh: '当前后端尚未提供删除智能体配置接口：{name}',
     en: 'The backend does not expose a delete operation for this config yet: {name}',
   },
+
+  // agent-detail (AgentDetailView — /agents/:id)
+  'agentDetail.title': { zh: '智能体详情', en: 'Agent Detail' },
+  'agentDetail.backToList': { zh: '返回智能体列表', en: 'Back to Agent List' },
+  'agentDetail.loading': { zh: '加载中…', en: 'Loading…' },
+  'agentDetail.error': { zh: '加载失败，请稍后重试', en: 'Failed to load agent detail' },
+  'agentDetail.notFound': { zh: '智能体不存在或无权访问', en: 'Agent not found or access denied' },
+  'agentDetail.name': { zh: '名称', en: 'Name' },
+  'agentDetail.type': { zh: '类型', en: 'Type' },
+  'agentDetail.status': { zh: '状态', en: 'Status' },
+  'agentDetail.endpoint': { zh: 'VM 端点', en: 'VM Endpoint' },
+  'agentDetail.credentials': { zh: '运行账号', en: 'Run-as User' },
+  'agentDetail.apiKey': { zh: '网关密钥', en: 'Gateway Key' },
+  'agentDetail.template': { zh: '来源模板', en: 'Source Template' },
+  'agentDetail.resourcePoolId': { zh: '资源池', en: 'Resource Pool' },
+  'agentDetail.createdAt': { zh: '创建时间', en: 'Created At' },
+  'agentDetail.updatedAt': { zh: '更新时间', en: 'Updated At' },
 
   /* ============================================================
    * Change Password (forced modal — see plan/spec)
