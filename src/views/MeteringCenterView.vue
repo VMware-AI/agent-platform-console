@@ -14,7 +14,13 @@ import {
   type MeteringTimeRange,
   type ModelUsageRow,
 } from '@/api/graphql/queries/metering'
+import GatewaySpendPanel from '@/views/metering/GatewaySpendPanel.vue'
 import '@/components/icons'
+
+// Two data sources (LLD-15): the platform's own TokenUsage aggregate ("平台记录")
+// and litellm's authoritative spend fanned out across gateways ("网关账").
+type MeteringSource = 'platform' | 'gateway'
+const source = ref<MeteringSource>('platform')
 
 // UI time-range keys vs. backend MeteringTimeRange. The backend supports exactly
 // three ranges, so the UI only exposes those three. A "custom" date-range tab is
@@ -336,6 +342,30 @@ const rankingBars = computed<RankingBar[]>(() => {
       <p cds-text="body" class="desc muted">{{ locale.t('metering.description') }}</p>
     </header>
 
+    <div class="source-switch" role="group" :aria-label="locale.t('metering.source.label')">
+      <button
+        type="button"
+        class="source-tab"
+        :class="{ active: source === 'platform' }"
+        :aria-pressed="source === 'platform'"
+        @click="source = 'platform'"
+      >
+        {{ locale.t('metering.source.platform') }}
+      </button>
+      <button
+        type="button"
+        class="source-tab"
+        :class="{ active: source === 'gateway' }"
+        :aria-pressed="source === 'gateway'"
+        @click="source = 'gateway'"
+      >
+        {{ locale.t('metering.source.gateway') }}
+      </button>
+    </div>
+
+    <GatewaySpendPanel v-if="source === 'gateway'" />
+
+    <template v-if="source === 'platform'">
     <div class="filter-toolbar">
       <div class="range-group" role="group" :aria-label="locale.t('metering.range.label')">
         <button
@@ -600,10 +630,29 @@ const rankingBars = computed<RankingBar[]>(() => {
         </div>
       </div>
     </cds-card>
+    </template>
   </section>
 </template>
 
 <style scoped>
+.source-switch {
+  display: inline-flex;
+  margin-bottom: 1rem;
+  border: 1px solid var(--cds-alias-object-interaction-border, #ccc);
+  border-radius: 0.25rem;
+  overflow: hidden;
+}
+.source-tab {
+  padding: 0.4rem 1.1rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.source-tab.active {
+  background: var(--cds-alias-status-info, #0072a3);
+  color: #fff;
+}
 :root,
 [cds-theme] {
   --chart-color-input: #4b76bd;
