@@ -1075,7 +1075,7 @@ export const STRINGS: Dict = {
   'supplier.col.actions': { zh: '操作', en: 'Actions' },
   'supplier.status.enabled': { zh: '启用', en: 'Enabled' },
   'supplier.status.disabled': { zh: '未启用', en: 'Disabled' },
-  'supplier.empty': { zh: '暂未配置供应商模型', en: 'No supplier models configured' },
+  'supplier.empty': { zh: '暂无供应商模型', en: 'No supplier models' },
   'supplier.selected': { zh: '已选 {count} 项', en: '{count} selected' },
   'supplier.pagination.pageSize': { zh: '每页条数', en: 'Per page' },
   'supplier.pagination.summary': {
