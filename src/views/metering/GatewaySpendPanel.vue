@@ -47,8 +47,14 @@ function applyQuickRange(days: number) {
 }
 
 // Backend Time scalar is RFC3339 — convert the local input to an ISO instant.
-const isoFrom = computed(() => new Date(fromLocal.value).toISOString())
-const isoTo = computed(() => new Date(toLocal.value).toISOString())
+// Guard against a cleared/invalid field (new Date('').toISOString() throws) by
+// falling back to the default window so the query variable stays valid.
+function toIso(local: string, fallback: Date): string {
+  const d = new Date(local)
+  return Number.isNaN(d.getTime()) ? fallback.toISOString() : d.toISOString()
+}
+const isoFrom = computed(() => toIso(fromLocal.value, daysAgo(7)))
+const isoTo = computed(() => toIso(toLocal.value, new Date()))
 
 const variables = computed<SpendReportVars>(() => ({
   input: { from: isoFrom.value, to: isoTo.value, groupBy: groupBy.value },
@@ -119,7 +125,8 @@ function exportCsv() {
       [r.key, `"${r.label.replace(/"/g, '""')}"`, r.spend, r.promptTokens, r.completionTokens, r.totalTokens, r.requests].join(','),
     )
   }
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+  // UTF-8 BOM so Excel renders Chinese department/model labels correctly.
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
