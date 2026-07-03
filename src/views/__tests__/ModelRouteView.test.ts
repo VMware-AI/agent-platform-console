@@ -204,7 +204,7 @@ describe('ModelRouteView — list states', () => {
     await flushPromises()
 
     const placeholder = wrapper!.element.querySelector('cds-grid-placeholder')
-    expect(placeholder?.textContent).toContain(locale.t('modelRoute.empty'))
+    expect(placeholder?.textContent).toContain(locale.t('gatewayModel.empty'))
     expect(rows()).toHaveLength(0)
   })
 
@@ -219,13 +219,13 @@ describe('ModelRouteView — list states', () => {
     expect(first.textContent).toContain('Alpha Route')
     expect(first.textContent).toContain('Primary Gateway')
     // Strategy comes from the localized enum key, not the raw enum value.
-    expect(first.textContent).toContain(locale.t('modelRoute.strategy.ROUND_ROBIN'))
-    expect(first.textContent).toContain(locale.t('modelRoute.status.enabled'))
+    expect(first.textContent).toContain(locale.t('gatewayModel.strategy.ROUND_ROBIN'))
+    expect(first.textContent).toContain(locale.t('gatewayModel.status.enabled'))
 
     const second = rows()[1]
     expect(second.textContent).toContain('Beta Route')
-    expect(second.textContent).toContain(locale.t('modelRoute.strategy.RANDOM'))
-    expect(second.textContent).toContain(locale.t('modelRoute.status.disabled'))
+    expect(second.textContent).toContain(locale.t('gatewayModel.strategy.RANDOM'))
+    expect(second.textContent).toContain(locale.t('gatewayModel.status.disabled'))
   })
 
   it('shows only the first 3 models plus a +N overflow chip', async () => {
@@ -324,7 +324,7 @@ describe('ModelRouteView — create / update via form modal', () => {
       supportedModels: ['modelX', 'modelY'],
     })
 
-    expect(toastMessages()).toContain(locale.t('modelRoute.toast.created'))
+    expect(toastMessages()).toContain(locale.t('gatewayModel.toast.created'))
     expect(routesSlot.refetch).toHaveBeenCalled()
     expect(routeForm()).toBeNull() // closes on success
   })
@@ -338,7 +338,7 @@ describe('ModelRouteView — create / update via form modal', () => {
     // The "edit" row action opens the form pre-populated for ROUTE_A.
     const editBtn = Array.from(
       rows()[0].querySelectorAll<HTMLElement>('.row-action'),
-    ).find((b) => b.getAttribute('title') === locale.t('modelRoute.action.edit'))!
+    ).find((b) => b.getAttribute('title') === locale.t('gatewayModel.action.edit'))!
     editBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
@@ -359,8 +359,8 @@ describe('ModelRouteView — create / update via form modal', () => {
     expect(updateCalls).toHaveLength(1)
     const vars = (updateCalls[0][0] as { variables: { id: string } }).variables
     expect(vars.id).toBe('a')
-    expect(toastMessages()).toContain(locale.t('modelRoute.toast.updated'))
-    expect(toastMessages()).not.toContain(locale.t('modelRoute.toast.created'))
+    expect(toastMessages()).toContain(locale.t('gatewayModel.toast.updated'))
+    expect(toastMessages()).not.toContain(locale.t('gatewayModel.toast.created'))
   })
 
   it('surfaces the backend GraphQL error and keeps the dialog open on create failure', async () => {
@@ -382,7 +382,7 @@ describe('ModelRouteView — create / update via form modal', () => {
     await flushPromises()
 
     expect(toastMessages()).toContain('route name already exists')
-    expect(toastMessages()).not.toContain(locale.t('modelRoute.toast.created'))
+    expect(toastMessages()).not.toContain(locale.t('gatewayModel.toast.created'))
     expect(routeForm()).not.toBeNull() // stays open for retry
   })
 })
@@ -406,7 +406,7 @@ describe('ModelRouteView — strategy menu (updateModelRoute uiStrategy)', () =>
     // Pick a strategy different from the current ROUND_ROBIN.
     const randomOption = Array.from(
       menu!.querySelectorAll<HTMLElement>('.strategy-menu-option'),
-    ).find((b) => b.textContent?.includes(locale.t('modelRoute.strategy.RANDOM')))!
+    ).find((b) => b.textContent?.includes(locale.t('gatewayModel.strategy.RANDOM')))!
     randomOption.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
@@ -420,7 +420,7 @@ describe('ModelRouteView — strategy menu (updateModelRoute uiStrategy)', () =>
     expect(vars.id).toBe('a')
     expect(vars.input).toEqual({ uiStrategy: 'RANDOM' })
     expect(toastMessages()).toContain(
-      locale.t('modelRoute.toast.strategyUpdated').replace('{name}', 'Alpha Route'),
+      locale.t('gatewayModel.toast.strategyUpdated').replace('{name}', 'Alpha Route'),
     )
   })
 
@@ -438,7 +438,7 @@ describe('ModelRouteView — strategy menu (updateModelRoute uiStrategy)', () =>
       wrapper!.element.querySelector('.strategy-menu')
     const sameOption = Array.from(
       menu!.querySelectorAll<HTMLElement>('.strategy-menu-option'),
-    ).find((b) => b.textContent?.includes(locale.t('modelRoute.strategy.ROUND_ROBIN')))!
+    ).find((b) => b.textContent?.includes(locale.t('gatewayModel.strategy.ROUND_ROBIN')))!
     sameOption.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
@@ -461,7 +461,7 @@ describe('ModelRouteView — toggle enabled (setModelRouteEnabled)', () => {
 
     const toggleBtn = Array.from(
       rows()[0].querySelectorAll<HTMLElement>('.row-action'),
-    ).find((b) => b.getAttribute('title') === locale.t('modelRoute.action.disable'))!
+    ).find((b) => b.getAttribute('title') === locale.t('gatewayModel.action.disable'))!
     toggleBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
@@ -472,7 +472,7 @@ describe('ModelRouteView — toggle enabled (setModelRouteEnabled)', () => {
     expect(setCalls).toHaveLength(1)
     const vars = (setCalls[0][0] as { variables: { id: string; enabled: boolean } }).variables
     expect(vars).toEqual({ id: 'a', enabled: false })
-    expect(toastMessages()).toContain(locale.t('modelRoute.toast.disabled').replace('{count}', '1'))
+    expect(toastMessages()).toContain(locale.t('gatewayModel.toast.disabled').replace('{count}', '1'))
     expect(routesSlot.refetch).toHaveBeenCalled()
   })
 
@@ -486,7 +486,7 @@ describe('ModelRouteView — toggle enabled (setModelRouteEnabled)', () => {
 
     const toggleBtn = Array.from(
       rows()[0].querySelectorAll<HTMLElement>('.row-action'),
-    ).find((b) => b.getAttribute('title') === locale.t('modelRoute.action.enable'))!
+    ).find((b) => b.getAttribute('title') === locale.t('gatewayModel.action.enable'))!
     toggleBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
@@ -512,7 +512,7 @@ describe('ModelRouteView — delete flow', () => {
 
     const card = confirmBackdrop()
     expect(card).not.toBeNull()
-    expect(card?.getAttribute('aria-label')).toBe(locale.t('modelRoute.confirm.deleteTitle'))
+    expect(card?.getAttribute('aria-label')).toBe(locale.t('gatewayModel.confirm.deleteTitle'))
     expect(card?.textContent).toContain('Alpha Route')
   })
 
@@ -536,7 +536,7 @@ describe('ModelRouteView — delete flow', () => {
     )
     expect(deleteCalls).toHaveLength(1)
     expect((deleteCalls[0][0] as { variables: { id: string } }).variables.id).toBe('b')
-    expect(toastMessages()).toContain(locale.t('modelRoute.toast.deleted').replace('{count}', '1'))
+    expect(toastMessages()).toContain(locale.t('gatewayModel.toast.deleted').replace('{count}', '1'))
     expect(routesSlot.refetch).toHaveBeenCalled()
     expect(confirmBackdrop()).toBeNull()
   })
@@ -579,7 +579,7 @@ describe('ModelRouteView — delete flow', () => {
 
     expect(toastMessages()).toContain('forbidden: requires admin')
     expect(toastMessages()).not.toContain(
-      locale.t('modelRoute.toast.deleted').replace('{count}', '1'),
+      locale.t('gatewayModel.toast.deleted').replace('{count}', '1'),
     )
   })
 })
@@ -645,21 +645,21 @@ describe('ModelRouteView — batch actions', () => {
     await flushPromises()
     // Selection summary reflects 2 selected.
     expect(wrapper!.element.textContent).toContain(
-      locale.t('modelRoute.selected').replace('{count}', '2'),
+      locale.t('gatewayModel.selected').replace('{count}', '2'),
     )
 
     // Open the batch dropdown and click "enable selected".
-    const enableBtn = await openBatchMenuOption(locale.t('modelRoute.batch.enable'))
+    const enableBtn = await openBatchMenuOption(locale.t('gatewayModel.batch.enable'))
     enableBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
     expect(seen).toHaveLength(2)
     expect(seen.map((v) => v.id).sort()).toEqual(['a', 'b'])
     expect(seen.every((v) => v.enabled === true)).toBe(true)
-    expect(toastMessages()).toContain(locale.t('modelRoute.toast.enabled').replace('{count}', '2'))
+    expect(toastMessages()).toContain(locale.t('gatewayModel.toast.enabled').replace('{count}', '2'))
     // Selection cleared after a successful batch.
     expect(wrapper!.element.textContent).not.toContain(
-      locale.t('modelRoute.selected').replace('{count}', '2'),
+      locale.t('gatewayModel.selected').replace('{count}', '2'),
     )
   })
 
@@ -672,16 +672,16 @@ describe('ModelRouteView — batch actions', () => {
     selectRow(1)
     await flushPromises()
 
-    const deleteBtn = await openBatchMenuOption(locale.t('modelRoute.batch.delete'))
+    const deleteBtn = await openBatchMenuOption(locale.t('gatewayModel.batch.delete'))
     deleteBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
     const card = confirmBackdrop()
     expect(card).not.toBeNull()
     // The batch-delete title + body (interpolating the count) are shown.
-    expect(card?.getAttribute('aria-label')).toBe(locale.t('modelRoute.confirm.batchDeleteTitle'))
+    expect(card?.getAttribute('aria-label')).toBe(locale.t('gatewayModel.confirm.batchDeleteTitle'))
     expect(card?.textContent).toContain(
-      locale.t('modelRoute.confirm.batchDeleteBody').replace('{count}', '2'),
+      locale.t('gatewayModel.confirm.batchDeleteBody').replace('{count}', '2'),
     )
     // No delete mutation yet — confirmation pending.
     const deleteCalls = mutateSpy.mock.calls.filter(
@@ -704,7 +704,7 @@ describe('ModelRouteView — refresh + pagination', () => {
     await flushPromises()
 
     expect(routesSlot.refetch).toHaveBeenCalled()
-    expect(toastMessages()).toContain(locale.t('modelRoute.toast.refreshed'))
+    expect(toastMessages()).toContain(locale.t('gatewayModel.toast.refreshed'))
   })
 
   it('paginates: page size 10 shows the first page and "next" reveals the rest', async () => {

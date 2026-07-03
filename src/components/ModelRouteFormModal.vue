@@ -90,31 +90,31 @@ function submit() {
   <cds-modal :hidden="!open" :closable="!saving" size="md" @closeChange="close">
     <cds-modal-header>
       <h2 cds-text="title" class="modal-title">
-        {{ locale.t(isEditing ? 'modelRoute.form.editTitle' : 'modelRoute.form.createTitle') }}
+        {{ locale.t(isEditing ? 'gatewayModel.form.editTitle' : 'gatewayModel.form.createTitle') }}
       </h2>
     </cds-modal-header>
 
     <cds-modal-content>
       <form class="route-form" @submit.prevent="submit">
         <cds-input :status="attempted && !nameValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('modelRoute.form.name') }}</label>
+          <label>{{ locale.t('gatewayModel.form.name') }}</label>
           <input
             :value="name"
             maxlength="64"
             autocomplete="off"
-            :placeholder="locale.t('modelRoute.form.namePlaceholder')"
+            :placeholder="locale.t('gatewayModel.form.namePlaceholder')"
             @input="name = ($event.target as HTMLInputElement).value"
           />
           <cds-control-message v-if="attempted && !nameValid" status="error">
-            {{ locale.t('modelRoute.form.nameError') }}
+            {{ locale.t('gatewayModel.form.nameError') }}
           </cds-control-message>
         </cds-input>
 
         <cds-select :status="attempted && !gatewayValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('modelRoute.form.gateway') }}</label>
+          <label>{{ locale.t('gatewayModel.form.gateway') }}</label>
           <select
             :value="gatewayId"
-            :aria-label="locale.t('modelRoute.form.gateway')"
+            :aria-label="locale.t('gatewayModel.form.gateway')"
             @change="gatewayId = ($event.target as HTMLSelectElement).value"
           >
             <option v-for="gateway in gateways" :key="gateway.id" :value="gateway.id">
@@ -122,39 +122,39 @@ function submit() {
             </option>
           </select>
           <cds-control-message v-if="attempted && !gatewayValid" status="error">
-            {{ locale.t('modelRoute.form.gatewayError') }}
+            {{ locale.t('gatewayModel.form.gatewayError') }}
           </cds-control-message>
         </cds-select>
 
         <cds-select>
-          <label>{{ locale.t('modelRoute.form.strategy') }}</label>
+          <label>{{ locale.t('gatewayModel.form.strategy') }}</label>
           <select
             :value="strategy"
-            :aria-label="locale.t('modelRoute.form.strategy')"
+            :aria-label="locale.t('gatewayModel.form.strategy')"
             @change="strategy = ($event.target as HTMLSelectElement).value as ModelRouteStrategy"
           >
             <option v-for="item in MODEL_ROUTE_STRATEGIES" :key="item" :value="item">
-              {{ locale.t(`modelRoute.strategy.${item}`) }}
+              {{ locale.t(`gatewayModel.strategy.${item}`) }}
             </option>
           </select>
         </cds-select>
 
         <cds-textarea :status="attempted && !modelsValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('modelRoute.form.models') }}</label>
+          <label>{{ locale.t('gatewayModel.form.models') }}</label>
           <textarea
             :value="modelsText"
             rows="5"
-            :placeholder="locale.t('modelRoute.form.modelsPlaceholder')"
+            :placeholder="locale.t('gatewayModel.form.modelsPlaceholder')"
             @input="modelsText = ($event.target as HTMLTextAreaElement).value"
           ></textarea>
           <cds-control-message v-if="attempted && !modelsValid" status="error">
-            {{ locale.t('modelRoute.form.modelsError') }}
+            {{ locale.t('gatewayModel.form.modelsError') }}
           </cds-control-message>
         </cds-textarea>
 
         <cds-control>
           <cds-toggle>
-            <label>{{ locale.t('modelRoute.form.enabled') }}</label>
+            <label>{{ locale.t('gatewayModel.form.enabled') }}</label>
             <input
               type="checkbox"
               slot="input"
@@ -175,7 +175,7 @@ function submit() {
         :disabled="saving"
         @click="submit"
       >
-        {{ locale.t('modelRoute.form.submit') }}
+        {{ locale.t('gatewayModel.form.submit') }}
       </cds-button>
     </cds-modal-actions>
   </cds-modal>
