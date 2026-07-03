@@ -2,7 +2,8 @@
 /**
  * Deploy Agent Dialog — creates a NEW agent from an OVA template version. Picks a
  * version + target resource pool, names the agent, and optionally sets a cloud-init
- * hostname / per-key budget cap.
+ * hostname / per-key budget cap / one-time initial password (seeded into the VM's
+ * web console + OS account on first boot; never logged or toasted).
  *
  * The marketplace no longer picks or creates a virtual key: the backend ISSUES the
  * gateway key as part of provisioning and returns its secret ONCE
@@ -53,6 +54,11 @@ const hostname = ref('')
 // number, so the runtime type is string | number ('' when blank). Normalize via
 // String(...) before any string op (see budgetValid / submit).
 const maxBudget = ref<string | number>('')
+// One-time initial password seeded into the VM (web console + OS account).
+// Optional: blank = the VM is provisioned without initial credentials.
+// NEVER log or toast these values.
+const initialPassword = ref('')
+const initialPasswordConfirm = ref('')
 const attempted = ref(false)
 
 watch(
@@ -68,6 +74,8 @@ watch(
       targetNetwork.value = ''
       hostname.value = ''
       maxBudget.value = ''
+      initialPassword.value = ''
+      initialPasswordConfirm.value = ''
       attempted.value = false
     }
   },
@@ -148,9 +156,31 @@ const budgetValid = () => {
 // selection is allowed — the clone inherits the source template's pool.
 const targetPoolValid = () =>
   vspherePools.value.length === 0 || !!targetResourcePool.value
+// Mirrors the backend bounds on DeployAgentInput.initialPassword: ≥12 chars
+// (code points), ≤72 UTF-8 bytes (bcrypt/htpasswd limit), no leading/trailing
+// whitespace, no control characters (Unicode Cc), no ':' (htpasswd separator).
+// Blank passes — the field is optional (VM gets no initial credentials).
+const passwordValid = () => {
+  const pw = initialPassword.value
+  if (!pw) return true
+  if ([...pw].length < 12) return false
+  if (new TextEncoder().encode(pw).length > 72) return false
+  if (pw !== pw.trim()) return false
+  if (/\p{Cc}/u.test(pw)) return false
+  return !pw.includes(':')
+}
+const passwordConfirmValid = () => initialPasswordConfirm.value === initialPassword.value
 
 function formValid(): boolean {
-  return versionValid() && poolValid() && nameValid() && targetPoolValid() && budgetValid()
+  return (
+    versionValid() &&
+    poolValid() &&
+    nameValid() &&
+    targetPoolValid() &&
+    budgetValid() &&
+    passwordValid() &&
+    passwordConfirmValid()
+  )
 }
 
 function submit() {
@@ -170,6 +200,9 @@ function submit() {
     targetNetwork: targetNetwork.value || null,
     hostname: hostname.value.trim() || null,
     maxBudget: budget,
+    // Passed through verbatim (no trim — validation already rejects edge
+    // whitespace); blank = provision without initial credentials.
+    initialPassword: initialPassword.value || null,
   })
 }
 
@@ -265,6 +298,43 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
             :placeholder="locale.t('marketplace.deploy.hostnamePlaceholder')"
           />
         </cds-input>
+
+        <!-- 初始密码（可选）：一次性种入 VM 的 Web 控制台 + OS 账号首启凭据。
+             约束与后端一致（≥12 字符、≤72 UTF-8 字节、无首尾空白/控制字符/冒号）。
+             绝不写入日志或 toast。 -->
+        <cds-password :status="attempted && !passwordValid() ? 'error' : 'neutral'">
+          <label>{{ locale.t('marketplace.deploy.initialPassword') }}</label>
+          <input
+            slot="input"
+            type="password"
+            autocomplete="new-password"
+            :value="initialPassword"
+            :placeholder="locale.t('marketplace.deploy.initialPasswordPlaceholder')"
+            @input="(e: Event) => (initialPassword = (e.target as HTMLInputElement).value)"
+          />
+          <cds-control-message v-if="attempted && !passwordValid()" status="error">
+            {{ locale.t('marketplace.deploy.error.initialPassword') }}
+          </cds-control-message>
+        </cds-password>
+
+        <!-- 确认初始密码 -->
+        <cds-password :status="attempted && !passwordConfirmValid() ? 'error' : 'neutral'">
+          <label>{{ locale.t('marketplace.deploy.initialPasswordConfirm') }}</label>
+          <input
+            slot="input"
+            type="password"
+            autocomplete="new-password"
+            :value="initialPasswordConfirm"
+            @input="(e: Event) => (initialPasswordConfirm = (e.target as HTMLInputElement).value)"
+          />
+          <cds-control-message v-if="attempted && !passwordConfirmValid()" status="error">
+            {{ locale.t('marketplace.deploy.error.initialPasswordConfirm') }}
+          </cds-control-message>
+        </cds-password>
+
+        <div class="full-row password-hint" cds-text="caption">
+          {{ locale.t('marketplace.deploy.initialPasswordHint') }}
+        </div>
 
         <!-- vSphere 放置资源池：真实 OVA 模板无源资源池，部署必须指定一个放置池。
              列表来自所选平台资源池对应 vCenter 的实时枚举；为空（vcsim/常规 VM）时
@@ -372,6 +442,10 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
 }
 .deploy-info {
   margin: 0 0 4px 0;
+}
+.password-hint {
+  color: var(--cds-global-typography-color-300, #666);
+  margin-top: -4px;
 }
 .modal-title {
   margin: 0;

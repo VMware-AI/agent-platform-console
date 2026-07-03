@@ -802,6 +802,30 @@ export const STRINGS: Dict = {
   },
   'marketplace.deploy.maxBudget': { zh: '预算上限（可选）', en: 'Budget cap (optional)' },
   'marketplace.deploy.maxBudgetPlaceholder': { zh: '如 100', en: 'e.g. 100' },
+  'marketplace.deploy.initialPassword': {
+    zh: '初始密码（可选）',
+    en: 'Initial password (optional)',
+  },
+  'marketplace.deploy.initialPasswordPlaceholder': {
+    zh: '至少 12 个字符',
+    en: 'At least 12 characters',
+  },
+  'marketplace.deploy.initialPasswordConfirm': {
+    zh: '确认初始密码',
+    en: 'Confirm initial password',
+  },
+  'marketplace.deploy.initialPasswordHint': {
+    zh: '初始密码将种入虚拟机的 Web 控制台与系统账号，首次登录后请立即修改；留空则不设置初始凭据。',
+    en: 'Seeds the VM’s web console and OS account — change it immediately after first login. Leave blank to provision without initial credentials.',
+  },
+  'marketplace.deploy.error.initialPassword': {
+    zh: '密码须至少 12 个字符、UTF-8 不超过 72 字节，且不含首尾空白、控制字符或冒号 ":"',
+    en: 'Password must be at least 12 characters, at most 72 UTF-8 bytes, with no leading/trailing whitespace, control characters, or ":"',
+  },
+  'marketplace.deploy.error.initialPasswordConfirm': {
+    zh: '两次输入的密码不一致',
+    en: 'Passwords do not match',
+  },
   'marketplace.deploy.submit': { zh: '开始部署', en: 'Deploy' },
   'marketplace.deploy.cancel': { zh: '取消', en: 'Cancel' },
   'marketplace.deploy.error.version': {

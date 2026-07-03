@@ -179,6 +179,14 @@ export interface DeployAgentInput {
   maxBudget?: number | null
   /** Optional target portgroup path for the agent VM's NIC (VsphereNetwork.path). */
   targetNetwork?: string | null
+  /**
+   * Optional one-time initial password seeded into the VM on first boot (web
+   * console htpasswd + OS user credentials; see backend PR #112). Bounds must
+   * match the backend: ≥12 chars, ≤72 UTF-8 bytes, no leading/trailing
+   * whitespace, no control characters, no ':'. Null/empty = the VM is
+   * provisioned without initial credentials.
+   */
+  initialPassword?: string | null
 }
 
 export interface DeployAgentPayload {
