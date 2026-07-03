@@ -29,7 +29,7 @@ export const STRINGS: Dict = {
   'nav.agents.list': { zh: '智能体列表', en: 'Agent List' },
   'nav.agents.config': { zh: '智能体配置', en: 'Agent Config' },
   'nav.agents.marketplace': { zh: '智能体市场', en: 'Marketplace' },
-  'nav.gateway.route': { zh: '模型路由', en: 'Model Routes' },
+  'nav.gateway.route': { zh: '网关模型', en: 'Gateway Models' },
   'nav.gateway.key': { zh: '虚拟密钥', en: 'Virtual Keys' },
   'nav.gateway.supplier': { zh: '供应商模型', en: 'Supplier Models' },
   'nav.obs.metering': { zh: '计量中心', en: 'Metering' },
