@@ -1045,8 +1045,8 @@ export const STRINGS: Dict = {
   // Rate-limit policies
   'supplier.title': { zh: '供应商模型管理', en: 'Supplier Model Management' },
   'supplier.description': {
-    zh: '管理网关上的策略配置（含限流、路由等），控制请求速率、并发与转发规则。',
-    en: 'Manage gateway policy configurations (rate limiting, routing, etc.) to control request rates, concurrency, and forwarding rules.',
+    zh: '管理上游供应商提供的模型配置（含限流、Token 计费与配额），控制平台侧请求速率与并发上限。',
+    en: 'Manage upstream supplier model configurations (rate limits, token billing and quotas) that control platform-side request rates and concurrency caps.',
   },
   'supplier.table.label': { zh: '限流策略列表', en: 'Rate-limit policies' },
   'supplier.sort': { zh: '排序：{column}', en: 'Sort {column}' },
@@ -1070,12 +1070,12 @@ export const STRINGS: Dict = {
   'supplier.batch.disabled': { zh: '请先选择限流策略', en: 'Select rate-limit policies first' },
   'supplier.col.selectAll': { zh: '选择当前页全部策略', en: 'Select all policies on this page' },
   'supplier.col.selectPolicy': { zh: '选择策略 {name}', en: 'Select policy {name}' },
-  'supplier.col.name': { zh: '策略名称', en: 'Policy Name' },
+  'supplier.col.name': { zh: '模型名称', en: 'Model Name' },
   'supplier.col.status': { zh: '状态', en: 'Status' },
   'supplier.col.actions': { zh: '操作', en: 'Actions' },
   'supplier.status.enabled': { zh: '启用', en: 'Enabled' },
   'supplier.status.disabled': { zh: '未启用', en: 'Disabled' },
-  'supplier.empty': { zh: '暂无限流策略', en: 'No rate-limit policies' },
+  'supplier.empty': { zh: '暂未配置供应商模型', en: 'No supplier models configured' },
   'supplier.selected': { zh: '已选 {count} 项', en: '{count} selected' },
   'supplier.pagination.pageSize': { zh: '每页条数', en: 'Per page' },
   'supplier.pagination.summary': {
@@ -1085,7 +1085,7 @@ export const STRINGS: Dict = {
   'supplier.pagination.label': { zh: '限流策略分页', en: 'Rate-limit policy pagination' },
   'supplier.form.createTitle': { zh: '新建限流策略', en: 'New Rate-limit Policy' },
   'supplier.form.editTitle': { zh: '编辑限流策略', en: 'Edit Rate-limit Policy' },
-  'supplier.form.name': { zh: '策略名称', en: 'Policy Name' },
+  'supplier.form.name': { zh: '模型名称', en: 'Model Name' },
   'supplier.form.namePlaceholder': {
     zh: '例如 agent_openclaw_limit',
     en: 'e.g. agent_openclaw_limit',

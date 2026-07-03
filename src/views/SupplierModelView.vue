@@ -559,7 +559,7 @@ function goToPage(page: number) {
         </cds-grid-row>
 
         <cds-grid-placeholder v-if="visiblePolicies.length === 0">
-          <cds-icon shape="filter" size="xl"></cds-icon>
+          <cds-icon shape="host" size="xl"></cds-icon>
           <p cds-text="subsection">{{ locale.t('supplier.empty') }}</p>
         </cds-grid-placeholder>
 
