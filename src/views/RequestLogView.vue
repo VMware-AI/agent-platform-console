@@ -34,17 +34,39 @@ const appliedRequestId = ref('')
 const pageSize = ref<PageSize>(10)
 const currentPage = ref(1)
 const expandedId = ref<string | null>(null)
+const customFrom = ref('')
+const customTo = ref('')
+const userInput = ref('')
+const appliedUserId = ref('')
 
 const offset = computed(() => (currentPage.value - 1) * pageSize.value)
 
-const serverStatusCode = computed<number | null>(() => (statusFilter.value === '200' ? 200 : null))
+// Time window pushed to the server (from/to) instead of client-side filtering,
+// which combined with offset paging gave uneven pages + wrong "has more" (LLD-15 T5).
+const serverWindow = computed<{ from: string | null; to: string | null }>(() => {
+  if (timeWindow.value === 'custom') {
+    return {
+      from: customFrom.value ? new Date(customFrom.value).toISOString() : null,
+      to: customTo.value ? new Date(customTo.value).toISOString() : null,
+    }
+  }
+  const hours = timeWindow.value === '1h' ? 1 : 6
+  return { from: new Date(Date.now() - hours * 60 * 60 * 1000).toISOString(), to: null }
+})
 
 const filter = computed<RequestLogFilterInput | null>(() => {
   const next: RequestLogFilterInput = {}
-  if (serverStatusCode.value !== null) next.statusCode = serverStatusCode.value
+  // 200 = exact success; 4xx/5xx map to the server-side status band.
+  if (statusFilter.value === '200') next.statusCode = 200
+  else if (statusFilter.value === '4xx') next.statusClass = 'CLIENT_ERROR'
+  else if (statusFilter.value === '5xx') next.statusClass = 'SERVER_ERROR'
   if (appliedModel.value.trim()) next.model = appliedModel.value.trim()
   if (appliedAgentId.value.trim()) next.agentId = appliedAgentId.value.trim()
   if (appliedRequestId.value.trim()) next.requestId = appliedRequestId.value.trim()
+  if (appliedUserId.value.trim()) next.userId = appliedUserId.value.trim()
+  const w = serverWindow.value
+  if (w.from) next.from = w.from
+  if (w.to) next.to = w.to
   return Object.keys(next).length > 0 ? next : null
 })
 
@@ -63,28 +85,37 @@ onError((error) => {
   toast.error(graphqlErrorMessage(error, locale.t('requestLog.toast.loadFailed')))
 })
 
-const logs = computed<RequestLogNode[]>(() => result.value?.requestLogs ?? [])
-const hasNextPage = computed(() => logs.value.length === pageSize.value)
+const logs = computed<RequestLogNode[]>(() => result.value?.requestLogs.items ?? [])
+const totalCount = computed(() => result.value?.requestLogs.total ?? 0)
+// Server applies every filter now, so render exactly what came back.
+const visibleLogs = computed(() => logs.value)
+const hasNextPage = computed(() => offset.value + logs.value.length < totalCount.value)
 const hasPrevPage = computed(() => currentPage.value > 1)
-
-function matchesTimeWindow(log: RequestLogNode): boolean {
-  if (timeWindow.value === 'custom') return true
-  const createdAt = new Date(log.createdAt).getTime()
-  if (Number.isNaN(createdAt)) return true
-  const hours = timeWindow.value === '1h' ? 1 : 6
-  return Date.now() - createdAt <= hours * 60 * 60 * 1000
-}
-
-function matchesStatusFilter(log: RequestLogNode): boolean {
-  if (statusFilter.value === 'all') return true
-  if (statusFilter.value === '200') return log.statusCode === 200
-  if (statusFilter.value === '4xx') return log.statusCode >= 400 && log.statusCode < 500
-  if (statusFilter.value === '5xx') return log.statusCode >= 500 && log.statusCode < 600
-  return true
-}
-
-const visibleLogs = computed(() => logs.value.filter(matchesTimeWindow).filter(matchesStatusFilter))
 const isEmpty = computed(() => !loading.value && visibleLogs.value.length === 0)
+
+function exportCsv() {
+  if (logs.value.length === 0) {
+    toast.info(locale.t('requestLog.export.empty'))
+    return
+  }
+  const header = ['createdAt', 'requestId', 'userId', 'agentId', 'model', 'inputTokens', 'outputTokens', 'latencyMs', 'statusCode']
+  const cell = (v: string | number | null) => `"${String(v ?? '').replace(/"/g, '""')}"`
+  const lines = [header.join(',')]
+  for (const l of logs.value) {
+    lines.push(
+      [l.createdAt, l.requestId, l.userId, l.agentId, l.model, l.inputTokens, l.outputTokens, l.latencyMs, l.statusCode]
+        .map(cell)
+        .join(','),
+    )
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `request-logs-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 const rangeText = computed(() => {
   if (visibleLogs.value.length === 0) return locale.t('requestLog.pagination.empty')
@@ -102,13 +133,15 @@ const anyFilterActive = computed(
     timeWindow.value !== '1h' ||
     Boolean(appliedModel.value.trim()) ||
     Boolean(appliedAgentId.value.trim()) ||
-    Boolean(appliedRequestId.value.trim()),
+    Boolean(appliedRequestId.value.trim()) ||
+    Boolean(appliedUserId.value.trim()),
 )
 
 function applyToolbarFilters() {
   appliedModel.value = modelInput.value.trim()
   appliedAgentId.value = agentIdInput.value.trim()
   appliedRequestId.value = requestIdInput.value.trim()
+  appliedUserId.value = userInput.value.trim()
   currentPage.value = 1
 }
 
@@ -118,9 +151,13 @@ function clearAllFilters() {
   modelInput.value = ''
   agentIdInput.value = ''
   requestIdInput.value = ''
+  userInput.value = ''
   appliedModel.value = ''
   appliedAgentId.value = ''
   appliedRequestId.value = ''
+  appliedUserId.value = ''
+  customFrom.value = ''
+  customTo.value = ''
   currentPage.value = 1
 }
 
@@ -365,6 +402,30 @@ async function copyRequestId(value: string) {
             @change="applyToolbarFilters"
           />
         </label>
+        <input
+          v-model="userInput"
+          class="control-input"
+          type="text"
+          :placeholder="locale.t('requestLog.filter.userPlaceholder')"
+          :aria-label="locale.t('requestLog.filter.userPlaceholder')"
+          @keyup.enter="applyToolbarFilters"
+          @change="applyToolbarFilters"
+        />
+        <cds-button action="outline" size="sm" @click="exportCsv">
+          <cds-icon shape="export" size="sm" aria-hidden="true"></cds-icon>
+          {{ locale.t('requestLog.action.export') }}
+        </cds-button>
+      </div>
+
+      <div v-if="timeWindow === 'custom'" class="custom-range">
+        <label class="time-field">
+          <span>{{ locale.t('requestLog.filter.from') }}</span>
+          <input type="datetime-local" v-model="customFrom" @change="currentPage = 1" />
+        </label>
+        <label class="time-field">
+          <span>{{ locale.t('requestLog.filter.to') }}</span>
+          <input type="datetime-local" v-model="customTo" @change="currentPage = 1" />
+        </label>
       </div>
 
       <div v-if="anyFilterActive" class="filter-summary">
@@ -380,6 +441,7 @@ async function copyRequestId(value: string) {
             <col class="time-col" />
             <col class="request-col" />
             <col class="agent-col" />
+            <col class="agent-col" />
             <col class="model-col" />
             <col class="token-col" />
             <col class="token-col" />
@@ -392,6 +454,7 @@ async function copyRequestId(value: string) {
               <th scope="col">{{ locale.t('requestLog.col.time') }}</th>
               <th scope="col">{{ locale.t('requestLog.col.requestId') }}</th>
               <th scope="col">{{ locale.t('requestLog.col.agentId') }}</th>
+              <th scope="col">{{ locale.t('requestLog.col.user') }}</th>
               <th scope="col">{{ locale.t('requestLog.col.model') }}</th>
               <th scope="col">{{ locale.t('requestLog.col.inputTokens') }}</th>
               <th scope="col">{{ locale.t('requestLog.col.outputTokens') }}</th>
@@ -418,6 +481,9 @@ async function copyRequestId(value: string) {
                 </td>
                 <td>
                   <span class="ellipsis" :title="dash(log.agentId)">{{ dash(log.agentId) }}</span>
+                </td>
+                <td>
+                  <span class="ellipsis mono" :title="dash(log.userId)">{{ log.userId ? log.userId.slice(0, 8) : '—' }}</span>
                 </td>
                 <td>
                   <span class="ellipsis" :title="dash(log.model)">{{ dash(log.model) }}</span>
@@ -450,20 +516,20 @@ async function copyRequestId(value: string) {
                 </td>
               </tr>
               <tr v-if="expandedId === log.id && log.detail" class="detail-row">
-                <td colspan="9">
+                <td colspan="10">
                   <pre class="detail-text">{{ detailText(log.detail) }}</pre>
                 </td>
               </tr>
             </template>
 
             <tr v-if="loading && visibleLogs.length === 0">
-              <td colspan="9" class="placeholder-cell">
+              <td colspan="10" class="placeholder-cell">
                 <cds-icon shape="history" size="xl" class="placeholder-icon"></cds-icon>
                 {{ locale.t('requestLog.loading') }}
               </td>
             </tr>
             <tr v-else-if="isEmpty">
-              <td colspan="9" class="placeholder-cell">
+              <td colspan="10" class="placeholder-cell">
                 <cds-icon shape="filter" size="xl" class="placeholder-icon"></cds-icon>
                 {{ locale.t('requestLog.empty') }}
               </td>
@@ -509,6 +575,20 @@ async function copyRequestId(value: string) {
 </template>
 
 <style scoped>
+.custom-range {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0 0 0.5rem;
+}
+.custom-range .time-field {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.7rem;
+  gap: 0.15rem;
+}
+.custom-range .time-field input {
+  padding: 0.25rem 0.4rem;
+}
 .request-log-page {
   height: 100%;
   min-height: 0;
