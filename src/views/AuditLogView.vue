@@ -10,6 +10,7 @@ import {
   type AuditLogsResult,
   type AuditLogsVars,
 } from '@/api/graphql/queries/audit-logs'
+import { apolloClient } from '@/api/graphql/client'
 import '@/components/icons'
 
 const locale = useLocaleStore()
@@ -77,6 +78,7 @@ const appliedSearch = ref('')
 const appliedActorUserId = ref('')
 const resultFilter = ref<'all' | 'success' | 'fail'>('all')
 const resourceTypeInput = ref('')
+const appliedResourceType = ref('')
 const customFrom = ref('')
 const customTo = ref('')
 
@@ -102,7 +104,7 @@ const queryVars = computed<AuditLogsVars>(() => ({
     from: serverWindow.value.from,
     to: serverWindow.value.to,
     result: resultFilter.value === 'all' ? null : resultFilter.value,
-    resourceType: resourceTypeInput.value.trim() || null,
+    resourceType: appliedResourceType.value.trim() || null,
   },
   page: {
     limit: pageSize.value,
@@ -142,7 +144,7 @@ const hasActiveFilters = computed(
     actionPrefix.value !== null ||
     timeWindow.value !== '1d' ||
     resultFilter.value !== 'all' ||
-    Boolean(resourceTypeInput.value.trim()) ||
+    Boolean(appliedResourceType.value.trim()) ||
     Boolean(appliedSearch.value.trim()) ||
     Boolean(appliedActorUserId.value.trim()),
 )
@@ -158,6 +160,7 @@ const errorMessage = computed(() =>
 function applyFilters() {
   appliedSearch.value = searchInput.value.trim()
   appliedActorUserId.value = actorInput.value.trim()
+  appliedResourceType.value = resourceTypeInput.value.trim()
   currentPage.value = 1
 }
 
@@ -170,6 +173,9 @@ function clearFilters() {
   appliedActorUserId.value = ''
   resultFilter.value = 'all'
   resourceTypeInput.value = ''
+  appliedResourceType.value = ''
+  customFrom.value = ''
+  customTo.value = ''
   currentPage.value = 1
 }
 
@@ -178,34 +184,73 @@ function onResultChange(event: Event) {
   currentPage.value = 1
 }
 
-function exportCsv() {
-  if (logs.value.length === 0) {
-    toast.info(locale.t('auditLog.export.empty'))
-    return
+// Export streams EVERY row matching the active filters (not just the visible
+// page) via one-shot apolloClient.query() paging, capped so a huge range can't
+// exhaust the tab. Mirrors the app's useAgentExport convention.
+const EXPORT_PAGE_SIZE = 500
+const EXPORT_CAP = 5000
+const exportingCsv = ref(false)
+
+async function fetchAllAuditLogs(): Promise<{ rows: AuditLogNode[]; total: number }> {
+  const filter = queryVars.value.filter
+  const rows: AuditLogNode[] = []
+  let total = 0
+  for (let offset = 0; offset < EXPORT_CAP; offset += EXPORT_PAGE_SIZE) {
+    const { data } = await apolloClient.query<AuditLogsResult, AuditLogsVars>({
+      query: AUDIT_LOGS_QUERY,
+      variables: { filter, page: { limit: EXPORT_PAGE_SIZE, offset } },
+      fetchPolicy: 'network-only',
+    })
+    total = data.auditLogs.total
+    rows.push(...data.auditLogs.items)
+    if (rows.length >= total || data.auditLogs.items.length < EXPORT_PAGE_SIZE) break
   }
-  const header = ['createdAt', 'actor', 'action', 'resourceType', 'resourceId', 'ip', 'result']
-  const cell = (v: string | null) => `"${(v ?? '').replace(/"/g, '""')}"`
-  const lines = [header.join(',')]
-  for (const l of logs.value) {
-    lines.push(
-      [
-        cell(l.createdAt),
-        cell(l.actorName ?? l.actorUserId),
-        cell(l.action),
-        cell(l.resourceType),
-        cell(l.resourceId),
-        cell(l.ip),
-        cell(l.result),
-      ].join(','),
-    )
+  return { rows, total }
+}
+
+async function exportCsv() {
+  if (exportingCsv.value) return
+  exportingCsv.value = true
+  try {
+    const { rows, total } = await fetchAllAuditLogs()
+    if (rows.length === 0) {
+      toast.info(locale.t('auditLog.export.empty'))
+      return
+    }
+    const header = ['createdAt', 'actor', 'action', 'resourceType', 'resourceId', 'ip', 'result']
+    const cell = (v: string | null) => `"${(v ?? '').replace(/"/g, '""')}"`
+    const lines = [header.join(',')]
+    for (const l of rows) {
+      lines.push(
+        [
+          cell(l.createdAt),
+          cell(l.actorName ?? l.actorUserId),
+          cell(l.action),
+          cell(l.resourceType),
+          cell(l.resourceId),
+          cell(l.ip),
+          cell(l.result),
+        ].join(','),
+      )
+    }
+    // UTF-8 BOM so Excel renders Chinese actor/resource names correctly.
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `audit-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    if (rows.length < total) {
+      toast.info(locale.t('auditLog.export.truncated').replace('{count}', String(rows.length)))
+    } else {
+      toast.success(locale.t('auditLog.export.success').replace('{count}', String(rows.length)))
+    }
+  } catch (err) {
+    toast.error(graphqlErrorMessage(err, locale.t('auditLog.export.fail')))
+  } finally {
+    exportingCsv.value = false
   }
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `audit-${new Date().toISOString().slice(0, 10)}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
 function selectTimeWindow(next: TimeWindow) {
@@ -437,13 +482,13 @@ async function copyResourceId(value: string | null) {
           type="text"
           :placeholder="locale.t('auditLog.filter.resourceTypePlaceholder')"
           :aria-label="locale.t('auditLog.filter.resourceTypePlaceholder')"
-          @keyup.enter="currentPage = 1"
-          @change="currentPage = 1"
+          @keyup.enter="applyFilters"
+          @change="applyFilters"
         />
 
-        <cds-button action="outline" size="sm" @click="exportCsv">
+        <cds-button action="outline" size="sm" :disabled="exportingCsv" @click="exportCsv">
           <cds-icon shape="export" size="sm" aria-hidden="true"></cds-icon>
-          {{ locale.t('auditLog.action.export') }}
+          {{ exportingCsv ? locale.t('auditLog.export.inProgress') : locale.t('auditLog.action.export') }}
         </cds-button>
       </div>
 

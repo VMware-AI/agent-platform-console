@@ -11,6 +11,7 @@ import {
   type RequestLogsResult,
   type RequestLogsVars,
 } from '@/api/graphql/queries/request-logs'
+import { apolloClient } from '@/api/graphql/client'
 import '@/components/icons'
 
 const locale = useLocaleStore()
@@ -93,28 +94,67 @@ const hasNextPage = computed(() => offset.value + logs.value.length < totalCount
 const hasPrevPage = computed(() => currentPage.value > 1)
 const isEmpty = computed(() => !loading.value && visibleLogs.value.length === 0)
 
-function exportCsv() {
-  if (logs.value.length === 0) {
-    toast.info(locale.t('requestLog.export.empty'))
-    return
+// Export streams EVERY row matching the active filters (not just the visible
+// page) via one-shot apolloClient.query() paging, capped so a huge range can't
+// exhaust the tab. Mirrors the app's useAgentExport convention.
+const EXPORT_PAGE_SIZE = 500
+const EXPORT_CAP = 5000
+const exportingCsv = ref(false)
+
+async function fetchAllRequestLogs(): Promise<{ rows: RequestLogNode[]; total: number }> {
+  const activeFilter = filter.value
+  const rows: RequestLogNode[] = []
+  let total = 0
+  for (let offset = 0; offset < EXPORT_CAP; offset += EXPORT_PAGE_SIZE) {
+    const { data } = await apolloClient.query<RequestLogsResult, RequestLogsVars>({
+      query: REQUEST_LOGS_QUERY,
+      variables: { filter: activeFilter, page: { limit: EXPORT_PAGE_SIZE, offset } },
+      fetchPolicy: 'network-only',
+    })
+    total = data.requestLogs.total
+    rows.push(...data.requestLogs.items)
+    if (rows.length >= total || data.requestLogs.items.length < EXPORT_PAGE_SIZE) break
   }
-  const header = ['createdAt', 'requestId', 'userId', 'agentId', 'model', 'inputTokens', 'outputTokens', 'latencyMs', 'statusCode']
-  const cell = (v: string | number | null) => `"${String(v ?? '').replace(/"/g, '""')}"`
-  const lines = [header.join(',')]
-  for (const l of logs.value) {
-    lines.push(
-      [l.createdAt, l.requestId, l.userId, l.agentId, l.model, l.inputTokens, l.outputTokens, l.latencyMs, l.statusCode]
-        .map(cell)
-        .join(','),
-    )
+  return { rows, total }
+}
+
+async function exportCsv() {
+  if (exportingCsv.value) return
+  exportingCsv.value = true
+  try {
+    const { rows, total } = await fetchAllRequestLogs()
+    if (rows.length === 0) {
+      toast.info(locale.t('requestLog.export.empty'))
+      return
+    }
+    const header = ['createdAt', 'requestId', 'userId', 'agentId', 'model', 'inputTokens', 'outputTokens', 'latencyMs', 'statusCode']
+    const cell = (v: string | number | null) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const lines = [header.join(',')]
+    for (const l of rows) {
+      lines.push(
+        [l.createdAt, l.requestId, l.userId, l.agentId, l.model, l.inputTokens, l.outputTokens, l.latencyMs, l.statusCode]
+          .map(cell)
+          .join(','),
+      )
+    }
+    // UTF-8 BOM so Excel renders any Chinese fields correctly.
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `request-logs-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    if (rows.length < total) {
+      toast.info(locale.t('requestLog.export.truncated').replace('{count}', String(rows.length)))
+    } else {
+      toast.success(locale.t('requestLog.export.success').replace('{count}', String(rows.length)))
+    }
+  } catch (err) {
+    toast.error(graphqlErrorMessage(err, locale.t('requestLog.export.fail')))
+  } finally {
+    exportingCsv.value = false
   }
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `request-logs-${new Date().toISOString().slice(0, 10)}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
 const rangeText = computed(() => {
@@ -167,12 +207,8 @@ function selectTimeWindow(next: TimeWindow) {
 }
 
 function selectStatusFilter(next: StatusFilter) {
+  // Toggle: clicking the active band clears back to "all".
   statusFilter.value = statusFilter.value === next ? 'all' : next
-  currentPage.value = 1
-}
-
-function onStatusSelect(event: Event) {
-  statusFilter.value = (event.target as HTMLSelectElement).value as StatusFilter
   currentPage.value = 1
 }
 
@@ -350,18 +386,6 @@ async function copyRequestId(value: string) {
           @keyup.enter="applyToolbarFilters"
           @change="applyToolbarFilters"
         />
-        <cds-select control-width="shrink" class="status-select">
-          <select
-            :value="statusFilter"
-            :aria-label="locale.t('requestLog.filter.status')"
-            @change="onStatusSelect"
-          >
-            <option value="all">{{ locale.t('requestLog.filter.allStatus') }}</option>
-            <option value="200">200</option>
-            <option value="4xx">4xx</option>
-            <option value="5xx">5xx</option>
-          </select>
-        </cds-select>
         <div class="status-chips" :aria-label="locale.t('requestLog.filter.statusGroup')">
           <button
             type="button"
@@ -411,9 +435,9 @@ async function copyRequestId(value: string) {
           @keyup.enter="applyToolbarFilters"
           @change="applyToolbarFilters"
         />
-        <cds-button action="outline" size="sm" @click="exportCsv">
+        <cds-button action="outline" size="sm" :disabled="exportingCsv" @click="exportCsv">
           <cds-icon shape="export" size="sm" aria-hidden="true"></cds-icon>
-          {{ locale.t('requestLog.action.export') }}
+          {{ exportingCsv ? locale.t('requestLog.export.inProgress') : locale.t('requestLog.action.export') }}
         </cds-button>
       </div>
 
@@ -729,9 +753,6 @@ async function copyRequestId(value: string) {
   outline: 2px solid color-mix(in srgb, var(--cds-alias-object-interaction-color, #0072a3) 20%, transparent);
   outline-offset: 1px;
 }
-.status-select {
-  flex: 0 0 auto;
-}
 .status-chips {
   gap: 4px;
 }
@@ -914,11 +935,12 @@ async function copyRequestId(value: string) {
 .status-pill[data-tone='success'] .status-dot {
   background: var(--cds-alias-status-success, #247144);
 }
+/* 4xx (client error) = amber, distinct from 5xx danger red. */
 .status-pill[data-tone='warning'] {
-  color: var(--cds-alias-status-danger, #b53d35);
+  color: var(--cds-alias-status-warning, #9a6700);
 }
 .status-pill[data-tone='warning'] .status-dot {
-  background: var(--cds-alias-status-danger, #b53d35);
+  background: var(--cds-alias-status-warning, #c25400);
 }
 .status-pill[data-tone='danger'] {
   color: var(--cds-alias-status-danger, #b53d35);

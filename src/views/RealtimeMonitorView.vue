@@ -86,6 +86,10 @@ const CHART = {
 const selectedWindow = ref<TimeWindow>('1h')
 const agentIdFilter = ref('')
 const modelFilter = ref('')
+// Applied filter values — committed on Enter/blur. The raw *Filter refs drive
+// only the input's own value, so typing no longer fires a query per keystroke.
+const appliedAgentId = ref('')
+const appliedModel = ref('')
 const nowTick = ref(Date.now())
 const focusedChart = ref<string | null>(null)
 
@@ -121,8 +125,8 @@ const activeGranularity = computed<RequestMetricsGranularity>(() => {
 
 const variables = computed<RequestMetricsVars>(() => {
   const filter: NonNullable<RequestMetricsVars['filter']> = {}
-  const agentId = agentIdFilter.value.trim()
-  const model = modelFilter.value.trim()
+  const agentId = appliedAgentId.value
+  const model = appliedModel.value
   if (agentId) filter.agentId = agentId
   if (model) filter.model = model
 
@@ -189,6 +193,13 @@ function manualRefresh() {
   poll()
 }
 
+// Commit the agent/model filter inputs (Enter or blur). Reactive `variables`
+// then refetches once, instead of firing a query on every keystroke.
+function applyMonitorFilters() {
+  appliedAgentId.value = agentIdFilter.value.trim()
+  appliedModel.value = modelFilter.value.trim()
+}
+
 function onVisibilityChange() {
   if (typeof document === 'undefined') return
   if (document.hidden) {
@@ -204,9 +215,9 @@ watch(selectedWindow, () => {
   void refetch()
 })
 
-watch([customStart, customEnd, agentIdFilter, modelFilter], () => {
-  void refetch()
-})
+// customStart/customEnd feed `variables` (via activeRange) directly, so editing
+// the custom range refetches through reactive `variables` — no explicit watch
+// needed. Agent/model filters commit via applyMonitorFilters.
 
 onMounted(() => {
   startPolling()
@@ -477,6 +488,8 @@ function toggleFocus(key: string) {
             type="text"
             :placeholder="locale.t('monitor.filter.agentId')"
             :aria-label="locale.t('monitor.filter.agentId')"
+            @keyup.enter="applyMonitorFilters"
+            @change="applyMonitorFilters"
           />
         </cds-input>
         <cds-input control-width="shrink" class="filter-field">
@@ -485,6 +498,8 @@ function toggleFocus(key: string) {
             type="text"
             :placeholder="locale.t('monitor.filter.model')"
             :aria-label="locale.t('monitor.filter.model')"
+            @keyup.enter="applyMonitorFilters"
+            @change="applyMonitorFilters"
           />
         </cds-input>
       </div>
@@ -895,8 +910,15 @@ function toggleFocus(key: string) {
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(3, minmax(0, 1fr));
+  /* Three real charts (the synthetic CPU/memory/active-agent charts were removed
+     in T4). Two rows fit them without the empty bottom band a 3-row grid left. */
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+/* With an odd chart count, let the last card span the full width so the grid
+   has no dangling empty cell. Overridden by .focused (which also spans). */
+.chart-card:last-child {
+  grid-column: 1 / -1;
 }
 
 .monitor-page :deep(cds-card) {
