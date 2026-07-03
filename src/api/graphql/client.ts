@@ -1,4 +1,5 @@
-import { ApolloClient, HttpLink, InMemoryCache } from '@apollo/client/core'
+import { ApolloClient, HttpLink, InMemoryCache, from } from '@apollo/client/core'
+import { onError } from '@apollo/client/link/error'
 
 /**
  * Single Apollo Client for the app, wired to the real agent-platform-backend.
@@ -25,8 +26,29 @@ const httpLink = new HttpLink({
   credentials: 'include',
 })
 
+/**
+ * Session-expiry hook (issue #31). This module cannot import the auth store or
+ * the router directly — auth.ts imports `apolloClient` from here, so that would
+ * be a cycle. main.ts registers the real handler (clear auth state + redirect
+ * to login) once the stores exist.
+ */
+let sessionExpiredHandler: (() => void) | null = null
+export function onSessionExpired(handler: () => void): void {
+  sessionExpiredHandler = handler
+}
+
+const errorLink = onError(({ graphQLErrors, operation }) => {
+  // `Me` is the session probe: restore()/changePassword read its null result to
+  // decide logged-out, so its UNAUTHENTICATED must not bounce every cold boot.
+  if (operation.operationName === 'Me') return
+  // The backend ErrorPresenter attaches a stable machine code (classifyCode):
+  // any "unauthenticated" resolver/directive error carries code UNAUTHENTICATED.
+  const expired = graphQLErrors?.some((e) => e.extensions?.code === 'UNAUTHENTICATED')
+  if (expired) sessionExpiredHandler?.()
+})
+
 export const apolloClient = new ApolloClient({
-  link: httpLink,
+  link: from([errorLink, httpLink]),
   cache: new InMemoryCache({
     // Normalize every entity the backend returns by `__typename` + `id` so the
     // cache can dedupe and patch mutation results in place. The default cache

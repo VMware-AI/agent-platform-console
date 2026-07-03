@@ -25,7 +25,10 @@ const REQUEST_LOG_FIELDS = gql`
 export const REQUEST_LOGS_QUERY = gql`
   query RequestLogs($filter: RequestLogFilter, $page: PageInput) {
     requestLogs(filter: $filter, page: $page) {
-      ...RequestLogFields
+      items {
+        ...RequestLogFields
+      }
+      total
     }
   }
   ${REQUEST_LOG_FIELDS}
@@ -45,11 +48,17 @@ export interface RequestLogNode {
   createdAt: string
 }
 
+export type RequestStatusClass = 'SUCCESS' | 'CLIENT_ERROR' | 'SERVER_ERROR'
+
 export interface RequestLogFilterInput {
   statusCode?: number | null
   agentId?: string | null
   model?: string | null
   requestId?: string | null
+  userId?: string | null
+  from?: string | null
+  to?: string | null
+  statusClass?: RequestStatusClass | null
 }
 
 export interface RequestLogPageInput {
@@ -63,5 +72,8 @@ export interface RequestLogsVars {
 }
 
 export interface RequestLogsResult {
-  requestLogs: RequestLogNode[]
+  requestLogs: {
+    items: RequestLogNode[]
+    total: number
+  }
 }

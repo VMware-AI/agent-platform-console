@@ -10,6 +10,7 @@ import {
   type AuditLogsResult,
   type AuditLogsVars,
 } from '@/api/graphql/queries/audit-logs'
+import { apolloClient } from '@/api/graphql/client'
 import '@/components/icons'
 
 const locale = useLocaleStore()
@@ -75,12 +76,35 @@ const searchInput = ref('')
 const actorInput = ref('')
 const appliedSearch = ref('')
 const appliedActorUserId = ref('')
+const resultFilter = ref<'all' | 'success' | 'fail'>('all')
+const resourceTypeInput = ref('')
+const appliedResourceType = ref('')
+const customFrom = ref('')
+const customTo = ref('')
+
+// Time window pushed to the server (from/to) instead of filtering client-side —
+// client-side filtering + offset pagination gave uneven pages and wrong counts.
+const serverWindow = computed<{ from: string | null; to: string | null }>(() => {
+  if (timeWindow.value === 'custom') {
+    return {
+      from: customFrom.value ? new Date(customFrom.value).toISOString() : null,
+      to: customTo.value ? new Date(customTo.value).toISOString() : null,
+    }
+  }
+  const days = timeWindow.value === '1d' ? 1 : 7
+  const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+  return { from: from.toISOString(), to: null }
+})
 
 const queryVars = computed<AuditLogsVars>(() => ({
   filter: {
     actionPrefix: actionPrefix.value,
     search: appliedSearch.value.trim() || null,
     actorUserId: appliedActorUserId.value.trim() || null,
+    from: serverWindow.value.from,
+    to: serverWindow.value.to,
+    result: resultFilter.value === 'all' ? null : resultFilter.value,
+    resourceType: appliedResourceType.value.trim() || null,
   },
   page: {
     limit: pageSize.value,
@@ -98,15 +122,9 @@ const logs = computed<AuditLogNode[]>(() => result.value?.auditLogs.items ?? [])
 const totalCount = computed(() => result.value?.auditLogs.total ?? 0)
 const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)))
 
-function matchesTimeWindow(log: AuditLogNode): boolean {
-  if (timeWindow.value === 'custom') return true
-  const createdAt = new Date(log.createdAt).getTime()
-  if (Number.isNaN(createdAt)) return true
-  const days = timeWindow.value === '1d' ? 1 : 7
-  return Date.now() - createdAt <= days * 24 * 60 * 60 * 1000
-}
-
-const visibleLogs = computed(() => logs.value.filter(matchesTimeWindow))
+// The server now applies the time window (serverWindow → filter.from/to), so the
+// page renders exactly what came back — no client-side re-filtering.
+const visibleLogs = computed(() => logs.value)
 
 const summaryText = computed(() => {
   if (totalCount.value === 0 || logs.value.length === 0) {
@@ -125,6 +143,8 @@ const hasActiveFilters = computed(
   () =>
     actionPrefix.value !== null ||
     timeWindow.value !== '1d' ||
+    resultFilter.value !== 'all' ||
+    Boolean(appliedResourceType.value.trim()) ||
     Boolean(appliedSearch.value.trim()) ||
     Boolean(appliedActorUserId.value.trim()),
 )
@@ -140,6 +160,7 @@ const errorMessage = computed(() =>
 function applyFilters() {
   appliedSearch.value = searchInput.value.trim()
   appliedActorUserId.value = actorInput.value.trim()
+  appliedResourceType.value = resourceTypeInput.value.trim()
   currentPage.value = 1
 }
 
@@ -150,7 +171,86 @@ function clearFilters() {
   actorInput.value = ''
   appliedSearch.value = ''
   appliedActorUserId.value = ''
+  resultFilter.value = 'all'
+  resourceTypeInput.value = ''
+  appliedResourceType.value = ''
+  customFrom.value = ''
+  customTo.value = ''
   currentPage.value = 1
+}
+
+function onResultChange(event: Event) {
+  resultFilter.value = (event.target as HTMLSelectElement).value as 'all' | 'success' | 'fail'
+  currentPage.value = 1
+}
+
+// Export streams EVERY row matching the active filters (not just the visible
+// page) via one-shot apolloClient.query() paging, capped so a huge range can't
+// exhaust the tab. Mirrors the app's useAgentExport convention.
+const EXPORT_PAGE_SIZE = 500
+const EXPORT_CAP = 5000
+const exportingCsv = ref(false)
+
+async function fetchAllAuditLogs(): Promise<{ rows: AuditLogNode[]; total: number }> {
+  const filter = queryVars.value.filter
+  const rows: AuditLogNode[] = []
+  let total = 0
+  for (let offset = 0; offset < EXPORT_CAP; offset += EXPORT_PAGE_SIZE) {
+    const { data } = await apolloClient.query<AuditLogsResult, AuditLogsVars>({
+      query: AUDIT_LOGS_QUERY,
+      variables: { filter, page: { limit: EXPORT_PAGE_SIZE, offset } },
+      fetchPolicy: 'network-only',
+    })
+    total = data.auditLogs.total
+    rows.push(...data.auditLogs.items)
+    if (rows.length >= total || data.auditLogs.items.length < EXPORT_PAGE_SIZE) break
+  }
+  return { rows, total }
+}
+
+async function exportCsv() {
+  if (exportingCsv.value) return
+  exportingCsv.value = true
+  try {
+    const { rows, total } = await fetchAllAuditLogs()
+    if (rows.length === 0) {
+      toast.info(locale.t('auditLog.export.empty'))
+      return
+    }
+    const header = ['createdAt', 'actor', 'action', 'resourceType', 'resourceId', 'ip', 'result']
+    const cell = (v: string | null) => `"${(v ?? '').replace(/"/g, '""')}"`
+    const lines = [header.join(',')]
+    for (const l of rows) {
+      lines.push(
+        [
+          cell(l.createdAt),
+          cell(l.actorName ?? l.actorUserId),
+          cell(l.action),
+          cell(l.resourceType),
+          cell(l.resourceId),
+          cell(l.ip),
+          cell(l.result),
+        ].join(','),
+      )
+    }
+    // UTF-8 BOM so Excel renders Chinese actor/resource names correctly.
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `audit-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    if (rows.length < total) {
+      toast.info(locale.t('auditLog.export.truncated').replace('{count}', String(rows.length)))
+    } else {
+      toast.success(locale.t('auditLog.export.success').replace('{count}', String(rows.length)))
+    }
+  } catch (err) {
+    toast.error(graphqlErrorMessage(err, locale.t('auditLog.export.fail')))
+  } finally {
+    exportingCsv.value = false
+  }
 }
 
 function selectTimeWindow(next: TimeWindow) {
@@ -208,9 +308,10 @@ function shortId(value: string | null | undefined, keep = 8): string {
   return value.length > keep + 4 ? `${value.slice(0, keep)}...` : value
 }
 
-function actorLabel(actorUserId: string | null): string {
-  if (!actorUserId) return locale.t('auditLog.value.system')
-  return locale.t('auditLog.value.user').replace('{id}', shortId(actorUserId))
+function actorLabel(log: AuditLogNode): string {
+  if (log.actorName) return log.actorName
+  if (!log.actorUserId) return locale.t('auditLog.value.system')
+  return locale.t('auditLog.value.user').replace('{id}', shortId(log.actorUserId))
 }
 
 function isSuccess(value: string): boolean {
@@ -366,6 +467,40 @@ async function copyResourceId(value: string | null) {
             @change="applyFilters"
           />
         </label>
+
+        <cds-select control-width="shrink" class="action-select">
+          <select :value="resultFilter" :aria-label="locale.t('auditLog.filter.result')" @change="onResultChange">
+            <option value="all">{{ locale.t('auditLog.filter.allResults') }}</option>
+            <option value="success">{{ locale.t('auditLog.result.success') }}</option>
+            <option value="fail">{{ locale.t('auditLog.result.fail') }}</option>
+          </select>
+        </cds-select>
+
+        <input
+          v-model="resourceTypeInput"
+          class="control-input actor-input"
+          type="text"
+          :placeholder="locale.t('auditLog.filter.resourceTypePlaceholder')"
+          :aria-label="locale.t('auditLog.filter.resourceTypePlaceholder')"
+          @keyup.enter="applyFilters"
+          @change="applyFilters"
+        />
+
+        <cds-button action="outline" size="sm" :disabled="exportingCsv" @click="exportCsv">
+          <cds-icon shape="export" size="sm" aria-hidden="true"></cds-icon>
+          {{ exportingCsv ? locale.t('auditLog.export.inProgress') : locale.t('auditLog.action.export') }}
+        </cds-button>
+      </div>
+
+      <div v-if="timeWindow === 'custom'" class="custom-range">
+        <label class="time-field">
+          <span>{{ locale.t('auditLog.filter.from') }}</span>
+          <input type="datetime-local" v-model="customFrom" @change="currentPage = 1" />
+        </label>
+        <label class="time-field">
+          <span>{{ locale.t('auditLog.filter.to') }}</span>
+          <input type="datetime-local" v-model="customTo" @change="currentPage = 1" />
+        </label>
       </div>
 
       <div v-if="hasActiveFilters" class="filter-summary">
@@ -407,7 +542,7 @@ async function copyResourceId(value: string | null) {
               <td class="mono nowrap">{{ formatDateTime(log.createdAt) }}</td>
               <td>
                 <span class="ellipsis" :title="log.actorUserId ?? locale.t('auditLog.value.system')">
-                  {{ actorLabel(log.actorUserId) }}
+                  {{ actorLabel(log) }}
                 </span>
               </td>
               <td>
@@ -498,6 +633,20 @@ async function copyResourceId(value: string | null) {
 </template>
 
 <style scoped>
+.custom-range {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0 0 0.5rem;
+}
+.custom-range .time-field {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.7rem;
+  gap: 0.15rem;
+}
+.custom-range .time-field input {
+  padding: 0.25rem 0.4rem;
+}
 .audit-page {
   height: 100%;
   min-height: 0;

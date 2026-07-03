@@ -16,6 +16,7 @@ export const AUDIT_LOGS_QUERY = gql`
       items {
         id
         actorUserId
+        actorName
         action
         resourceType
         resourceId
@@ -32,6 +33,7 @@ export const AUDIT_LOGS_QUERY = gql`
 export interface AuditLogNode {
   id: string
   actorUserId: string | null
+  actorName: string | null
   action: string
   resourceType: string | null
   resourceId: string | null
@@ -54,6 +56,10 @@ export interface AuditFilterInput {
   actorUserId?: string | null
   actionPrefix?: string | null
   search?: string | null
+  from?: string | null
+  to?: string | null
+  result?: string | null
+  resourceType?: string | null
 }
 
 export interface PageInput {

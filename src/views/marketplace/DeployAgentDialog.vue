@@ -12,7 +12,7 @@
 import { computed, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
-import { VSPHERE_RESOURCE_POOLS_QUERY } from '@/api/graphql/queries/vsphere'
+import { VSPHERE_RESOURCE_POOLS_QUERY, VSPHERE_NETWORKS_QUERY } from '@/api/graphql/queries/vsphere'
 import type { ResourcePool } from '@/types/resource-pool'
 import type {
   DeployAgentInput,
@@ -21,6 +21,9 @@ import type {
   VsphereResourcePool,
   VsphereResourcePoolsQueryResult,
   VsphereResourcePoolsQueryVars,
+  VsphereNetwork,
+  VsphereNetworksQueryResult,
+  VsphereNetworksQueryVars,
 } from '@/types/marketplace'
 import '@/components/icons'
 
@@ -43,6 +46,8 @@ const resourcePoolId = ref<string>('')
 const name = ref('')
 // The selected vSphere placement pool's inventory PATH (sent as targetResourcePool).
 const targetResourcePool = ref('')
+// The selected vSphere portgroup PATH (sent as targetNetwork; '' = inherit template NIC).
+const targetNetwork = ref('')
 const hostname = ref('')
 // Bound to a <input type="number"> whose v-model coerces a typed value to a JS
 // number, so the runtime type is string | number ('' when blank). Normalize via
@@ -60,6 +65,7 @@ watch(
       resourcePoolId.value = props.pools[0]?.id ?? ''
       name.value = `${props.template.name}_${Date.now() % 100000}`
       targetResourcePool.value = ''
+      targetNetwork.value = ''
       hostname.value = ''
       maxBudget.value = ''
       attempted.value = false
@@ -92,6 +98,39 @@ const vspherePools = computed<VsphereResourcePool[]>(
 watch(vspherePools, (pools) => {
   if (targetResourcePool.value && !pools.some((p) => p.path === targetResourcePool.value)) {
     targetResourcePool.value = ''
+  }
+})
+
+/* ---- Live vSphere networks / portgroups ---- */
+const networksVars = computed<VsphereNetworksQueryVars>(() => ({
+  resourcePoolId: resourcePoolId.value,
+}))
+const {
+  result: networksResult,
+  loading: networksLoading,
+} = useQuery<VsphereNetworksQueryResult, VsphereNetworksQueryVars>(
+  VSPHERE_NETWORKS_QUERY,
+  networksVars,
+  () => ({ enabled: vsphereEnabled.value, fetchPolicy: 'cache-and-network' }),
+)
+const vsphereNetworks = computed<VsphereNetwork[]>(
+  () => networksResult.value?.vsphereNetworks ?? [],
+)
+
+// Group portgroups by their dvSwitch name (distributed) or 'Standard' bucket.
+const networksGrouped = computed(() => {
+  const groups: Record<string, VsphereNetwork[]> = {}
+  for (const n of vsphereNetworks.value) {
+    const key = n.type === 'distributed' ? (n.dvsName || 'Distributed vSwitch') : 'Standard'
+    if (!groups[key]) groups[key] = []
+    groups[key].push(n)
+  }
+  return groups
+})
+
+watch(vsphereNetworks, (nets) => {
+  if (targetNetwork.value && !nets.some((n) => n.path === targetNetwork.value)) {
+    targetNetwork.value = ''
   }
 })
 
@@ -128,6 +167,7 @@ function submit() {
     // resource pool, so a real deploy must place the clone here; empty inherits
     // the source's pool (only valid for regular-VM sources, e.g. vcsim).
     targetResourcePool: targetResourcePool.value || null,
+    targetNetwork: targetNetwork.value || null,
     hostname: hostname.value.trim() || null,
     maxBudget: budget,
   })
@@ -258,6 +298,36 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
           <cds-control-message v-if="attempted && !targetPoolValid()" status="error">
             {{ locale.t('marketplace.deploy.error.targetPool') }}
           </cds-control-message>
+        </cds-select>
+
+        <!-- 目标网络/端口组（可选）：标准端口组直接列出，分布式端口组按 dvSwitch 分组 -->
+        <cds-select class="full-row">
+          <label>{{ locale.t('marketplace.deploy.targetNetwork') }}</label>
+          <select
+            v-model="targetNetwork"
+            :disabled="networksLoading || vsphereNetworks.length === 0"
+          >
+            <option value="">
+              {{
+                networksLoading
+                  ? locale.t('marketplace.deploy.targetNetworkLoading')
+                  : vsphereNetworks.length === 0
+                    ? locale.t('marketplace.deploy.targetNetworkEmpty')
+                    : locale.t('marketplace.deploy.targetNetworkPlaceholder')
+              }}
+            </option>
+            <template v-for="(nets, groupName) in networksGrouped" :key="groupName">
+              <optgroup :label="String(groupName)">
+                <option
+                  v-for="n in nets"
+                  :key="n.path"
+                  :value="n.path"
+                >
+                  {{ n.name }}
+                </option>
+              </optgroup>
+            </template>
+          </select>
         </cds-select>
 
         <!-- 预算上限（可选） -->

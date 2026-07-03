@@ -186,8 +186,36 @@ export const useAuthStore = defineStore('auth', () => {
   // (the httpOnly cookie is sent automatically). No valid cookie ⇒ `me` returns
   // null ⇒ logged-out. We always call `me` — the cookie, not any local flag, is
   // the source of truth.
-  async function restore(): Promise<void> {
-    user.value = readStoredUser()
+  // Resolves when the boot-time restore() has settled (issue #31). The router
+  // guard awaits this so the FIRST navigation judges the server-confirmed
+  // session, not the optimistic localStorage copy. When restore() was never
+  // started (unit tests drive the store directly), it resolves immediately so
+  // navigation behaves exactly as before.
+  let restorePromise: Promise<void> | null = null
+  function whenReady(): Promise<void> {
+    return restorePromise ?? Promise.resolve()
+  }
+
+  // Session expired mid-use (Apollo error link saw UNAUTHENTICATED): drop local
+  // state only — the cookie is already dead, so no server logout round-trip.
+  function sessionExpired(): void {
+    user.value = null
+    role.value = null
+    mustChangePassword.value = false
+    clearStoredUser()
+  }
+
+  function restore(): Promise<void> {
+    restorePromise = doRestore()
+    return restorePromise
+  }
+
+  async function doRestore(): Promise<void> {
+    // Paint from the stored copy (user AND role, so admin menus don't flicker
+    // out on reload) — display only; the guard waits for the `me` verdict.
+    const stored = readStoredUser()
+    user.value = stored
+    role.value = stored?.role ?? null
     try {
       const { data } = await apolloClient.query<MeQueryResult>({
         query: ME_QUERY,
@@ -223,5 +251,7 @@ export const useAuthStore = defineStore('auth', () => {
     changePassword,
     clearError,
     restore,
+    whenReady,
+    sessionExpired,
   }
 })

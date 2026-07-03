@@ -26,7 +26,9 @@ export const REQUEST_METRICS_QUERY = gql`
         totalErrors
         errorRate
         avgLatencyMs
+        p50LatencyMs
         p95LatencyMs
+        p99LatencyMs
         totalInputTokens
         totalOutputTokens
       }
@@ -61,7 +63,9 @@ export interface RequestMetricsSummary {
   // Float in [0.0, 1.0].
   errorRate: number
   avgLatencyMs: number
+  p50LatencyMs: number
   p95LatencyMs: number
+  p99LatencyMs: number
   totalInputTokens: number
   totalOutputTokens: number
 }
