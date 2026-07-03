@@ -4,6 +4,7 @@ import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
+import { GATEWAY_HEALTH_QUERY, type GatewayHealthResult } from '@/api/graphql/queries/gateway-health'
 import {
   REQUEST_METRICS_QUERY,
   type RequestMetrics,
@@ -143,7 +144,18 @@ onError((error) => {
   toast.error(graphqlErrorMessage(error, locale.t('monitor.error.load')))
 })
 
+// Upstream health matrix (fan-out to litellm /health), polled alongside metrics.
+const { result: healthResult } = useQuery<GatewayHealthResult>(GATEWAY_HEALTH_QUERY, null, {
+  fetchPolicy: 'no-cache',
+})
+const gatewayHealth = computed(() => healthResult.value?.gatewayHealth ?? [])
+
 const metrics = computed<RequestMetrics | null>(() => result.value?.requestMetrics ?? null)
+const summary = computed(() => metrics.value?.summary ?? null)
+// Success rate = 1 - errorRate, as a whole-number percent.
+const successRatePct = computed(() =>
+  summary.value ? Math.round((1 - summary.value.errorRate) * 100) : null,
+)
 const buckets = computed<RequestMetricsBucket[]>(() => metrics.value?.buckets ?? [])
 const hasData = computed(() => buckets.value.length > 0)
 const isInitialLoading = computed(() => loading.value && metrics.value === null)
@@ -320,20 +332,7 @@ function maxValue(values: number[]): number {
   return values.reduce((max, value) => Math.max(max, value), 0)
 }
 
-function normalized(values: number[], fallback = 0): number[] {
-  const max = maxValue(values)
-  if (max <= 0) return values.map(() => fallback)
-  return values.map((value) => value / max)
-}
 
-function movingAverage(values: number[], radius = 2): number[] {
-  return values.map((_, index) => {
-    const start = Math.max(0, index - radius)
-    const end = Math.min(values.length, index + radius + 1)
-    const slice = values.slice(start, end)
-    return slice.reduce((sum, value) => sum + value, 0) / slice.length
-  })
-}
 
 function requestRate(bucket: RequestMetricsBucket): number {
   const seconds = GRANULARITY_MS[activeGranularity.value] / 1000
@@ -345,114 +344,25 @@ function formatRateTick(value: number, max: number): string {
   return formatNumber(Math.round(value))
 }
 
-function bucketErrorPct(bucket: RequestMetricsBucket): number {
-  if (bucket.requestCount <= 0) return 0
-  return bucket.errorCount / bucket.requestCount
-}
 
 const chartBuckets = computed(() => buckets.value.slice(-90))
 
 const chartSpecs = computed<ChartSpec[]>(() => {
+  // Only real, measured series — the CPU / memory / active-agent charts were
+  // synthetic (sine-wave placeholders) and were removed (LLD-15 T4). KPIs and
+  // latency percentiles come from the backend summary (see summaryStats).
   const list = chartBuckets.value
   const labels = xLabelsFor(list)
-  const requests = list.map((bucket) => bucket.requestCount)
-  const requestRatios = normalized(requests, 0.15)
-  const latencyRatios = normalized(
-    list.map((bucket) => bucket.avgLatencyMs),
-    0.12,
-  )
-  const errorRatios = list.map(bucketErrorPct)
-  const inputTokenRatios = normalized(
-    list.map((bucket) => bucket.inputTokensTotal + bucket.requestCount * 120),
-    0.2,
-  )
-  const outputTokenRatios = normalized(
-    list.map((bucket) => bucket.outputTokensTotal + bucket.requestCount * 60),
-    0.2,
-  )
-
-  const cpu = movingAverage(
-    list.map((bucket, index) => {
-      const wave = Math.sin(index * 1.7) * 6 + Math.cos(index * 0.8) * 4
-      return Math.min(
-        96,
-        Math.max(
-          8,
-          22 +
-            requestRatios[index] * 38 +
-            latencyRatios[index] * 18 +
-            errorRatios[index] * 34 +
-            wave,
-        ),
-      )
-    }),
-    1,
-  )
-
-  const inputMemory = movingAverage(
-    list.map((_, index) => 1.18 + inputTokenRatios[index] * 0.62 + requestRatios[index] * 0.12),
-    2,
-  )
-  const outputMemory = movingAverage(
-    list.map((_, index) => 0.18 + outputTokenRatios[index] * 0.34 + requestRatios[index] * 0.06),
-    2,
-  )
 
   const requestRates = list.map(requestRate)
   const latency = list.map((bucket) => bucket.avgLatencyMs)
-  const activeAgents = movingAverage(
-    list.map((_, index) =>
-      Math.min(
-        10,
-        4 + Math.round((index / Math.max(list.length - 1, 1)) * 4 + requestRatios[index] * 2),
-      ),
-    ),
-    2,
-  )
   const errors = list.map((bucket) => bucket.errorCount)
 
   const requestMax = niceCeil(maxValue(requestRates))
   const latencyMax = niceCeil(maxValue(latency))
   const errorMax = niceCeil(maxValue(errors))
-  const memoryMax = Math.max(
-    2,
-    Math.ceil(Math.max(maxValue(inputMemory), maxValue(outputMemory)) * 10) / 10,
-  )
 
   return [
-    {
-      key: 'cpu',
-      title: locale.t('monitor.chart.cpu'),
-      yMax: 100,
-      yTicks: [100, 80, 60, 40, 20, 0],
-      xLabels: labels,
-      series: [{ key: 'cpu', label: locale.t('monitor.series.cpu'), color: '#5f7fb8', mode: 'line', values: cpu }],
-      formatY: (value: number) => formatNumber(Math.round(value)),
-    },
-    {
-      key: 'memory',
-      title: locale.t('monitor.chart.memory'),
-      yMax: memoryMax,
-      yTicks: ticksFor(memoryMax),
-      xLabels: labels,
-      series: [
-        {
-          key: 'input',
-          label: locale.t('monitor.series.input'),
-          color: '#5077b8',
-          mode: 'line',
-          values: inputMemory,
-        },
-        {
-          key: 'output',
-          label: locale.t('monitor.series.output'),
-          color: '#d0852f',
-          mode: 'line',
-          values: outputMemory,
-        },
-      ],
-      formatY: (value: number) => `${formatDecimal(value, 1)}B`,
-    },
     {
       key: 'requestRate',
       title: locale.t('monitor.chart.requestRate'),
@@ -483,23 +393,6 @@ const chartSpecs = computed<ChartSpec[]>(() => {
           color: '#5c86c7',
           mode: 'area',
           values: latency,
-        },
-      ],
-      formatY: (value: number) => formatNumber(Math.round(value)),
-    },
-    {
-      key: 'activeAgents',
-      title: locale.t('monitor.chart.activeAgents'),
-      yMax: 10,
-      yTicks: [10, 8, 6, 4, 2, 0],
-      xLabels: labels,
-      series: [
-        {
-          key: 'activeAgents',
-          label: locale.t('monitor.series.activeAgents'),
-          color: '#5b83c4',
-          mode: 'area',
-          values: activeAgents,
         },
       ],
       formatY: (value: number) => formatNumber(Math.round(value)),
@@ -596,6 +489,72 @@ function toggleFocus(key: string) {
         </cds-input>
       </div>
     </div>
+
+    <!-- KPI cards from the real backend summary (was: data fetched but never shown) -->
+    <div v-if="summary" class="kpi-row">
+      <cds-card class="kpi">
+        <div class="card-content">
+          <span class="kpi-label">{{ locale.t('monitor.kpi.requests') }}</span>
+          <strong class="kpi-value">{{ summary.totalRequests.toLocaleString() }}</strong>
+        </div>
+      </cds-card>
+      <cds-card class="kpi">
+        <div class="card-content">
+          <span class="kpi-label">{{ locale.t('monitor.kpi.successRate') }}</span>
+          <strong class="kpi-value" :class="{ warn: (successRatePct ?? 100) < 99 }">
+            {{ successRatePct == null ? '—' : `${successRatePct}%` }}
+          </strong>
+        </div>
+      </cds-card>
+      <cds-card class="kpi">
+        <div class="card-content">
+          <span class="kpi-label">{{ locale.t('monitor.kpi.errors') }}</span>
+          <strong class="kpi-value">{{ summary.totalErrors.toLocaleString() }}</strong>
+        </div>
+      </cds-card>
+      <cds-card class="kpi">
+        <div class="card-content">
+          <span class="kpi-label">P50</span>
+          <strong class="kpi-value">{{ summary.p50LatencyMs }}ms</strong>
+        </div>
+      </cds-card>
+      <cds-card class="kpi">
+        <div class="card-content">
+          <span class="kpi-label">P95</span>
+          <strong class="kpi-value">{{ summary.p95LatencyMs }}ms</strong>
+        </div>
+      </cds-card>
+      <cds-card class="kpi">
+        <div class="card-content">
+          <span class="kpi-label">P99</span>
+          <strong class="kpi-value">{{ summary.p99LatencyMs }}ms</strong>
+        </div>
+      </cds-card>
+    </div>
+
+    <!-- Upstream health matrix (fan-out to litellm /health) -->
+    <cds-card v-if="gatewayHealth.length > 0" class="health-card">
+      <div class="card-content">
+        <h2>{{ locale.t('monitor.health.title') }}</h2>
+        <div class="health-grid">
+          <div v-for="g in gatewayHealth" :key="g.gatewayId" class="health-item">
+            <span class="health-dot" :class="g.error ? 'down' : g.unhealthyCount > 0 ? 'partial' : 'up'"></span>
+            <span class="health-name">{{ g.gatewayName }}</span>
+            <span class="health-detail muted">
+              <template v-if="g.error">{{ locale.t('monitor.health.unreachable') }}</template>
+              <template v-else>
+                {{
+                  locale
+                    .t('monitor.health.counts')
+                    .replace('{healthy}', String(g.healthyCount))
+                    .replace('{unhealthy}', String(g.unhealthyCount))
+                }}
+              </template>
+            </span>
+          </div>
+        </div>
+      </div>
+    </cds-card>
 
     <div class="chart-grid" :class="{ 'has-focus': focusedChart }">
       <cds-card
@@ -726,6 +685,76 @@ function toggleFocus(key: string) {
 </template>
 
 <style scoped>
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+.kpi .card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.6rem 0.8rem;
+}
+.kpi-label {
+  font-size: 0.72rem;
+  color: var(--cds-global-typography-color-500, #666);
+}
+.kpi-value {
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+.kpi-value.warn {
+  color: var(--cds-alias-status-danger, #e12200);
+}
+.health-card {
+  margin-bottom: 0.75rem;
+}
+.health-card .card-content {
+  padding: 0.75rem 1rem;
+}
+.health-card h2 {
+  font-size: 0.9rem;
+  margin: 0 0 0.5rem;
+}
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.5rem;
+}
+.health-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+.health-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+.health-dot.up {
+  background: var(--cds-alias-status-success, #3c8500);
+}
+.health-dot.partial {
+  background: var(--cds-alias-status-warning, #c25400);
+}
+.health-dot.down {
+  background: var(--cds-alias-status-danger, #e12200);
+}
+.health-name {
+  font-weight: 600;
+}
+.health-detail {
+  margin-left: auto;
+}
+@media (max-width: 1100px) {
+  .kpi-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
 .monitor-page {
   height: 100%;
   min-height: 0;
