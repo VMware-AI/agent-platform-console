@@ -80,39 +80,39 @@ function submit() {
   <cds-modal :hidden="!open" :closable="!saving" size="md" @closeChange="close">
     <cds-modal-header>
       <h2 cds-text="title" class="modal-title">
-        {{ locale.t(isEditing ? 'rateLimit.form.editTitle' : 'rateLimit.form.createTitle') }}
+        {{ locale.t(isEditing ? 'supplier.form.editTitle' : 'supplier.form.createTitle') }}
       </h2>
     </cds-modal-header>
 
     <cds-modal-content>
       <form class="policy-form" @submit.prevent="submit">
         <cds-input :status="attempted && !nameValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('rateLimit.form.name') }}</label>
+          <label>{{ locale.t('supplier.form.name') }}</label>
           <input
             :value="name"
             maxlength="64"
             autocomplete="off"
             :readonly="isEditing"
-            :placeholder="locale.t('rateLimit.form.namePlaceholder')"
+            :placeholder="locale.t('supplier.form.namePlaceholder')"
             @input="name = ($event.target as HTMLInputElement).value"
           />
           <cds-control-message v-if="attempted && !nameValid" status="error">
-            {{ locale.t('rateLimit.form.nameError') }}
+            {{ locale.t('supplier.form.nameError') }}
           </cds-control-message>
           <cds-control-message v-else-if="isEditing" status="neutral">
-            {{ locale.t('rateLimit.form.nameLockedHint') }}
+            {{ locale.t('supplier.form.nameLockedHint') }}
           </cds-control-message>
         </cds-input>
 
         <cds-select>
-          <label>{{ locale.t('rateLimit.form.type') }}</label>
+          <label>{{ locale.t('supplier.form.type') }}</label>
           <select
             :value="type"
-            :aria-label="locale.t('rateLimit.form.type')"
+            :aria-label="locale.t('supplier.form.type')"
             @change="type = ($event.target as HTMLSelectElement).value as RateLimitType"
           >
             <option v-for="item in RATE_LIMIT_TYPES" :key="item" :value="item">
-              {{ locale.t(`rateLimit.type.${item}`) }}
+              {{ locale.t(`supplier.type.${item}`) }}
             </option>
           </select>
         </cds-select>
@@ -121,7 +121,7 @@ function submit() {
           v-if="type !== 'REQUEST'"
           :status="attempted && !tokenLimitValid ? 'error' : 'neutral'"
         >
-          <label>{{ locale.t('rateLimit.form.tokenLimit') }}</label>
+          <label>{{ locale.t('supplier.form.tokenLimit') }}</label>
           <input
             type="number"
             min="1"
@@ -135,7 +135,7 @@ function submit() {
           v-if="type !== 'TOKEN'"
           :status="attempted && !requestLimitValid ? 'error' : 'neutral'"
         >
-          <label>{{ locale.t('rateLimit.form.requestLimit') }}</label>
+          <label>{{ locale.t('supplier.form.requestLimit') }}</label>
           <input
             type="number"
             min="1"
@@ -147,7 +147,7 @@ function submit() {
 
         <cds-control>
           <cds-toggle>
-            <label>{{ locale.t('rateLimit.form.enabled') }}</label>
+            <label>{{ locale.t('supplier.form.enabled') }}</label>
             <input
               type="checkbox"
               slot="input"
@@ -161,14 +161,14 @@ function submit() {
 
     <cds-modal-actions>
       <cds-button action="outline" :disabled="saving" @click="close">
-        {{ locale.t('rateLimit.form.cancel') }}
+        {{ locale.t('supplier.form.cancel') }}
       </cds-button>
       <cds-button
         :loading-state="saving ? 'loading' : 'default'"
         :disabled="saving"
         @click="submit"
       >
-        {{ locale.t('rateLimit.form.submit') }}
+        {{ locale.t('supplier.form.submit') }}
       </cds-button>
     </cds-modal-actions>
   </cds-modal>

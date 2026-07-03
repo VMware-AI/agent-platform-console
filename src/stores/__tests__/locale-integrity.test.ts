@@ -35,7 +35,7 @@ const ALLOWED_EMPTY_EN_KEYS = new Set<string>([
   'common.cancel',
   'common.confirm',
   'modelRoute.description',
-  'rateLimit.description',
+  'supplier.description',
   'virtualKey.description',
 ])
 

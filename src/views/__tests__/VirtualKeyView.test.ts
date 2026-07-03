@@ -12,7 +12,7 @@
  *   - revoke  → REVOKE_VIRTUAL_KEY     (delete confirm via ConfirmDialog, teleported
  *               → `.confirm-backdrop`); skips already-revoked keys.
  *
- * Mocking strategy (mirrors RateLimitPolicyView.test.ts):
+ * Mocking strategy (mirrors SupplierModelView.test.ts):
  *   - `@vue/apollo-composable`'s `useQuery` is mocked. The view fires FOUR queries
  *     (keys / users / agents / policies); we route each to its own controllable
  *     slot by the gql operation name so every list/selector state is deterministic.

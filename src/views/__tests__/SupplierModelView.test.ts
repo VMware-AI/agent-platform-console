@@ -1,10 +1,10 @@
 /**
- * Component tests for RateLimitPolicyView.vue — 网关策略管理 / rate-limit policies.
+ * Component tests for SupplierModelView.vue — 供应商模型管理 / rate-limit policies.
  *
  * The view lists raw RateLimitPolicy nodes (rpm/tpm caps) and derives a UI
  * `type` (COMBINED / REQUEST / TOKEN) from which caps are set. It runs real
  * mutations via the shared Apollo client:
- *   - upsert (create/edit) via RateLimitPolicyFormModal (inline cds-modal,
+ *   - upsert (create/edit) via SupplierModelFormModal (inline cds-modal,
  *     `.policy-form`); the draft `type` is persisted back as rpm/tpm,
  *   - setEnabled (row toggle + batch enable/disable) → SetRateLimitPolicyEnabled,
  *   - delete (single + batch) via ConfirmDialog (teleported → `.confirm-backdrop`).
@@ -70,7 +70,7 @@ vi.mock('@/api/graphql/client', () => ({
   },
 }))
 
-import RateLimitPolicyView from '@/views/RateLimitPolicyView.vue'
+import SupplierModelView from '@/views/SupplierModelView.vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
@@ -122,7 +122,7 @@ let wrapper: VueWrapper | null = null
 let locale: ReturnType<typeof useLocaleStore>
 
 function mountView() {
-  wrapper = mount(RateLimitPolicyView, mountConfig)
+  wrapper = mount(SupplierModelView, mountConfig)
   return wrapper
 }
 
@@ -162,7 +162,7 @@ afterEach(() => {
 
 // ---------------------------------------------------------------------------
 
-describe('RateLimitPolicyView — list states', () => {
+describe('SupplierModelView — list states', () => {
   it('disables the refresh button while loading', () => {
     listSlot.loading.value = true
     mountView()
@@ -175,7 +175,7 @@ describe('RateLimitPolicyView — list states', () => {
     mountView()
     await flushPromises()
     const placeholder = wrapper!.element.querySelector('cds-grid-placeholder')
-    expect(placeholder?.textContent).toContain(locale.t('rateLimit.empty'))
+    expect(placeholder?.textContent).toContain(locale.t('supplier.empty'))
     expect(rows()).toHaveLength(0)
     // Footer (pagination) is hidden when there are no policies.
     expect(wrapper!.element.querySelector('cds-grid-footer')).toBeNull()
@@ -190,11 +190,11 @@ describe('RateLimitPolicyView — list states', () => {
     const first = rows()[0]
     expect(first.textContent).toContain('Alpha Policy')
     // Enabled policy → enabled status string (localized, not raw boolean).
-    expect(first.textContent).toContain(locale.t('rateLimit.status.enabled'))
+    expect(first.textContent).toContain(locale.t('supplier.status.enabled'))
 
     const second = rows()[1]
     expect(second.textContent).toContain('Beta Policy')
-    expect(second.textContent).toContain(locale.t('rateLimit.status.disabled'))
+    expect(second.textContent).toContain(locale.t('supplier.status.disabled'))
   })
 
   it('shows the pagination summary reflecting the total count', async () => {
@@ -203,7 +203,7 @@ describe('RateLimitPolicyView — list states', () => {
     await flushPromises()
 
     const expected = locale
-      .t('rateLimit.pagination.summary')
+      .t('supplier.pagination.summary')
       .replace('{start}', '1')
       .replace('{end}', '3')
       .replace('{total}', '3')
@@ -211,7 +211,7 @@ describe('RateLimitPolicyView — list states', () => {
   })
 })
 
-describe('RateLimitPolicyView — upsert (rpm/tpm ↔ derived type)', () => {
+describe('SupplierModelView — upsert (rpm/tpm ↔ derived type)', () => {
   function openCreate() {
     // First toolbar button is the create action.
     const createBtn = wrapper!.element.querySelector<HTMLElement>('.toolbar cds-button')!
@@ -257,7 +257,7 @@ describe('RateLimitPolicyView — upsert (rpm/tpm ↔ derived type)', () => {
     expect(arg.variables.input.rpm).toBeGreaterThan(0)
     expect(arg.variables.input.tpm).toBeGreaterThan(0)
 
-    expect(toastMessages()).toContain(locale.t('rateLimit.toast.created'))
+    expect(toastMessages()).toContain(locale.t('supplier.toast.created'))
     expect(listSlot.refetch).toHaveBeenCalled()
     // Dialog closes on success.
     expect(policyForm()).toBeNull()
@@ -322,8 +322,8 @@ describe('RateLimitPolicyView — upsert (rpm/tpm ↔ derived type)', () => {
     const arg = mutateMock.mock.calls[0][0] as { variables: { input: { name: string } } }
     expect(arg.variables.input.name).toBe('Alpha Policy')
 
-    expect(toastMessages()).toContain(locale.t('rateLimit.toast.updated'))
-    expect(toastMessages()).not.toContain(locale.t('rateLimit.toast.created'))
+    expect(toastMessages()).toContain(locale.t('supplier.toast.updated'))
+    expect(toastMessages()).not.toContain(locale.t('supplier.toast.created'))
     expect(listSlot.refetch).toHaveBeenCalled()
   })
 
@@ -347,13 +347,13 @@ describe('RateLimitPolicyView — upsert (rpm/tpm ↔ derived type)', () => {
     expect(mutateMock).toHaveBeenCalledTimes(1)
     // graphqlErrorMessage prefers the backend message over the generic fallback.
     expect(toastMessages()).toContain('name already exists')
-    expect(toastMessages()).not.toContain(locale.t('rateLimit.toast.created'))
+    expect(toastMessages()).not.toContain(locale.t('supplier.toast.created'))
     // Dialog stays open so the user can correct + retry.
     expect(policyForm()).not.toBeNull()
   })
 })
 
-describe('RateLimitPolicyView — setEnabled', () => {
+describe('SupplierModelView — setEnabled', () => {
   it('toggling a disabled policy mutates enabled=true and toasts the enabled count', async () => {
     mutateMock.mockResolvedValue({ data: { setRateLimitPolicyEnabled: makeNode() } })
     setListData([POLICY_B]) // disabled
@@ -371,7 +371,7 @@ describe('RateLimitPolicyView — setEnabled', () => {
     expect(arg.variables.id).toBe('b')
     expect(arg.variables.enabled).toBe(true)
 
-    const expected = locale.t('rateLimit.toast.enabled').replace('{count}', '1')
+    const expected = locale.t('supplier.toast.enabled').replace('{count}', '1')
     expect(toastMessages()).toContain(expected)
     expect(toastStatuses()).toContain('success')
     expect(listSlot.refetch).toHaveBeenCalled()
@@ -389,7 +389,7 @@ describe('RateLimitPolicyView — setEnabled', () => {
 
     const arg = mutateMock.mock.calls[0][0] as { variables: { enabled: boolean } }
     expect(arg.variables.enabled).toBe(false)
-    expect(toastMessages()).toContain(locale.t('rateLimit.toast.disabled').replace('{count}', '1'))
+    expect(toastMessages()).toContain(locale.t('supplier.toast.disabled').replace('{count}', '1'))
   })
 
   it('batch enable mutates once per selected id and clears the selection', async () => {
@@ -406,7 +406,7 @@ describe('RateLimitPolicyView — setEnabled', () => {
 
     // Selected summary reflects 2 selected.
     expect(wrapper!.element.querySelector('.selected-summary')?.textContent).toContain(
-      locale.t('rateLimit.selected').replace('{count}', '2'),
+      locale.t('supplier.selected').replace('{count}', '2'),
     )
 
     // Open the batch dropdown (second toolbar cds-button) then click "enable".
@@ -417,13 +417,13 @@ describe('RateLimitPolicyView — setEnabled', () => {
     await flushPromises()
     const enableOption = Array.from(
       wrapper!.element.querySelectorAll<HTMLElement>('.menu-option'),
-    ).find((b) => b.textContent?.includes(locale.t('rateLimit.batch.enable')))!
+    ).find((b) => b.textContent?.includes(locale.t('supplier.batch.enable')))!
     enableOption.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
     // One mutation per selected policy.
     expect(mutateMock).toHaveBeenCalledTimes(2)
-    expect(toastMessages()).toContain(locale.t('rateLimit.toast.enabled').replace('{count}', '2'))
+    expect(toastMessages()).toContain(locale.t('supplier.toast.enabled').replace('{count}', '2'))
     // Selection is cleared after a successful batch.
     expect(wrapper!.element.querySelector('.selected-summary')).toBeNull()
   })
@@ -439,11 +439,11 @@ describe('RateLimitPolicyView — setEnabled', () => {
     await flushPromises()
 
     expect(toastMessages()).toContain('forbidden: requires admin')
-    expect(toastMessages()).not.toContain(locale.t('rateLimit.toast.disabled').replace('{count}', '1'))
+    expect(toastMessages()).not.toContain(locale.t('supplier.toast.disabled').replace('{count}', '1'))
   })
 })
 
-describe('RateLimitPolicyView — delete', () => {
+describe('SupplierModelView — delete', () => {
   function openSingleConfirm(index: number) {
     const deleteBtn = rows()[index].querySelector<HTMLElement>('.row-action.danger')!
     deleteBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -459,7 +459,7 @@ describe('RateLimitPolicyView — delete', () => {
 
     const card = confirmBackdrop()
     expect(card).not.toBeNull()
-    expect(card?.getAttribute('aria-label')).toBe(locale.t('rateLimit.confirm.deleteTitle'))
+    expect(card?.getAttribute('aria-label')).toBe(locale.t('supplier.confirm.deleteTitle'))
     // Body interpolates the policy name.
     expect(card?.textContent).toContain('Alpha Policy')
   })
@@ -480,7 +480,7 @@ describe('RateLimitPolicyView — delete', () => {
     expect(mutateMock).toHaveBeenCalledTimes(1)
     const arg = mutateMock.mock.calls[0][0] as { variables: { id: string } }
     expect(arg.variables.id).toBe('b')
-    expect(toastMessages()).toContain(locale.t('rateLimit.toast.deleted').replace('{count}', '1'))
+    expect(toastMessages()).toContain(locale.t('supplier.toast.deleted').replace('{count}', '1'))
     expect(listSlot.refetch).toHaveBeenCalled()
     expect(confirmBackdrop()).toBeNull()
   })
@@ -525,9 +525,9 @@ describe('RateLimitPolicyView — delete', () => {
 
     // Batch confirm dialog with the batch title + interpolated count body.
     const card = confirmBackdrop()
-    expect(card?.getAttribute('aria-label')).toBe(locale.t('rateLimit.confirm.batchDeleteTitle'))
+    expect(card?.getAttribute('aria-label')).toBe(locale.t('supplier.confirm.batchDeleteTitle'))
     expect(card?.textContent).toContain(
-      locale.t('rateLimit.confirm.batchDeleteBody').replace('{count}', '2'),
+      locale.t('supplier.confirm.batchDeleteBody').replace('{count}', '2'),
     )
 
     card!.querySelector<HTMLElement>('cds-button[status="danger"]')!
@@ -535,7 +535,7 @@ describe('RateLimitPolicyView — delete', () => {
     await flushPromises()
 
     expect(mutateMock).toHaveBeenCalledTimes(2)
-    expect(toastMessages()).toContain(locale.t('rateLimit.toast.deleted').replace('{count}', '2'))
+    expect(toastMessages()).toContain(locale.t('supplier.toast.deleted').replace('{count}', '2'))
   })
 
   it('a failing delete surfaces the GraphQL error toast', async () => {
@@ -551,11 +551,11 @@ describe('RateLimitPolicyView — delete', () => {
     await flushPromises()
 
     expect(toastMessages()).toContain('policy is in use by 2 virtual key(s)')
-    expect(toastMessages()).not.toContain(locale.t('rateLimit.toast.deleted').replace('{count}', '1'))
+    expect(toastMessages()).not.toContain(locale.t('supplier.toast.deleted').replace('{count}', '1'))
   })
 })
 
-describe('RateLimitPolicyView — filtering + refresh', () => {
+describe('SupplierModelView — filtering + refresh', () => {
   it('status filter narrows the visible rows to enabled policies', async () => {
     setListData([POLICY_A, POLICY_B, POLICY_C]) // A+C enabled, B disabled
     mountView()
@@ -572,7 +572,7 @@ describe('RateLimitPolicyView — filtering + refresh', () => {
 
     const enabledOption = Array.from(
       wrapper!.element.querySelectorAll<HTMLElement>('.filter-option'),
-    ).find((b) => b.textContent?.includes(locale.t('rateLimit.filter.status.ENABLED')))!
+    ).find((b) => b.textContent?.includes(locale.t('supplier.filter.status.ENABLED')))!
     enabledOption.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
@@ -594,7 +594,7 @@ describe('RateLimitPolicyView — filtering + refresh', () => {
     await flushPromises()
 
     expect(listSlot.refetch).toHaveBeenCalled()
-    expect(toastMessages()).toContain(locale.t('rateLimit.toast.refreshed'))
+    expect(toastMessages()).toContain(locale.t('supplier.toast.refreshed'))
   })
 
   it('refresh surfaces an error toast when refetch rejects', async () => {
@@ -608,6 +608,6 @@ describe('RateLimitPolicyView — filtering + refresh', () => {
     await flushPromises()
 
     expect(toastMessages()).toContain('network down')
-    expect(toastMessages()).not.toContain(locale.t('rateLimit.toast.refreshed'))
+    expect(toastMessages()).not.toContain(locale.t('supplier.toast.refreshed'))
   })
 })

@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { apolloClient } from '@/api/graphql/client'
 import AppDropdown from '@/components/AppDropdown.vue'
-import RateLimitPolicyFormModal from '@/components/RateLimitPolicyFormModal.vue'
+import SupplierModelFormModal from '@/components/SupplierModelFormModal.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useAuthStore } from '@/stores/auth'
@@ -124,24 +124,24 @@ const summaryText = computed(() => {
   const start = totalCount.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1
   const end = Math.min(currentPage.value * pageSize.value, totalCount.value)
   return locale
-    .t('rateLimit.pagination.summary')
+    .t('supplier.pagination.summary')
     .replace('{start}', String(start))
     .replace('{end}', String(end))
     .replace('{total}', String(totalCount.value))
 })
 const deleteDialogTitle = computed(() =>
   pendingDeleteIds.value.length > 1
-    ? locale.t('rateLimit.confirm.batchDeleteTitle')
-    : locale.t('rateLimit.confirm.deleteTitle'),
+    ? locale.t('supplier.confirm.batchDeleteTitle')
+    : locale.t('supplier.confirm.deleteTitle'),
 )
 const deleteDialogBody = computed(() => {
   if (pendingDeleteIds.value.length > 1) {
     return locale
-      .t('rateLimit.confirm.batchDeleteBody')
+      .t('supplier.confirm.batchDeleteBody')
       .replace('{count}', String(pendingDeleteIds.value.length))
   }
   const target = policies.value.find((policy) => policy.id === pendingDeleteIds.value[0])
-  return locale.t('rateLimit.confirm.deleteBody').replace('{name}', target?.name ?? '')
+  return locale.t('supplier.confirm.deleteBody').replace('{name}', target?.name ?? '')
 })
 
 function toggleSelect(id: string, checked: boolean) {
@@ -236,13 +236,13 @@ async function submitPolicy(draft: RateLimitPolicyDraft) {
       mutation: UPSERT_RATE_LIMIT_POLICY,
       variables: { input: toUpsertInput(draft) },
     })
-    toast.success(locale.t(isEditing ? 'rateLimit.toast.updated' : 'rateLimit.toast.created'))
+    toast.success(locale.t(isEditing ? 'supplier.toast.updated' : 'supplier.toast.created'))
     if (!isEditing) currentPage.value = 1
     formOpen.value = false
     editingPolicy.value = null
     await refetch()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, locale.t('rateLimit.toast.saveFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('supplier.toast.saveFailed')))
   } finally {
     saving.value = false
   }
@@ -265,12 +265,12 @@ async function setEnabled(ids: string[], enabled: boolean) {
   if (ok > 0) {
     toast.success(
       locale
-        .t(enabled ? 'rateLimit.toast.enabled' : 'rateLimit.toast.disabled')
+        .t(enabled ? 'supplier.toast.enabled' : 'supplier.toast.disabled')
         .replace('{count}', String(ok)),
     )
   }
   if (failure) {
-    toast.error(graphqlErrorMessage(failure.reason, locale.t('rateLimit.toast.saveFailed')))
+    toast.error(graphqlErrorMessage(failure.reason, locale.t('supplier.toast.saveFailed')))
   }
   await refetch()
 }
@@ -317,10 +317,10 @@ async function confirmDelete() {
     (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected',
   )
   if (deletedIds.length > 0) {
-    toast.success(locale.t('rateLimit.toast.deleted').replace('{count}', String(deletedIds.length)))
+    toast.success(locale.t('supplier.toast.deleted').replace('{count}', String(deletedIds.length)))
   }
   if (failures.length > 0) {
-    toast.error(graphqlErrorMessage(failures[0].reason, locale.t('rateLimit.toast.deleteFailed')))
+    toast.error(graphqlErrorMessage(failures[0].reason, locale.t('supplier.toast.deleteFailed')))
   }
   selectedIds.value = new Set([...selectedIds.value].filter((id) => !deletedIds.includes(id)))
   await refetch()
@@ -331,9 +331,9 @@ async function refreshPolicies() {
   if (loading.value) return
   try {
     await refetch()
-    toast.success(locale.t('rateLimit.toast.refreshed'))
+    toast.success(locale.t('supplier.toast.refreshed'))
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, locale.t('rateLimit.toast.refreshFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('supplier.toast.refreshFailed')))
   }
 }
 
@@ -353,8 +353,8 @@ function goToPage(page: number) {
 <template>
   <section class="rate-limit-page">
     <header class="page-head">
-      <h1 cds-text="title" class="heading">{{ locale.t('rateLimit.title') }}</h1>
-      <p cds-text="body" class="desc muted">{{ locale.t('rateLimit.description') }}</p>
+      <h1 cds-text="title" class="heading">{{ locale.t('supplier.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('supplier.description') }}</p>
     </header>
 
     <div class="content-card">
@@ -366,7 +366,7 @@ function goToPage(page: number) {
           @click="openCreate"
         >
           <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
-          {{ locale.t('rateLimit.action.create') }}
+          {{ locale.t('supplier.action.create') }}
         </cds-button>
 
         <AppDropdown
@@ -378,25 +378,25 @@ function goToPage(page: number) {
             <cds-button
               action="outline"
               :disabled="selectedCount === 0"
-              :title="selectedCount === 0 ? locale.t('rateLimit.batch.disabled') : undefined"
+              :title="selectedCount === 0 ? locale.t('supplier.batch.disabled') : undefined"
             >
               <cds-icon shape="cog" size="sm" aria-hidden="true"></cds-icon>
-              {{ locale.t('rateLimit.action.batch') }}
+              {{ locale.t('supplier.action.batch') }}
               <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
             </cds-button>
           </template>
           <template #default="{ close }">
             <button class="menu-option" type="button" @click="performBatch('enable', close)">
               <cds-icon shape="check-circle" size="sm"></cds-icon>
-              {{ locale.t('rateLimit.batch.enable') }}
+              {{ locale.t('supplier.batch.enable') }}
             </button>
             <button class="menu-option" type="button" @click="performBatch('disable', close)">
               <cds-icon shape="ban" size="sm"></cds-icon>
-              {{ locale.t('rateLimit.batch.disable') }}
+              {{ locale.t('supplier.batch.disable') }}
             </button>
             <button class="menu-option danger" type="button" @click="performBatch('delete', close)">
               <cds-icon shape="trash" size="sm"></cds-icon>
-              {{ locale.t('rateLimit.batch.delete') }}
+              {{ locale.t('supplier.batch.delete') }}
             </button>
           </template>
         </AppDropdown>
@@ -405,8 +405,8 @@ function goToPage(page: number) {
           type="button"
           class="refresh-button"
           :disabled="loading"
-          :aria-label="locale.t('rateLimit.action.refresh')"
-          :title="locale.t('rateLimit.action.refresh')"
+          :aria-label="locale.t('supplier.action.refresh')"
+          :title="locale.t('supplier.action.refresh')"
           @click="refreshPolicies"
         >
           <cds-icon shape="refresh" size="md" :class="{ spinning: loading }" aria-hidden="true"></cds-icon>
@@ -418,24 +418,24 @@ function goToPage(page: number) {
         column-layout="flex"
         role="grid"
         scroll-lock
-        :aria-label="locale.t('rateLimit.table.label')"
+        :aria-label="locale.t('supplier.table.label')"
       >
         <cds-grid-column type="action" :resizable="false">
           <input
             type="checkbox"
             class="app-checkbox"
             :checked="allVisibleSelected"
-            :aria-label="locale.t('rateLimit.col.selectAll')"
+            :aria-label="locale.t('supplier.col.selectAll')"
             @change="toggleSelectAll(($event.target as HTMLInputElement).checked)"
           />
         </cds-grid-column>
 
         <cds-grid-column width="50%">
           <div class="column-head">
-            <span>{{ locale.t('rateLimit.col.name') }}</span>
+            <span>{{ locale.t('supplier.col.name') }}</span>
             <span class="column-head-actions">
               <cds-button-action
-                :aria-label="locale.t('rateLimit.sort').replace('{column}', locale.t('rateLimit.col.name'))"
+                :aria-label="locale.t('supplier.sort').replace('{column}', locale.t('supplier.col.name'))"
                 @click="toggleSort('NAME')"
               >
                 <cds-icon
@@ -455,7 +455,7 @@ function goToPage(page: number) {
               <cds-button-action
                 shape="filter"
                 :expanded="hasFilter('NAME')"
-                :aria-label="locale.t('rateLimit.filter').replace('{column}', locale.t('rateLimit.col.name'))"
+                :aria-label="locale.t('supplier.filter').replace('{column}', locale.t('supplier.col.name'))"
                 @click="(event: MouseEvent) => openFilterMenu('NAME', event)"
               ></cds-button-action>
             </span>
@@ -464,10 +464,10 @@ function goToPage(page: number) {
 
         <cds-grid-column width="13%">
           <div class="column-head">
-            <span>{{ locale.t('rateLimit.col.status') }}</span>
+            <span>{{ locale.t('supplier.col.status') }}</span>
             <span class="column-head-actions">
               <cds-button-action
-                :aria-label="locale.t('rateLimit.sort').replace('{column}', locale.t('rateLimit.col.status'))"
+                :aria-label="locale.t('supplier.sort').replace('{column}', locale.t('supplier.col.status'))"
                 @click="toggleSort('STATUS')"
               >
                 <cds-icon
@@ -487,14 +487,14 @@ function goToPage(page: number) {
               <cds-button-action
                 shape="filter"
                 :expanded="hasFilter('STATUS')"
-                :aria-label="locale.t('rateLimit.filter').replace('{column}', locale.t('rateLimit.col.status'))"
+                :aria-label="locale.t('supplier.filter').replace('{column}', locale.t('supplier.col.status'))"
                 @click="(event: MouseEvent) => openFilterMenu('STATUS', event)"
               ></cds-button-action>
             </span>
           </div>
         </cds-grid-column>
 
-        <cds-grid-column width="32%">{{ locale.t('rateLimit.col.actions') }}</cds-grid-column>
+        <cds-grid-column width="32%">{{ locale.t('supplier.col.actions') }}</cds-grid-column>
 
         <cds-grid-row v-for="policy in visiblePolicies" :key="policy.id">
           <cds-grid-cell>
@@ -502,7 +502,7 @@ function goToPage(page: number) {
               type="checkbox"
               class="app-checkbox"
               :checked="selectedIds.has(policy.id)"
-              :aria-label="locale.t('rateLimit.col.selectPolicy').replace('{name}', policy.name)"
+              :aria-label="locale.t('supplier.col.selectPolicy').replace('{name}', policy.name)"
               @change="toggleSelect(policy.id, ($event.target as HTMLInputElement).checked)"
             />
           </cds-grid-cell>
@@ -512,7 +512,7 @@ function goToPage(page: number) {
           <cds-grid-cell>
             <cds-badge :status="policy.enabled ? 'success' : 'neutral'" class="status-badge">
               <cds-icon :shape="policy.enabled ? 'check-circle' : 'ban'" size="sm"></cds-icon>
-              {{ locale.t(policy.enabled ? 'rateLimit.status.enabled' : 'rateLimit.status.disabled') }}
+              {{ locale.t(policy.enabled ? 'supplier.status.enabled' : 'supplier.status.disabled') }}
             </cds-badge>
           </cds-grid-cell>
           <cds-grid-cell>
@@ -524,7 +524,7 @@ function goToPage(page: number) {
                 @click="openEdit(policy)"
               >
                 <cds-icon shape="pencil" size="sm"></cds-icon>
-                <span>{{ locale.t('rateLimit.action.edit') }}</span>
+                <span>{{ locale.t('supplier.action.edit') }}</span>
               </button>
               <button
                 type="button"
@@ -534,7 +534,7 @@ function goToPage(page: number) {
                 @click.prevent
               >
                 <cds-icon shape="users" size="sm"></cds-icon>
-                <span>{{ locale.t('rateLimit.action.apply') }}</span>
+                <span>{{ locale.t('supplier.action.apply') }}</span>
               </button>
               <button
                 v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
@@ -543,7 +543,7 @@ function goToPage(page: number) {
                 @click="toggleEnabled(policy)"
               >
                 <cds-icon :shape="policy.enabled ? 'ban' : 'check-circle'" size="sm"></cds-icon>
-                <span>{{ locale.t(policy.enabled ? 'rateLimit.action.disable' : 'rateLimit.action.enable') }}</span>
+                <span>{{ locale.t(policy.enabled ? 'supplier.action.disable' : 'supplier.action.enable') }}</span>
               </button>
               <button
                 v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
@@ -552,7 +552,7 @@ function goToPage(page: number) {
                 @click="requestDelete(policy)"
               >
                 <cds-icon shape="trash" size="sm"></cds-icon>
-                <span>{{ locale.t('rateLimit.action.delete') }}</span>
+                <span>{{ locale.t('supplier.action.delete') }}</span>
               </button>
             </div>
           </cds-grid-cell>
@@ -560,20 +560,20 @@ function goToPage(page: number) {
 
         <cds-grid-placeholder v-if="visiblePolicies.length === 0">
           <cds-icon shape="filter" size="xl"></cds-icon>
-          <p cds-text="subsection">{{ locale.t('rateLimit.empty') }}</p>
+          <p cds-text="subsection">{{ locale.t('supplier.empty') }}</p>
         </cds-grid-placeholder>
 
         <cds-grid-footer v-if="totalCount > 0">
           <span v-if="selectedCount > 0" class="selected-summary">
-            {{ locale.t('rateLimit.selected').replace('{count}', String(selectedCount)) }}
+            {{ locale.t('supplier.selected').replace('{count}', String(selectedCount)) }}
           </span>
           <div class="pager">
-            <label for="rate-limit-page-size">{{ locale.t('rateLimit.pagination.pageSize') }}</label>
+            <label for="rate-limit-page-size">{{ locale.t('supplier.pagination.pageSize') }}</label>
             <cds-select control-width="shrink">
               <select
                 id="rate-limit-page-size"
                 :value="pageSize"
-                :aria-label="locale.t('rateLimit.pagination.pageSize')"
+                :aria-label="locale.t('supplier.pagination.pageSize')"
                 @change="onPageSizeChange"
               >
                 <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
@@ -582,7 +582,7 @@ function goToPage(page: number) {
               </select>
             </cds-select>
             <span class="pager-summary">{{ summaryText }}</span>
-            <cds-pagination :aria-label="locale.t('rateLimit.pagination.label')">
+            <cds-pagination :aria-label="locale.t('supplier.pagination.label')">
               <cds-pagination-button
                 action="first"
                 :disabled="currentPage <= 1"
@@ -636,8 +636,8 @@ function goToPage(page: number) {
           class="filter-input"
           type="text"
           :value="nameFilter"
-          :placeholder="locale.t('rateLimit.filter.namePlaceholder')"
-          :aria-label="locale.t('rateLimit.filter.namePlaceholder')"
+          :placeholder="locale.t('supplier.filter.namePlaceholder')"
+          :aria-label="locale.t('supplier.filter.namePlaceholder')"
           @input="setNameFilter(($event.target as HTMLInputElement).value)"
         />
 
@@ -650,20 +650,20 @@ function goToPage(page: number) {
             :class="{ active: statusFilter === status }"
             @click="setStatusFilter(status)"
           >
-            <span>{{ locale.t(`rateLimit.filter.status.${status}`) }}</span>
+            <span>{{ locale.t(`supplier.filter.status.${status}`) }}</span>
             <cds-icon v-if="statusFilter === status" shape="check" size="sm"></cds-icon>
           </button>
         </div>
 
         <div v-if="hasFilter(filterMenuKey)" class="filter-footer">
           <cds-button action="outline" size="sm" @click="clearActiveFilter">
-            {{ locale.t('rateLimit.filter.clear') }}
+            {{ locale.t('supplier.filter.clear') }}
           </cds-button>
         </div>
       </div>
     </cds-dropdown>
 
-    <RateLimitPolicyFormModal
+    <SupplierModelFormModal
       v-if="formOpen"
       :open="formOpen"
       :policy="editingPolicy"
