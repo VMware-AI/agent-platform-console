@@ -1339,6 +1339,12 @@ export const STRINGS: Dict = {
 
   // 实时监控 (real-time monitor)
   'monitor.title': { zh: '实时监控仪表板', en: 'Real-time Monitoring Dashboard' },
+  'monitor.kpi.requests': { zh: '总请求数', en: 'Total requests' },
+  'monitor.kpi.successRate': { zh: '成功率', en: 'Success rate' },
+  'monitor.kpi.errors': { zh: '错误数', en: 'Errors' },
+  'monitor.health.title': { zh: '上游健康（各网关）', en: 'Upstream health (per gateway)' },
+  'monitor.health.unreachable': { zh: '网关不可达', en: 'Gateway unreachable' },
+  'monitor.health.counts': { zh: '健康 {healthy} · 异常 {unhealthy}', en: '{healthy} healthy · {unhealthy} down' },
   'monitor.description': {
     zh: '按时间窗口聚合网关请求指标，实时刷新关键指标卡片与时序图表。',
     en: 'Aggregated gateway request metrics over a time window, with live-refreshing KPI cards and time-series charts.',
