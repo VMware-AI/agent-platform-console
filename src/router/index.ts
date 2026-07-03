@@ -51,50 +51,50 @@ const router = createRouter({
           component: () => import('@/views/ModelRouteView.vue'),
           meta: { admin: true },
         },
-        // 虚拟密钥: issueVirtualKey is @hasPermission("key:manage") — admin + tenant_admin.
+        // 虚拟密钥: issueVirtualKey is @hasPermission("key:manage") — admin only (tenant_admin removed).
         {
           path: 'model-gateway/key',
           name: 'mg.key',
           component: () => import('@/views/VirtualKeyView.vue'),
-          meta: { roles: ['admin', 'tenant_admin'] },
+          meta: { roles: ['admin'] },
         },
-        // 网关策略: rate-limit mutations are @hasPermission("route:manage") — admin + tenant_admin.
+        // 网关策略: rate-limit mutations are @hasPermission("route:manage") — admin only (tenant_admin removed).
         {
           path: 'model-gateway/policy',
           name: 'mg.policy',
           component: () => import('@/views/RateLimitPolicyView.vue'),
-          meta: { roles: ['admin', 'tenant_admin'] },
+          meta: { roles: ['admin'] },
         },
 
         // 可观测性
-        // 计量中心: meteringOverview is @hasPermission("metering:view") — admin/observability/tenant_admin.
+        // 计量中心: meteringOverview is @hasPermission("metering:view") — admin + read_only (观测岗).
         {
           path: 'observability/metering',
           name: 'obs.metering',
           component: () => import('@/views/MeteringCenterView.vue'),
-          meta: { roles: ['admin', 'observability', 'tenant_admin'] },
+          meta: { roles: ['admin', 'read_only'] },
         },
         {
           path: 'observability/monitor',
           name: 'obs.monitor',
           component: () => import('@/views/RealtimeMonitorView.vue'),
-          meta: { roles: ['admin', 'observability', 'tenant_admin'] },
+          meta: { roles: ['admin', 'read_only'] },
         },
         // 请求日志 / 审计日志 are gated by @hasPermission("audit:view"), which the
-        // backend grants to admin, observability AND tenant_admin (rbac.go) — NOT
-        // admin alone. Guard on the role allowlist (meta.roles), not meta.admin,
-        // so the observability role (whose whole job is these pages) isn't bounced.
+        // backend grants to admin + read_only (the observability seat, rbac.go) —
+        // NOT admin alone. Guard on the role allowlist (meta.roles), not meta.admin,
+        // so the read_only observability seat isn't bounced.
         {
           path: 'observability/requests',
           name: 'obs.requests',
           component: () => import('@/views/RequestLogView.vue'),
-          meta: { roles: ['admin', 'observability', 'tenant_admin'] },
+          meta: { roles: ['admin', 'read_only'] },
         },
         {
           path: 'observability/audit',
           name: 'obs.audit',
           component: () => import('@/views/AuditLogView.vue'),
-          meta: { roles: ['admin', 'observability', 'tenant_admin'] },
+          meta: { roles: ['admin', 'read_only'] },
         },
 
         // 平台管理
@@ -111,8 +111,8 @@ const router = createRouter({
           component: () => import('@/views/ModelGatewayView.vue'),
           meta: { admin: true },
         },
-        // 用户与权限: createUser/assignUserRole are @hasPermission("user:manage") — admin + tenant_admin.
-        { path: 'platform/users',   name: 'platform.users',   component: () => import('@/views/UserRoleView.vue'), meta: { roles: ['admin', 'tenant_admin'] } },
+        // 用户与权限: createUser/assignUserRole are @hasPermission("user:manage") — admin only (tenant_admin removed).
+        { path: 'platform/users',   name: 'platform.users',   component: () => import('@/views/UserRoleView.vue'), meta: { roles: ['admin'] } },
 
         // 个人资料: any authenticated user; reads `me` (which all roles have).
         // Rendered as a modal overlay (see ProfileView / AppShell) rather than
@@ -183,8 +183,8 @@ export function resolveGuard(
   }
   // Permission-scoped routes (meta.roles): an allowlist of backend role names that
   // hold the gating permission. Used for pages gated by @hasPermission rather than
-  // @hasRole(any:[admin]) — e.g. audit:view is held by admin/observability/
-  // tenant_admin. A role outside the list is bounced before its queries can error.
+  // @hasRole(any:[admin]) — e.g. audit:view is held by admin + read_only. A role
+  // outside the list is bounced before its queries can error.
   if (meta.roles && !meta.roles.includes(auth.role ?? '')) {
     return { name: 'overview' }
   }
