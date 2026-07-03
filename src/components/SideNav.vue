@@ -52,7 +52,7 @@ const groups: Group[] = [
     titleKey: 'nav.group.gateway',
     icon: 'internet-of-things',
     children: [
-      { name: 'mg.supplier', labelKey: 'nav.gateway.supplier', icon: 'blocks-group', to: '/model-gateway/policy' },
+      { name: 'mg.supplier', labelKey: 'nav.gateway.supplier', icon: 'blocks-group', to: '/model-gateway/supplier' },
       { name: 'mg.route',    labelKey: 'nav.gateway.route',    icon: 'forking',      to: '/model-gateway/route' },
       { name: 'mg.key',      labelKey: 'nav.gateway.key',      icon: 'key',          to: '/model-gateway/key' },
     ],
