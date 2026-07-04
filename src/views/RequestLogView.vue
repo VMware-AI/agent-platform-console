@@ -4,6 +4,7 @@ import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
+import { csvCell } from '@/utils/csv'
 import {
   REQUEST_LOGS_QUERY,
   type RequestLogFilterInput,
@@ -128,12 +129,11 @@ async function exportCsv() {
       return
     }
     const header = ['createdAt', 'requestId', 'userId', 'agentId', 'model', 'inputTokens', 'outputTokens', 'latencyMs', 'statusCode']
-    const cell = (v: string | number | null) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const lines = [header.join(',')]
     for (const l of rows) {
       lines.push(
         [l.createdAt, l.requestId, l.userId, l.agentId, l.model, l.inputTokens, l.outputTokens, l.latencyMs, l.statusCode]
-          .map(cell)
+          .map(csvCell)
           .join(','),
       )
     }
@@ -391,6 +391,7 @@ async function copyRequestId(value: string) {
             type="button"
             class="status-chip"
             :class="{ active: statusFilter === '200' }"
+            :aria-pressed="statusFilter === '200'"
             @click="selectStatusFilter('200')"
           >
             <span class="chip-check" aria-hidden="true"></span>
@@ -400,6 +401,7 @@ async function copyRequestId(value: string) {
             type="button"
             class="status-chip"
             :class="{ active: statusFilter === '4xx' }"
+            :aria-pressed="statusFilter === '4xx'"
             @click="selectStatusFilter('4xx')"
           >
             <span class="chip-check" aria-hidden="true"></span>
@@ -409,6 +411,7 @@ async function copyRequestId(value: string) {
             type="button"
             class="status-chip"
             :class="{ active: statusFilter === '5xx' }"
+            :aria-pressed="statusFilter === '5xx'"
             @click="selectStatusFilter('5xx')"
           >
             <span class="chip-check" aria-hidden="true"></span>
