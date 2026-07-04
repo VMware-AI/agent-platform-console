@@ -776,6 +776,27 @@ export const STRINGS: Dict = {
   },
   'marketplace.deploy.hostname': { zh: '主机名（可选）', en: 'Hostname (optional)' },
   'marketplace.deploy.hostnamePlaceholder': { zh: '如 agent-vm-01', en: 'e.g. agent-vm-01' },
+  'marketplace.deploy.initialPassword': {
+    zh: '初始登录密码（可选）',
+    en: 'Initial login password (optional)',
+  },
+  'marketplace.deploy.initialPasswordHint': {
+    zh: '用于智能体管理页与系统登录；留空则首启不设置密码，需另行配置。首登后可自助修改。',
+    en: 'For the agent management page + OS login. Empty = no credential is seeded (configure later). Changeable after first login.',
+  },
+  'marketplace.deploy.confirmPassword': { zh: '确认密码', en: 'Confirm password' },
+  'marketplace.deploy.error.passwordWeak': {
+    zh: '密码至少 12 位、最多 72 字节',
+    en: 'Password must be 12–72 bytes',
+  },
+  'marketplace.deploy.error.passwordChars': {
+    zh: '密码不能包含冒号或控制字符',
+    en: 'Password may not contain a colon or control characters',
+  },
+  'marketplace.deploy.error.passwordMismatch': {
+    zh: '两次输入的密码不一致',
+    en: 'The two passwords do not match',
+  },
   'marketplace.deploy.targetPool': { zh: 'vSphere 放置资源池', en: 'vSphere placement pool' },
   'marketplace.deploy.targetPoolPlaceholder': {
     zh: '请选择放置资源池',
