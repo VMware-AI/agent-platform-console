@@ -248,8 +248,10 @@ async function onSubmitDeploy(payload: DeployAgentInput) {
       secretDialogOpen.value = true
     }
   } catch (err) {
-
-    console.error('[marketplace] deploy failed', err)
+    // Scrub before logging: this mutation carries the initial password in its
+    // variables, and a raw ApolloError can echo the operation (incl. those
+    // variables) into the console. Log only the extracted, safe message.
+    console.error('[marketplace] deploy failed:', graphqlErrorMessage(err, 'deploy failed'))
     toast.error(graphqlErrorMessage(err, locale.t('marketplace.toast.deployFail')))
   }
 }

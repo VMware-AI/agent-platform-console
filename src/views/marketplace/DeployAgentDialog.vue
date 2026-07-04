@@ -155,11 +155,18 @@ const budgetValid = () => {
 function pwErrorKey(): string {
   const p = initialPassword.value
   if (!p && !confirmPassword.value) return ''
-  const bytes = new TextEncoder().encode(p).length
-  if (bytes < 12 || bytes > 72) return 'marketplace.deploy.error.passwordWeak'
-  // reject ':' (htpasswd/chpasswd delimiter) and any control char
-  const bad = [...p].some((c) => c === ':' || c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)
-  if (bad) return 'marketplace.deploy.error.passwordChars'
+  // Mirror the backend seed policy (agent-platform-backend
+  // internal/graph/deploy_targets.go validateInitialPassword), which itself
+  // mirrors the VM webadmin: reject edge whitespace (the seeder trims, so a
+  // padded value silently seeds a different credential), then ≥12 code points,
+  // ≤72 bytes (bcrypt truncates past 72), no ':' (htpasswd/chpasswd delimiter),
+  // and no control chars incl. C1 (an interior newline smuggles a second
+  // "user:password" line into chpasswd).
+  if (p !== p.trim()) return 'marketplace.deploy.error.passwordChars'
+  if ([...p].length < 12 || new TextEncoder().encode(p).length > 72) {
+    return 'marketplace.deploy.error.passwordWeak'
+  }
+  if (p.includes(':') || /\p{Cc}/u.test(p)) return 'marketplace.deploy.error.passwordChars'
   if (p !== confirmPassword.value) return 'marketplace.deploy.error.passwordMismatch'
   return ''
 }
