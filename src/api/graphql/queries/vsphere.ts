@@ -43,3 +43,23 @@ export const CONTENT_LIBRARY_ITEMS_QUERY = gql`
     }
   }
 `
+
+// VM Templates in resource pool vCenter (deploy form + add-template picker).
+export const VM_TEMPLATES_QUERY = gql`
+  query VMTemplates($resourcePoolId: ID!) {
+    vmTemplates(resourcePoolId: $resourcePoolId) {
+      name
+      uuid
+    }
+  }
+`
+
+export const UNBOUND_KEYS_QUERY = gql`
+  query UnboundKeys {
+    unboundKeys {
+      id
+      alias
+      status
+    }
+  }
+`

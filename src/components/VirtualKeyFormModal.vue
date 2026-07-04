@@ -32,14 +32,14 @@ const nameValid = computed(() => {
   return length === 0 || (length >= 2 && length <= 64)
 })
 const ownerValid = computed(() => props.users.some((user) => user.id === userId.value))
-const agentValid = computed(() => props.agents.some((agent) => agent.id === agentId.value))
-const formValid = computed(() => nameValid.value && ownerValid.value && agentValid.value)
+const agentValid = computed(() => true) // agent binding is optional
+const formValid = computed(() => nameValid.value && ownerValid.value)
 const minimumDate = computed(() => new Date().toISOString().slice(0, 10))
 
 function reset() {
   name.value = ''
   userId.value = props.users[0]?.id ?? ''
-  agentId.value = props.agents[0]?.id ?? ''
+  agentId.value = ''
   policyId.value = ''
   expiresAt.value = ''
   attempted.value = false
@@ -116,8 +116,9 @@ function submit() {
             :aria-label="locale.t('virtualKey.form.agent')"
             @change="agentId = ($event.target as HTMLSelectElement).value"
           >
+            <option value="">不绑定（独立密钥）</option>
             <option v-for="agent in agents" :key="agent.id" :value="agent.id">
-              {{ agent.id }} · {{ agent.name }}
+              {{ agent.id.slice(0, 12) }}... · {{ agent.name }}
             </option>
           </select>
         </cds-select>

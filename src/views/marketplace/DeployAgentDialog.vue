@@ -12,7 +12,7 @@
 import { computed, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
-import { VSPHERE_RESOURCE_POOLS_QUERY, VSPHERE_NETWORKS_QUERY } from '@/api/graphql/queries/vsphere'
+import { VSPHERE_RESOURCE_POOLS_QUERY, VSPHERE_NETWORKS_QUERY, UNBOUND_KEYS_QUERY } from '@/api/graphql/queries/vsphere'
 import type { ResourcePool } from '@/types/resource-pool'
 import type {
   DeployAgentInput,
@@ -54,6 +54,10 @@ const existingKeyId = ref<string>('')
 const ovfPropertyValues = ref<Record<string, string>>({})
 const ovfPasswordConfirm = ref<Record<string, string>>({})
 const deployNotes = ref('')
+const batchMode = ref(false)
+const batchCount = ref(3)
+const batchNamePrefix = ref('')
+const batchStartIP = ref('')
 const attempted = ref(false)
 
 watch(
@@ -134,6 +138,13 @@ const networksGrouped = computed(() => {
   return groups
 })
 
+/* ---- Unbound keys (key-source picker) ---- */
+const { result: unboundResult } = useQuery(UNBOUND_KEYS_QUERY, null, () => ({
+  enabled: computed(() => props.open),
+  fetchPolicy: 'cache-and-network',
+}))
+const unboundKeys = computed(() => unboundResult.value?.unboundKeys ?? [])
+
 watch(vsphereNetworks, (nets) => {
   if (targetNetwork.value && !nets.some((n) => n.path === targetNetwork.value)) {
     targetNetwork.value = ''
@@ -168,21 +179,37 @@ function submit() {
   const ovfProps = Object.entries(ovfPropertyValues.value)
     .filter(([, v]) => v !== '')
     .map(([key, value]) => ({ key, value }))
-  emit('submit', {
-    name: name.value.trim(),
-    templateFamilyId: props.template?.id ?? '',
-    templateVersionId: templateVersionId.value,
-    resourcePoolId: resourcePoolId.value,
-    targetResourcePool: targetResourcePool.value || null,
-    targetNetwork: targetNetwork.value || null,
-    hostname: hostname.value.trim() || null,
-    maxBudget: budget,
-    departmentId: departmentId.value || null,
-    keySource: keySource.value,
-    existingKeyId: keySource.value === 'existing' ? (existingKeyId.value || null) : null,
-    ovfProperties: ovfProps.length > 0 ? ovfProps : null,
-    notes: deployNotes.value.trim() || null,
-  })
+    const doSubmit = (agentName: string, agentHostname: string | null, agentProps: any[]) => {
+      emit('submit', {
+        name: agentName,
+        templateFamilyId: props.template?.id ?? '',
+        templateVersionId: templateVersionId.value,
+        resourcePoolId: resourcePoolId.value,
+        targetResourcePool: targetResourcePool.value || null,
+        targetNetwork: targetNetwork.value || null,
+        hostname: agentHostname,
+        maxBudget: budget,
+        departmentId: departmentId.value || null,
+        keySource: keySource.value,
+        existingKeyId: keySource.value === 'existing' ? (existingKeyId.value || null) : null,
+        ovfProperties: agentProps.length > 0 ? agentProps : null,
+        notes: deployNotes.value.trim() || null,
+      })
+    }
+    if (batchMode.value && batchCount.value > 0) {
+      const prefix = batchNamePrefix.value || name.value.trim()
+      for (let i = 0; i < batchCount.value; i++) {
+        const idx = String(i + 1).padStart(2, '0')
+        const bName = prefix + '-' + idx
+        let bProps = [...ovfProps]
+        if (batchStartIP.value) {
+          bProps = bProps.map(p => p.key === 'guestinfo.static_ip' ? { key: p.key, value: incrIP(batchStartIP.value, i) } : p)
+        }
+        doSubmit(bName, bName, bProps)
+      }
+    } else {
+      doSubmit(name.value.trim(), hostname.value.trim() || null, ovfProps)
+    }
 }
 
 function close() {
@@ -195,6 +222,7 @@ const selectedVersion = computed<OvaTemplateVersion | null>(() => {
   return v ?? null
 })
 
+function incrIP(ip: string, delta: number): string { const p = ip.split("."); p[3] = String(Math.min(255, parseInt(p[3])+delta)); return p.join("."); }
 function fmtVersionRow(v: OvaTemplateVersion): string {
   const isLatest = v.version === props.template?.latestVersion
   return `${v.version}${isLatest ? ` · ${locale.t('marketplace.deploy.versionLatest')}` : ''}`
@@ -275,6 +303,26 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
           </cds-control-message>
         </cds-input>
 
+        <!-- 密钥来源 -->
+        <div class="full-row" style="margin:4px 0">
+          <label style="display:block;font-weight:500;margin-bottom:6px">密钥来源</label>
+          <div style="display:flex;gap:16px">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+              <input type="radio" v-model="keySource" value="new" /> 现场新建密钥
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+              <input type="radio" v-model="keySource" value="existing" /> 使用已有未绑定密钥
+            </label>
+          </div>
+        </div>
+        <cds-select v-if="keySource === 'existing'" class="full-row">
+          <label>选择密钥</label>
+          <select v-model="existingKeyId">
+            <option value="">-- 选择 --</option>
+            <option v-for="k in unboundKeys" :key="k.id" :value="k.id">{{ k.alias || 'Key ' + k.id.slice(0, 8) }}</option>
+          </select>
+        </cds-select>
+
         <!-- 主机名（可选） -->
         <cds-input>
           <label>{{ locale.t('marketplace.deploy.hostname') }}</label>
@@ -285,6 +333,23 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
         </cds-input>
 
         
+        <!-- 批量部署 -->
+        <div class="full-row" style="margin:8px 0;padding:10px;border:1px dashed #ccc;border-radius:6px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500">
+            <input type="checkbox" v-model="batchMode" /> 批量部署
+          </label>
+          <template v-if="batchMode">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">
+              <cds-input><label>数量</label><input v-model.number="batchCount" type="number" min="1" max="50" /></cds-input>
+              <cds-input><label>名称前缀</label><input v-model="batchNamePrefix" :placeholder="name || ''" /></cds-input>
+              <cds-input><label>起始 IP（DHCP 忽略）</label><input v-model="batchStartIP" placeholder="172.16.85.200" /></cds-input>
+            </div>
+            <div style="margin-top:6px;font-size:0.8rem;color:#666" v-if="batchCount && batchNamePrefix">
+              {{ batchCount }} 台: {{ batchNamePrefix }}-01, {{ batchNamePrefix }}-02...
+            </div>
+          </template>
+        </div>
+
         <!-- vApp / OVF 属性（来自模板，动态渲染） -->
         <template v-if="template && template.versions.length > 0">
           <div v-if="selectedVersion?.ovfProperties?.length" class="full-row vapp-section">

@@ -113,6 +113,8 @@ export const STRINGS: Dict = {
   'agents.col.actions': { zh: '操作', en: 'Actions' },
   'agents.status.running': { zh: '运行中', en: 'Running' },
   'agents.status.stopped': { zh: '已停止', en: 'Stopped' },
+  'agents.status.provisioning': { zh: '部署中', en: 'Provisioning' },
+  'agents.status.exception': { zh: '异常', en: 'Exception' },
   'agents.status.error': { zh: '异常', en: 'Error' },
   'agents.status.filter.all': { zh: '全部状态', en: 'All statuses' },
   'agents.type.filter.all': { zh: '全部类型', en: 'All types' },

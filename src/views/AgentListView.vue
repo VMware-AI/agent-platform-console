@@ -49,7 +49,7 @@ const columnFilterAnchors = ref<Record<ColumnKeywordField, HTMLElement | null>>(
 const filter = computed<AgentsQueryVars['filter']>(() => {
   const f: NonNullable<AgentsQueryVars['filter']> = {}
   if (statusFilter.value !== 'all') {
-    f.status = statusFilter.value.toUpperCase() as 'RUNNING' | 'STOPPED' | 'ERROR'
+    f.status = statusFilter.value as Agent['status']
   }
   if (typeFilter.value !== 'all') {
     f.type = typeFilter.value
@@ -152,7 +152,7 @@ const STATUS_OPTIONS: Array<StatusKey | 'all'> = [
   'all',
   'running',
   'stopped',
-  'error',
+  'exception',
 ]
 
 const TYPE_OPTIONS: Array<TypeKey | 'all'> = [
@@ -257,16 +257,16 @@ function onPageSizeSelect(e: Event) {
 
 /* ---------- Row actions ---------- */
 
-type RowActionKey = 'rotateKey' | 'restart' | 'stop' | 'update' | 'delete'
+type RowActionKey = 'rotateKey' | 'restart' | 'stop' | 'update' | 'delete' | 'copyAccess'
 
 // Order is fixed by the product spec:
 //   密码更新 → 版本更新 → 重启 → 停止 → 删除
 // All five items are exposed for every status so the "更多" menu reads the
 // same regardless of the agent's current state.
 const ACTIONS_BY_STATUS: Record<StatusKey, RowActionKey[]> = {
-  running: ['rotateKey', 'update', 'restart', 'stop', 'delete'],
-  stopped: ['rotateKey', 'update', 'restart', 'stop', 'delete'],
-  error: ['rotateKey', 'update', 'restart', 'stop', 'delete'],
+  running: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
+  stopped: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
+  error: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
 }
 
 const ICON_FOR_ACTION: Record<RowActionKey, string> = {
@@ -278,8 +278,8 @@ const ICON_FOR_ACTION: Record<RowActionKey, string> = {
 }
 
 function badgeStatusFor(status: Agent['status']): 'success' | 'neutral' | 'danger' {
-  if (status === 'RUNNING') return 'success'
-  if (status === 'ERROR') return 'danger'
+  if (status === 'running') return 'success'
+  if (status === 'exception') return 'danger'
   return 'neutral'
 }
 
@@ -354,6 +354,26 @@ async function onCopyKey(agent: Agent) {
   } catch (err) {
     console.warn('[agents] copy-key failed', { id: agent.id, err })
     toast.error(graphqlErrorMessage(err, locale.t('agents.action.copyKeyFail')))
+  }
+}
+
+async function onCopyAccess(agent: Agent) {
+  const creds = agent.credentials
+  const ip = creds?.ip || ''
+  const user = creds?.username || ''
+  const text = `IP: ${ip}  User: ${user}  Password: (set at deploy)`
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = text; ta.style.position='fixed'; ta.style.opacity='0'
+      document.body.appendChild(ta); ta.select()
+      document.execCommand('copy'); document.body.removeChild(ta)
+    }
+    toast.success(locale.t('agents.action.copyAccessOk').replace('{ip}', ip))
+  } catch (err) {
+    toast.error(locale.t('agents.action.copyAccessFail'))
   }
 }
 

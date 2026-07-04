@@ -3,7 +3,7 @@
  * view-key mappings). Mirrors the backend schema; replace with codegen
  * output when available.
  */
-export type AgentStatus = 'RUNNING' | 'STOPPED' | 'ERROR'
+export type AgentStatus = 'running' | 'stopped' | 'provisioning' | 'exception'
 
 export type AgentType =
   | 'GENERAL_CHAT'
@@ -111,18 +111,20 @@ export interface AgentQueryResult {
 /* ---------- View-layer mappings ---------- */
 
 /** Lower-case status used in views / i18n keys. */
-export type StatusKey = 'running' | 'stopped' | 'error'
+export type StatusKey = 'running' | 'stopped' | 'provisioning' | 'exception'
 
 export const STATUS_FROM_GQL: Record<AgentStatus, StatusKey> = {
-  RUNNING: 'running',
-  STOPPED: 'stopped',
-  ERROR: 'error',
+  running: 'running',
+  stopped: 'stopped',
+  provisioning: 'provisioning',
+  exception: 'exception',
 }
 
 export const STATUS_TO_GQL: Record<StatusKey, AgentStatus> = {
-  running: 'RUNNING',
-  stopped: 'STOPPED',
-  error: 'ERROR',
+  running: 'running',
+  stopped: 'stopped',
+  provisioning: 'provisioning',
+  exception: 'exception',
 }
 
 /** Lower-case type key used in views / i18n keys. */
