@@ -4,26 +4,42 @@ import { useQuery } from '@vue/apollo-composable'
 import { apolloClient } from '@/api/graphql/client'
 import AppDropdown from '@/components/AppDropdown.vue'
 import SupplierModelFormModal from '@/components/SupplierModelFormModal.vue'
+import SupplierModelSpecsDrawer from '@/components/SupplierModelSpecsDrawer.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
-import type { RateLimitPolicy, RateLimitPolicyDraft, RateLimitType } from '@/types/rate-limit-policy'
 import {
-  RATE_LIMIT_POLICIES_QUERY,
-  UPSERT_RATE_LIMIT_POLICY,
-  SET_RATE_LIMIT_POLICY_ENABLED,
-  DELETE_RATE_LIMIT_POLICY,
-  type RateLimitPoliciesResult,
-  type RateLimitPolicyNode,
-  type UpsertRateLimitPolicyResult,
-  type UpsertRateLimitPolicyVars,
-  type SetRateLimitPolicyEnabledResult,
-  type SetRateLimitPolicyEnabledVars,
-  type DeleteRateLimitPolicyResult,
-  type DeleteRateLimitPolicyVars,
-} from '@/api/graphql/queries/rate-limit-policies'
+  PROVIDER_MODELS_QUERY,
+  CREATE_PROVIDER_MODEL,
+  UPDATE_PROVIDER_MODEL,
+  DELETE_PROVIDER_MODEL,
+  TEST_PROVIDER_CONNECTION,
+  BLOCK_PROVIDER_MODEL_SPEC,
+  REFRESH_PROVIDER_MODEL_STATUS,
+  type ProviderModelInfoResult,
+  type ProviderModelNode,
+  type ProviderModelStatus,
+  type CreateProviderModelInput,
+  type UpdateProviderModelInput,
+  type CreateProviderModelResult,
+  type CreateProviderModelVars,
+  type UpdateProviderModelResult,
+  type UpdateProviderModelVars,
+  type DeleteProviderModelResult,
+  type DeleteProviderModelVars,
+  type TestProviderConnectionResult,
+  type TestProviderConnectionVars,
+  type BlockProviderModelSpecResult,
+  type BlockProviderModelSpecVars,
+  type RefreshProviderModelStatusResult,
+  type RefreshProviderModelStatusVars,
+  type ProviderModelSortField,
+  type SortDirection,
+} from '@/api/graphql/queries/supplier-models'
+import { MODEL_GATEWAYS_QUERY } from '@/api/graphql/queries/model-gateways'
+import { PROVIDER_MODEL_STATUSES } from '@/types/supplier-model'
 import '@/components/icons'
 
 const locale = useLocaleStore()
@@ -31,97 +47,75 @@ const auth = useAuthStore()
 const toast = useToast()
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const
-const STATUS_FILTER_OPTIONS = ['ALL', 'ENABLED', 'DISABLED'] as const
 type PageSize = (typeof PAGE_SIZE_OPTIONS)[number]
-type PolicyColumn = 'NAME' | 'STATUS'
-type SortDirection = 'ASC' | 'DESC'
-type BatchAction = 'enable' | 'disable' | 'delete'
 
-// The backend stores raw rpm/tpm caps; the UI models a `type` derived from which
-// caps are set (COMBINED = both, REQUEST = rpm only, TOKEN = tpm only).
-function toUiPolicy(node: RateLimitPolicyNode): RateLimitPolicy {
-  const tokenLimitPerMinute = node.tpm ?? 0
-  const requestLimitPerMinute = node.rpm ?? 0
-  const type: RateLimitType =
-    tokenLimitPerMinute > 0 && requestLimitPerMinute > 0
-      ? 'COMBINED'
-      : requestLimitPerMinute > 0
-        ? 'REQUEST'
-        : tokenLimitPerMinute > 0
-          ? 'TOKEN'
-          : 'COMBINED' // neither cap set — show as COMBINED rather than mislabel as TOKEN
-  return {
-    id: node.id,
-    name: node.name,
-    type,
-    tokenLimitPerMinute,
-    requestLimitPerMinute,
-    enabled: node.enabled,
-  }
-}
+const STATUS_FILTER_OPTIONS = ['ALL', ...PROVIDER_MODEL_STATUSES] as const
+type StatusFilter = 'ALL' | ProviderModelStatus
 
-// `type` is a UI concept; persist it as the rpm/tpm pair the backend stores.
-function toUpsertInput(draft: RateLimitPolicyDraft): UpsertRateLimitPolicyVars['input'] {
-  return {
-    name: draft.name,
-    tpm: draft.type === 'REQUEST' ? 0 : draft.tokenLimitPerMinute,
-    rpm: draft.type === 'TOKEN' ? 0 : draft.requestLimitPerMinute,
-    enabled: draft.enabled,
-  }
-}
+const { result, loading, refetch } = useQuery<ProviderModelInfoResult>(
+  PROVIDER_MODELS_QUERY,
+  () => ({
+    filter: {
+      search: nameFilter.value.trim() || null,
+      status: statusFilter.value === 'ALL' ? null : statusFilter.value,
+    },
+    page: {
+      limit: pageSize.value,
+      offset: (currentPage.value - 1) * pageSize.value,
+    },
+    sort: sortField.value
+      ? { field: sortField.value, direction: sortDirection.value }
+      : null,
+  }),
+)
 
-const { result, loading, refetch } = useQuery<RateLimitPoliciesResult>(RATE_LIMIT_POLICIES_QUERY)
-const policies = computed<RateLimitPolicy[]>(() =>
-  (result.value?.rateLimitPolicies ?? []).map(toUiPolicy),
+const models = computed<ProviderModelNode[]>(
+  () => result.value?.providerModelInfo?.data ?? [],
+)
+const totalCount = computed<number>(
+  () => result.value?.providerModelInfo?.total_count ?? 0,
+)
+const totalPages = computed<number>(() =>
+  Math.max(1, result.value?.providerModelInfo?.total_pages ?? 1),
+)
+
+// Model Gateways (picker source for form / drawer)
+const { result: gatewaysResult } = useQuery(MODEL_GATEWAYS_QUERY, {
+  page: { limit: 1000, offset: 0 },
+})
+const gateways = computed(() =>
+  (gatewaysResult.value?.modelGateways?.nodes ?? []).map(
+    (g: { id: string; name: string }) => ({ id: g.id, name: g.name }),
+  ),
 )
 
 const selectedIds = ref<Set<string>>(new Set())
+const nameFilter = ref('')
+const statusFilter = ref<StatusFilter>('ALL')
 const pageSize = ref<PageSize>(10)
 const currentPage = ref(1)
-const formOpen = ref(false)
-const editingPolicy = ref<RateLimitPolicy | null>(null)
-const saving = ref(false)
-const pendingDeleteIds = ref<string[]>([])
-const sortField = ref<PolicyColumn | null>(null)
+const sortField = ref<ProviderModelSortField | null>(null)
 const sortDirection = ref<SortDirection>('ASC')
-const nameFilter = ref('')
-const statusFilter = ref<'ALL' | 'ENABLED' | 'DISABLED'>('ALL')
 const filterMenuAnchor = ref<HTMLElement | null>(null)
-const filterMenuKey = ref<PolicyColumn | null>(null)
+const filterMenuKey = ref<'NAME' | 'HEALTH' | null>(null)
 
-const filteredPolicies = computed(() => {
-  const nameKeyword = nameFilter.value.trim().toLocaleLowerCase()
-  const filtered = policies.value.filter((policy) => {
-    if (nameKeyword && !policy.name.toLocaleLowerCase().includes(nameKeyword)) return false
-    if (statusFilter.value === 'ENABLED' && !policy.enabled) return false
-    if (statusFilter.value === 'DISABLED' && policy.enabled) return false
-    return true
-  })
+const formOpen = ref(false)
+const editingModel = ref<ProviderModelNode | null>(null)
+const saving = ref(false)
+const specsDrawerModel = ref<ProviderModelNode | null>(null)
+const pendingDeleteIds = ref<string[]>([])
 
-  if (!sortField.value) return filtered
-  const direction = sortDirection.value === 'ASC' ? 1 : -1
-  return [...filtered].sort((left, right) => {
-    if (sortField.value === 'STATUS') {
-      return ((left.enabled ? 1 : 0) - (right.enabled ? 1 : 0)) * direction
-    }
-    return left.name.localeCompare(right.name, locale.locale) * direction
-  })
-})
-
-const totalCount = computed(() => filteredPolicies.value.length)
-const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)))
-const visiblePolicies = computed(() => {
-  const offset = (currentPage.value - 1) * pageSize.value
-  return filteredPolicies.value.slice(offset, offset + pageSize.value)
-})
+const visibleModels = computed(() => models.value)
 const selectedCount = computed(() => selectedIds.value.size)
 const allVisibleSelected = computed(
   () =>
-    visiblePolicies.value.length > 0 &&
-    visiblePolicies.value.every((policy) => selectedIds.value.has(policy.id)),
+    visibleModels.value.length > 0 &&
+    visibleModels.value.every((m) => selectedIds.value.has(m.id)),
 )
+
 const summaryText = computed(() => {
-  const start = totalCount.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1
+  const start =
+    totalCount.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1
   const end = Math.min(currentPage.value * pageSize.value, totalCount.value)
   return locale
     .t('supplier.pagination.summary')
@@ -129,6 +123,7 @@ const summaryText = computed(() => {
     .replace('{end}', String(end))
     .replace('{total}', String(totalCount.value))
 })
+
 const deleteDialogTitle = computed(() =>
   pendingDeleteIds.value.length > 1
     ? locale.t('supplier.confirm.batchDeleteTitle')
@@ -140,8 +135,12 @@ const deleteDialogBody = computed(() => {
       .t('supplier.confirm.batchDeleteBody')
       .replace('{count}', String(pendingDeleteIds.value.length))
   }
-  const target = policies.value.find((policy) => policy.id === pendingDeleteIds.value[0])
-  return locale.t('supplier.confirm.deleteBody').replace('{name}', target?.name ?? '')
+  const target = models.value.find(
+    (m) => m.id === pendingDeleteIds.value[0],
+  )
+  return locale
+    .t('supplier.confirm.deleteBody')
+    .replace('{name}', target?.name ?? '')
 })
 
 function toggleSelect(id: string, checked: boolean) {
@@ -153,22 +152,25 @@ function toggleSelect(id: string, checked: boolean) {
 
 function toggleSelectAll(checked: boolean) {
   const next = new Set(selectedIds.value)
-  for (const policy of visiblePolicies.value) {
-    if (checked) next.add(policy.id)
-    else next.delete(policy.id)
+  for (const m of visibleModels.value) {
+    if (checked) next.add(m.id)
+    else next.delete(m.id)
   }
   selectedIds.value = next
 }
 
-function sortStateFor(field: PolicyColumn): 'none' | 'ascending' | 'descending' {
+function sortStateFor(
+  field: 'NAME' | 'HEALTH',
+): 'none' | 'ascending' | 'descending' {
   if (sortField.value !== field) return 'none'
   return sortDirection.value === 'ASC' ? 'ascending' : 'descending'
 }
 
-function toggleSort(field: PolicyColumn) {
+function toggleSort(field: 'NAME' | 'HEALTH') {
+  const target: ProviderModelSortField = field === 'HEALTH' ? 'STATUS' : 'NAME'
   const state = sortStateFor(field)
   if (state === 'none') {
-    sortField.value = field
+    sortField.value = target
     sortDirection.value = 'ASC'
   } else if (state === 'ascending') {
     sortDirection.value = 'DESC'
@@ -179,7 +181,7 @@ function toggleSort(field: PolicyColumn) {
   currentPage.value = 1
 }
 
-function openFilterMenu(key: PolicyColumn, event: MouseEvent) {
+function openFilterMenu(key: 'NAME' | 'HEALTH', event: MouseEvent) {
   filterMenuKey.value = key
   filterMenuAnchor.value = event.currentTarget as HTMLElement
 }
@@ -189,8 +191,9 @@ function closeFilterMenu() {
   filterMenuAnchor.value = null
 }
 
-function hasFilter(key: PolicyColumn): boolean {
-  return key === 'NAME' ? Boolean(nameFilter.value.trim()) : statusFilter.value !== 'ALL'
+function hasFilter(key: 'NAME' | 'HEALTH'): boolean {
+  if (key === 'NAME') return Boolean(nameFilter.value.trim())
+  return statusFilter.value !== 'ALL'
 }
 
 function setNameFilter(value: string) {
@@ -198,7 +201,7 @@ function setNameFilter(value: string) {
   currentPage.value = 1
 }
 
-function setStatusFilter(value: 'ALL' | 'ENABLED' | 'DISABLED') {
+function setStatusFilter(value: StatusFilter) {
   statusFilter.value = value
   currentPage.value = 1
   closeFilterMenu()
@@ -206,40 +209,53 @@ function setStatusFilter(value: 'ALL' | 'ENABLED' | 'DISABLED') {
 
 function clearActiveFilter() {
   if (filterMenuKey.value === 'NAME') nameFilter.value = ''
-  else if (filterMenuKey.value === 'STATUS') statusFilter.value = 'ALL'
+  else if (filterMenuKey.value === 'HEALTH') statusFilter.value = 'ALL'
   currentPage.value = 1
   closeFilterMenu()
 }
 
 function openCreate() {
-  editingPolicy.value = null
+  editingModel.value = null
   formOpen.value = true
+  specsDrawerModel.value = null
 }
 
-function openEdit(policy: RateLimitPolicy) {
-  editingPolicy.value = policy
+function openEdit(m: ProviderModelNode) {
+  editingModel.value = m
   formOpen.value = true
+  specsDrawerModel.value = null
 }
 
 function closeForm() {
   if (saving.value) return
   formOpen.value = false
-  editingPolicy.value = null
+  editingModel.value = null
 }
 
-async function submitPolicy(draft: RateLimitPolicyDraft) {
+async function submitModel(
+  input: CreateProviderModelInput | UpdateProviderModelInput,
+) {
   if (saving.value) return
-  const isEditing = Boolean(editingPolicy.value)
+  const isEditing = Boolean(editingModel.value)
   saving.value = true
   try {
-    await apolloClient.mutate<UpsertRateLimitPolicyResult, UpsertRateLimitPolicyVars>({
-      mutation: UPSERT_RATE_LIMIT_POLICY,
-      variables: { input: toUpsertInput(draft) },
-    })
-    toast.success(locale.t(isEditing ? 'supplier.toast.updated' : 'supplier.toast.created'))
+    if (isEditing) {
+      await apolloClient.mutate<UpdateProviderModelResult, UpdateProviderModelVars>({
+        mutation: UPDATE_PROVIDER_MODEL,
+        variables: { input: input as UpdateProviderModelInput },
+      })
+    } else {
+      await apolloClient.mutate<CreateProviderModelResult, CreateProviderModelVars>({
+        mutation: CREATE_PROVIDER_MODEL,
+        variables: { input: input as CreateProviderModelInput },
+      })
+    }
+    toast.success(
+      locale.t(isEditing ? 'supplier.toast.updated' : 'supplier.toast.created'),
+    )
     if (!isEditing) currentPage.value = 1
     formOpen.value = false
-    editingPolicy.value = null
+    editingModel.value = null
     await refetch()
   } catch (error) {
     toast.error(graphqlErrorMessage(error, locale.t('supplier.toast.saveFailed')))
@@ -248,86 +264,67 @@ async function submitPolicy(draft: RateLimitPolicyDraft) {
   }
 }
 
-async function setEnabled(ids: string[], enabled: boolean) {
-  if (ids.length === 0) return
+function openSpecsDrawer(m: ProviderModelNode) {
+  specsDrawerModel.value = m
+  formOpen.value = false
+}
+
+function closeSpecsDrawer() {
+  specsDrawerModel.value = null
+}
+
+async function refreshOne(m: ProviderModelNode) {
+  try {
+    const r = await apolloClient.mutate<
+      TestProviderConnectionResult,
+      TestProviderConnectionVars
+    >({
+      mutation: TEST_PROVIDER_CONNECTION,
+      variables: { name: m.name },
+    })
+    if (r.data?.testProviderConnection) {
+      toast.success(locale.t('supplier.toast.refreshed'))
+      await refetch()
+    }
+  } catch (error) {
+    toast.error(
+      graphqlErrorMessage(error, locale.t('supplier.toast.refreshFailed')),
+    )
+  }
+}
+
+async function batchBlockSpecIds(blocked: boolean) {
+  const rows = models.value.filter((m) => selectedIds.value.has(m.id))
+  const specPairs = rows.flatMap((m) =>
+    m.modelSpecs.map((s) => ({ specId: s.modelInfo.id, name: m.name })),
+  )
+  if (specPairs.length === 0) return
   const outcomes = await Promise.allSettled(
-    ids.map((id) =>
-      apolloClient.mutate<SetRateLimitPolicyEnabledResult, SetRateLimitPolicyEnabledVars>({
-        mutation: SET_RATE_LIMIT_POLICY_ENABLED,
-        variables: { id, enabled },
+    specPairs.map((p) =>
+      apolloClient.mutate<BlockProviderModelSpecResult, BlockProviderModelSpecVars>({
+        mutation: BLOCK_PROVIDER_MODEL_SPEC,
+        variables: { input: { specId: p.specId, blocked } },
       }),
     ),
   )
-  const ok = outcomes.filter((outcome) => outcome.status === 'fulfilled').length
+  const ok = outcomes.filter((o) => o.status === 'fulfilled').length
   const failure = outcomes.find(
-    (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected',
+    (o): o is PromiseRejectedResult => o.status === 'rejected',
   )
   if (ok > 0) {
-    toast.success(
-      locale
-        .t(enabled ? 'supplier.toast.enabled' : 'supplier.toast.disabled')
-        .replace('{count}', String(ok)),
-    )
+    const key = blocked
+      ? 'supplier.specs.toast.blocked'
+      : 'supplier.specs.toast.unblocked'
+    toast.success(locale.t(key).replace('{count}', String(ok)))
   }
   if (failure) {
     toast.error(graphqlErrorMessage(failure.reason, locale.t('supplier.toast.saveFailed')))
   }
+  selectedIds.value = new Set()
   await refetch()
 }
 
-function toggleEnabled(policy: RateLimitPolicy) {
-  void setEnabled([policy.id], !policy.enabled)
-}
-
-function performBatch(action: BatchAction, close: () => void) {
-  const ids = [...selectedIds.value]
-  close()
-  if (ids.length === 0) return
-  if (action === 'delete') {
-    pendingDeleteIds.value = ids
-    return
-  }
-  void setEnabled(ids, action === 'enable').then(() => {
-    selectedIds.value = new Set()
-  })
-}
-
-function requestDelete(policy: RateLimitPolicy) {
-  pendingDeleteIds.value = [policy.id]
-}
-
-function closeDelete() {
-  pendingDeleteIds.value = []
-}
-
-async function confirmDelete() {
-  const ids = [...pendingDeleteIds.value]
-  pendingDeleteIds.value = []
-  if (ids.length === 0) return
-  const outcomes = await Promise.allSettled(
-    ids.map((id) =>
-      apolloClient.mutate<DeleteRateLimitPolicyResult, DeleteRateLimitPolicyVars>({
-        mutation: DELETE_RATE_LIMIT_POLICY,
-        variables: { id },
-      }),
-    ),
-  )
-  const deletedIds = ids.filter((_, index) => outcomes[index].status === 'fulfilled')
-  const failures = outcomes.filter(
-    (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected',
-  )
-  if (deletedIds.length > 0) {
-    toast.success(locale.t('supplier.toast.deleted').replace('{count}', String(deletedIds.length)))
-  }
-  if (failures.length > 0) {
-    toast.error(graphqlErrorMessage(failures[0].reason, locale.t('supplier.toast.deleteFailed')))
-  }
-  selectedIds.value = new Set([...selectedIds.value].filter((id) => !deletedIds.includes(id)))
-  await refetch()
-  if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
-}
-
-async function refreshPolicies() {
+async function refreshAll() {
   if (loading.value) return
   try {
     await refetch()
@@ -348,10 +345,84 @@ function goToPage(page: number) {
   if (page < 1 || page > totalPages.value) return
   currentPage.value = page
 }
+
+function healthBadgeStatus(
+  s: ProviderModelStatus,
+): 'success' | 'warning' | 'danger' | 'neutral' {
+  if (s === 'full_healthy') return 'success'
+  if (s === 'partial_outage') return 'warning'
+  if (s === 'full_outage') return 'danger'
+  return 'neutral'
+}
+
+function requestDelete(m: ProviderModelNode) {
+  pendingDeleteIds.value = [m.id]
+}
+
+function requestBatchDelete() {
+  pendingDeleteIds.value = [...selectedIds.value]
+}
+
+function closeDelete() {
+  pendingDeleteIds.value = []
+}
+
+async function confirmDelete() {
+  const ids = [...pendingDeleteIds.value]
+  pendingDeleteIds.value = []
+  if (ids.length === 0) return
+  const outcomes = await Promise.allSettled(
+    ids.map((id) =>
+      apolloClient.mutate<DeleteProviderModelResult, DeleteProviderModelVars>({
+        mutation: DELETE_PROVIDER_MODEL,
+        variables: { id },
+      }),
+    ),
+  )
+  const deletedIds = ids.filter((_, i) => outcomes[i].status === 'fulfilled')
+  const failures = outcomes.filter(
+    (o): o is PromiseRejectedResult => o.status === 'rejected',
+  )
+  if (deletedIds.length > 0) {
+    toast.success(
+      locale
+        .t('supplier.toast.deleted')
+        .replace('{count}', String(deletedIds.length)),
+    )
+  }
+  if (failures.length > 0) {
+    toast.error(
+      graphqlErrorMessage(failures[0].reason, locale.t('supplier.toast.deleteFailed')),
+    )
+  }
+  selectedIds.value = new Set(
+    [...selectedIds.value].filter((id) => !deletedIds.includes(id)),
+  )
+  await refetch()
+  if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
+}
+
+async function refreshOneStatus(m: ProviderModelNode) {
+  try {
+    await apolloClient.mutate<
+      RefreshProviderModelStatusResult,
+      RefreshProviderModelStatusVars
+    >({
+      mutation: REFRESH_PROVIDER_MODEL_STATUS,
+      variables: { id: m.id },
+    })
+    await refetch()
+    toast.success(locale.t('supplier.specs.toast.refreshed'))
+  } catch (error) {
+    toast.error(
+      graphqlErrorMessage(error, locale.t('supplier.toast.refreshFailed')),
+    )
+  }
+}
 </script>
 
 <template>
-  <section class="rate-limit-page">
+  <section class="supplier-page">
     <header class="page-head">
       <h1 cds-text="title" class="heading">{{ locale.t('supplier.title') }}</h1>
       <p cds-text="body" class="desc muted">{{ locale.t('supplier.description') }}</p>
@@ -360,7 +431,7 @@ function goToPage(page: number) {
     <div class="content-card">
       <div class="toolbar">
         <cds-button
-          v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+          v-if="auth.role === 'admin'"
           action="outline"
           status="primary"
           @click="openCreate"
@@ -370,7 +441,7 @@ function goToPage(page: number) {
         </cds-button>
 
         <AppDropdown
-          v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+          v-if="auth.role === 'admin'"
           align="start"
           :disabled="selectedCount === 0"
         >
@@ -386,15 +457,15 @@ function goToPage(page: number) {
             </cds-button>
           </template>
           <template #default="{ close }">
-            <button class="menu-option" type="button" @click="performBatch('enable', close)">
-              <cds-icon shape="check-circle" size="sm"></cds-icon>
-              {{ locale.t('supplier.batch.enable') }}
-            </button>
-            <button class="menu-option" type="button" @click="performBatch('disable', close)">
+            <button class="menu-option" type="button" @click="(batchBlockSpecIds(true), close())">
               <cds-icon shape="ban" size="sm"></cds-icon>
-              {{ locale.t('supplier.batch.disable') }}
+              {{ locale.t('supplier.specs.blockAll') }}
             </button>
-            <button class="menu-option danger" type="button" @click="performBatch('delete', close)">
+            <button class="menu-option" type="button" @click="(batchBlockSpecIds(false), close())">
+              <cds-icon shape="unlock" size="sm"></cds-icon>
+              {{ locale.t('supplier.specs.unblockAll') }}
+            </button>
+            <button class="menu-option danger" type="button" @click="(requestBatchDelete(), close())">
               <cds-icon shape="trash" size="sm"></cds-icon>
               {{ locale.t('supplier.batch.delete') }}
             </button>
@@ -407,7 +478,7 @@ function goToPage(page: number) {
           :disabled="loading"
           :aria-label="locale.t('supplier.action.refresh')"
           :title="locale.t('supplier.action.refresh')"
-          @click="refreshPolicies"
+          @click="refreshAll"
         >
           <cds-icon shape="refresh" size="md" :class="{ spinning: loading }" aria-hidden="true"></cds-icon>
         </button>
@@ -430,7 +501,7 @@ function goToPage(page: number) {
           />
         </cds-grid-column>
 
-        <cds-grid-column width="50%">
+        <cds-grid-column width="22%">
           <div class="column-head">
             <span>{{ locale.t('supplier.col.name') }}</span>
             <span class="column-head-actions">
@@ -438,18 +509,8 @@ function goToPage(page: number) {
                 :aria-label="locale.t('supplier.sort').replace('{column}', locale.t('supplier.col.name'))"
                 @click="toggleSort('NAME')"
               >
-                <cds-icon
-                  v-if="sortStateFor('NAME') === 'ascending'"
-                  shape="angle"
-                  direction="up"
-                  size="sm"
-                ></cds-icon>
-                <cds-icon
-                  v-else-if="sortStateFor('NAME') === 'descending'"
-                  shape="angle"
-                  direction="down"
-                  size="sm"
-                ></cds-icon>
+                <cds-icon v-if="sortStateFor('NAME') === 'ascending'" shape="angle" direction="up" size="sm"></cds-icon>
+                <cds-icon v-else-if="sortStateFor('NAME') === 'descending'" shape="angle" direction="down" size="sm"></cds-icon>
                 <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
               </cds-button-action>
               <cds-button-action
@@ -462,94 +523,110 @@ function goToPage(page: number) {
           </div>
         </cds-grid-column>
 
-        <cds-grid-column width="13%">
+        <cds-grid-column width="14%">{{ locale.t('supplier.col.gateway') }}</cds-grid-column>
+
+        <cds-grid-column width="22%">
           <div class="column-head">
-            <span>{{ locale.t('supplier.col.status') }}</span>
+            <span>{{ locale.t('supplier.col.specs') }}</span>
             <span class="column-head-actions">
               <cds-button-action
-                :aria-label="locale.t('supplier.sort').replace('{column}', locale.t('supplier.col.status'))"
-                @click="toggleSort('STATUS')"
+                :aria-label="locale.t('supplier.sort').replace('{column}', locale.t('supplier.col.specs'))"
+                @click="toggleSort('HEALTH')"
               >
-                <cds-icon
-                  v-if="sortStateFor('STATUS') === 'ascending'"
-                  shape="angle"
-                  direction="up"
-                  size="sm"
-                ></cds-icon>
-                <cds-icon
-                  v-else-if="sortStateFor('STATUS') === 'descending'"
-                  shape="angle"
-                  direction="down"
-                  size="sm"
-                ></cds-icon>
+                <cds-icon v-if="sortStateFor('HEALTH') === 'ascending'" shape="angle" direction="up" size="sm"></cds-icon>
+                <cds-icon v-else-if="sortStateFor('HEALTH') === 'descending'" shape="angle" direction="down" size="sm"></cds-icon>
                 <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
               </cds-button-action>
-              <cds-button-action
-                shape="filter"
-                :expanded="hasFilter('STATUS')"
-                :aria-label="locale.t('supplier.filter').replace('{column}', locale.t('supplier.col.status'))"
-                @click="(event: MouseEvent) => openFilterMenu('STATUS', event)"
-              ></cds-button-action>
             </span>
           </div>
         </cds-grid-column>
 
-        <cds-grid-column width="32%">{{ locale.t('supplier.col.actions') }}</cds-grid-column>
+        <cds-grid-column width="22%">{{ locale.t('supplier.col.actions') }}</cds-grid-column>
 
-        <cds-grid-row v-for="policy in visiblePolicies" :key="policy.id">
+        <cds-grid-row v-for="m in visibleModels" :key="m.id">
           <cds-grid-cell>
             <input
               type="checkbox"
               class="app-checkbox"
-              :checked="selectedIds.has(policy.id)"
-              :aria-label="locale.t('supplier.col.selectPolicy').replace('{name}', policy.name)"
-              @change="toggleSelect(policy.id, ($event.target as HTMLInputElement).checked)"
+              :checked="selectedIds.has(m.id)"
+              :aria-label="locale.t('supplier.col.selectModel').replace('{name}', m.name)"
+              @change="toggleSelect(m.id, ($event.target as HTMLInputElement).checked)"
             />
           </cds-grid-cell>
           <cds-grid-cell>
-            <strong class="policy-name" :title="policy.name">{{ policy.name }}</strong>
+            <strong class="model-name" :title="m.name">{{ m.name }}</strong>
           </cds-grid-cell>
           <cds-grid-cell>
-            <cds-badge :status="policy.enabled ? 'success' : 'neutral'" class="status-badge">
-              <cds-icon :shape="policy.enabled ? 'check-circle' : 'ban'" size="sm"></cds-icon>
-              {{ locale.t(policy.enabled ? 'supplier.status.enabled' : 'supplier.status.disabled') }}
+            <cds-badge status="neutral" class="provider-badge">
+              {{ m.modelGateway.name }}
+            </cds-badge>
+          </cds-grid-cell>
+          <cds-grid-cell>
+            <button
+              type="button"
+              class="specs-link"
+              :title="`${m.modelSpecs.length} 个 deployment`"
+              @click="openSpecsDrawer(m)"
+            >
+              {{ m.modelSpecs.length }} 个 deployment
+            </button>
+            <cds-badge :status="healthBadgeStatus(m.status)" class="status-badge">
+              <cds-icon
+                :shape="
+                  m.status === 'full_healthy'
+                    ? 'check-circle'
+                    : m.status === 'full_outage'
+                      ? 'ban'
+                      : 'warning-standard'
+                "
+                size="sm"
+              ></cds-icon>
+              {{ locale.t(`supplier.status.${m.status}`) }}
             </cds-badge>
           </cds-grid-cell>
           <cds-grid-cell>
             <div class="row-actions">
               <button
-                v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+                v-if="auth.role === 'admin'"
                 type="button"
                 class="row-action"
-                @click="openEdit(policy)"
+                :title="locale.t('supplier.action.test')"
+                @click="refreshOne(m)"
+              >
+                <cds-icon shape="network-globe" size="sm"></cds-icon>
+                <span>{{ locale.t('supplier.action.test') }}</span>
+              </button>
+              <button
+                v-if="auth.role === 'admin'"
+                type="button"
+                class="row-action"
+                @click="openEdit(m)"
               >
                 <cds-icon shape="pencil" size="sm"></cds-icon>
                 <span>{{ locale.t('supplier.action.edit') }}</span>
               </button>
               <button
+                v-if="auth.role === 'admin'"
                 type="button"
                 class="row-action"
-                disabled
-                :title="locale.t('common.noPermission')"
-                @click.prevent
+                @click="openSpecsDrawer(m)"
               >
-                <cds-icon shape="users" size="sm"></cds-icon>
-                <span>{{ locale.t('supplier.action.apply') }}</span>
+                <cds-icon shape="list" size="sm"></cds-icon>
+                <span>{{ locale.t('supplier.specs.title').replace('{name}', '') }}</span>
               </button>
               <button
-                v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+                v-if="auth.role === 'admin'"
                 type="button"
                 class="row-action"
-                @click="toggleEnabled(policy)"
+                @click="refreshOneStatus(m)"
               >
-                <cds-icon :shape="policy.enabled ? 'ban' : 'check-circle'" size="sm"></cds-icon>
-                <span>{{ locale.t(policy.enabled ? 'supplier.action.disable' : 'supplier.action.enable') }}</span>
+                <cds-icon shape="refresh" size="sm"></cds-icon>
               </button>
               <button
-                v-if="['admin','tenant_admin'].includes(auth.role ?? '')"
+                v-if="auth.role === 'admin'"
                 type="button"
                 class="row-action danger"
-                @click="requestDelete(policy)"
+                @click="requestDelete(m)"
               >
                 <cds-icon shape="trash" size="sm"></cds-icon>
                 <span>{{ locale.t('supplier.action.delete') }}</span>
@@ -558,7 +635,7 @@ function goToPage(page: number) {
           </cds-grid-cell>
         </cds-grid-row>
 
-        <cds-grid-placeholder v-if="visiblePolicies.length === 0">
+        <cds-grid-placeholder v-if="visibleModels.length === 0 && !loading">
           <cds-icon shape="host" size="xl"></cds-icon>
           <p cds-text="subsection">{{ locale.t('supplier.empty') }}</p>
         </cds-grid-placeholder>
@@ -568,10 +645,10 @@ function goToPage(page: number) {
             {{ locale.t('supplier.selected').replace('{count}', String(selectedCount)) }}
           </span>
           <div class="pager">
-            <label for="rate-limit-page-size">{{ locale.t('supplier.pagination.pageSize') }}</label>
+            <label for="supplier-page-size">{{ locale.t('supplier.pagination.pageSize') }}</label>
             <cds-select control-width="shrink">
               <select
-                id="rate-limit-page-size"
+                id="supplier-page-size"
                 :value="pageSize"
                 :aria-label="locale.t('supplier.pagination.pageSize')"
                 @change="onPageSizeChange"
@@ -583,18 +660,8 @@ function goToPage(page: number) {
             </cds-select>
             <span class="pager-summary">{{ summaryText }}</span>
             <cds-pagination :aria-label="locale.t('supplier.pagination.label')">
-              <cds-pagination-button
-                action="first"
-                :disabled="currentPage <= 1"
-                :aria-label="locale.t('agents.pager.first')"
-                @click="goToPage(1)"
-              ></cds-pagination-button>
-              <cds-pagination-button
-                action="prev"
-                :disabled="currentPage <= 1"
-                :aria-label="locale.t('agents.pager.prev')"
-                @click="goToPage(currentPage - 1)"
-              ></cds-pagination-button>
+              <cds-pagination-button action="first" :disabled="currentPage <= 1" :aria-label="locale.t('agents.pager.first')" @click="goToPage(1)"></cds-pagination-button>
+              <cds-pagination-button action="prev" :disabled="currentPage <= 1" :aria-label="locale.t('agents.pager.prev')" @click="goToPage(currentPage - 1)"></cds-pagination-button>
               <cds-input cds-pagination-number>
                 <input
                   type="number"
@@ -605,18 +672,8 @@ function goToPage(page: number) {
                   @change="goToPage(Number(($event.target as HTMLInputElement).value))"
                 />
               </cds-input>
-              <cds-pagination-button
-                action="next"
-                :disabled="currentPage >= totalPages"
-                :aria-label="locale.t('agents.pager.next')"
-                @click="goToPage(currentPage + 1)"
-              ></cds-pagination-button>
-              <cds-pagination-button
-                action="last"
-                :disabled="currentPage >= totalPages"
-                :aria-label="locale.t('agents.pager.last')"
-                @click="goToPage(totalPages)"
-              ></cds-pagination-button>
+              <cds-pagination-button action="next" :disabled="currentPage >= totalPages" :aria-label="locale.t('agents.pager.next')" @click="goToPage(currentPage + 1)"></cds-pagination-button>
+              <cds-pagination-button action="last" :disabled="currentPage >= totalPages" :aria-label="locale.t('agents.pager.last')" @click="goToPage(totalPages)"></cds-pagination-button>
             </cds-pagination>
           </div>
         </cds-grid-footer>
@@ -640,7 +697,6 @@ function goToPage(page: number) {
           :aria-label="locale.t('supplier.filter.namePlaceholder')"
           @input="setNameFilter(($event.target as HTMLInputElement).value)"
         />
-
         <div v-else class="filter-options">
           <button
             v-for="status in STATUS_FILTER_OPTIONS"
@@ -650,11 +706,10 @@ function goToPage(page: number) {
             :class="{ active: statusFilter === status }"
             @click="setStatusFilter(status)"
           >
-            <span>{{ locale.t(`supplier.filter.status.${status}`) }}</span>
+            <span>{{ status === 'ALL' ? locale.t('supplier.filter.status.ALL') : locale.t(`supplier.status.${status}`) }}</span>
             <cds-icon v-if="statusFilter === status" shape="check" size="sm"></cds-icon>
           </button>
         </div>
-
         <div v-if="hasFilter(filterMenuKey)" class="filter-footer">
           <cds-button action="outline" size="sm" @click="clearActiveFilter">
             {{ locale.t('supplier.filter.clear') }}
@@ -666,10 +721,19 @@ function goToPage(page: number) {
     <SupplierModelFormModal
       v-if="formOpen"
       :open="formOpen"
-      :policy="editingPolicy"
+      :model="editingModel"
+      :gateways="gateways"
       :saving="saving"
       @close="closeForm"
-      @submit="submitPolicy"
+      @submit="submitModel"
+    />
+
+    <SupplierModelSpecsDrawer
+      v-if="specsDrawerModel"
+      :open="Boolean(specsDrawerModel)"
+      :model="specsDrawerModel"
+      @close="closeSpecsDrawer"
+      @changed="refetch"
     />
 
     <ConfirmDialog
@@ -684,7 +748,7 @@ function goToPage(page: number) {
 </template>
 
 <style scoped>
-.rate-limit-page {
+.supplier-page {
   height: 100%;
   min-height: 0;
   min-width: 0;
@@ -749,23 +813,17 @@ function goToPage(page: number) {
   cursor: not-allowed;
   opacity: 0.5;
 }
-.rate-limit-page cds-grid {
+.supplier-page cds-grid {
   display: block;
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
   max-width: 100%;
   width: 100%;
-  /* scroll-lock on <cds-grid> disables the shadow-DOM scroll container's
-     scrollbars; combined with min-width: 0 + max-width: 100% on the host
-     this prevents the table from ever overflowing the viewport. */
   overflow: hidden;
 }
-/* Force cds-grid columns + cells to clip instead of expanding past their
-   intrinsic content width (which would re-introduce the inner scrollbar
-   even with scroll-lock applied). */
-.rate-limit-page cds-grid-column,
-.rate-limit-page cds-grid-cell {
+.supplier-page cds-grid-column,
+.supplier-page cds-grid-cell {
   min-width: 0;
   overflow: hidden;
 }
@@ -791,18 +849,20 @@ function goToPage(page: number) {
   height: 16px;
   accent-color: var(--cds-alias-object-interaction-color, #0072a3);
 }
-.policy-name {
+.model-name {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.status-badge {
+.status-badge,
+.provider-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   min-width: 66px;
   white-space: nowrap;
+  text-transform: capitalize;
 }
 .row-actions {
   display: flex;
@@ -828,6 +888,20 @@ function goToPage(page: number) {
 }
 .row-action.danger {
   color: var(--cds-alias-status-danger, #c92100);
+}
+.specs-link {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--cds-alias-object-interaction-color, #006e9c);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.specs-link:hover {
+  background: var(--cds-alias-object-app-background, #f4f4f4);
 }
 .menu-option {
   display: flex;
@@ -912,10 +986,9 @@ function goToPage(page: number) {
   color: var(--cds-alias-typography-color-300, #565656);
 }
 .spinning {
-  animation: rate-limit-spin 1s linear infinite;
-  transform-origin: center;
+  animation: supplier-spin 1s linear infinite;
 }
-@keyframes rate-limit-spin {
+@keyframes supplier-spin {
   to {
     transform: rotate(360deg);
   }
