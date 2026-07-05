@@ -52,6 +52,28 @@ type PageSize = (typeof PAGE_SIZE_OPTIONS)[number]
 const STATUS_FILTER_OPTIONS = ['ALL', ...PROVIDER_MODEL_STATUSES] as const
 type StatusFilter = 'ALL' | ProviderModelStatus
 
+// All reactive refs MUST be declared before the useQuery calls below.
+// @vue/apollo-composable wraps a reactive variables function in a `computed`
+// and observes it via `watch(variablesRef, ..., { deep: true })`. That watch
+// evaluates the computed synchronously on init, so any ref read inside the
+// reactive fn must already be in scope — referencing a not-yet-initialized
+// `const` throws `ReferenceError: Cannot access 'nameFilter' before initialization`.
+const selectedIds = ref<Set<string>>(new Set())
+const nameFilter = ref('')
+const statusFilter = ref<StatusFilter>('ALL')
+const pageSize = ref<PageSize>(10)
+const currentPage = ref(1)
+const sortField = ref<ProviderModelSortField | null>(null)
+const sortDirection = ref<SortDirection>('ASC')
+const filterMenuAnchor = ref<HTMLElement | null>(null)
+const filterMenuKey = ref<'NAME' | 'HEALTH' | null>(null)
+
+const formOpen = ref(false)
+const editingModel = ref<ProviderModelNode | null>(null)
+const saving = ref(false)
+const specsDrawerModel = ref<ProviderModelNode | null>(null)
+const pendingDeleteIds = ref<string[]>([])
+
 const { result, loading, refetch } = useQuery<ProviderModelInfoResult>(
   PROVIDER_MODELS_QUERY,
   () => ({
@@ -88,22 +110,6 @@ const gateways = computed(() =>
     (g: { id: string; name: string }) => ({ id: g.id, name: g.name }),
   ),
 )
-
-const selectedIds = ref<Set<string>>(new Set())
-const nameFilter = ref('')
-const statusFilter = ref<StatusFilter>('ALL')
-const pageSize = ref<PageSize>(10)
-const currentPage = ref(1)
-const sortField = ref<ProviderModelSortField | null>(null)
-const sortDirection = ref<SortDirection>('ASC')
-const filterMenuAnchor = ref<HTMLElement | null>(null)
-const filterMenuKey = ref<'NAME' | 'HEALTH' | null>(null)
-
-const formOpen = ref(false)
-const editingModel = ref<ProviderModelNode | null>(null)
-const saving = ref(false)
-const specsDrawerModel = ref<ProviderModelNode | null>(null)
-const pendingDeleteIds = ref<string[]>([])
 
 const visibleModels = computed(() => models.value)
 const selectedCount = computed(() => selectedIds.value.size)
