@@ -1233,7 +1233,7 @@ export const STRINGS: Dict = {
   'supplier.model.action.unblock': { zh: '解除熔断', en: 'Unblock' },
   'supplier.model.form.createTitle': { zh: '新建模型', en: 'New Model' },
   'supplier.model.form.editTitle': { zh: '编辑供应商模型', en: 'Edit Provider Model' },
-  'supplier.model.form.name': { zh: '物理节点 ID', en: 'Node ID' },
+  'supplier.model.form.name': { zh: '模型名称', en: 'Model name' },
   'supplier.model.form.namePlaceholder': { zh: '例如 EAST-OPENAI-001', en: 'e.g. EAST-OPENAI-001' },
   'supplier.model.form.nameError': {
     zh: '节点 ID 仅允许大写字母、数字与中划线',
@@ -1352,7 +1352,7 @@ export const STRINGS: Dict = {
     zh: '编辑时不可更改',
     en: 'Cannot be changed during edit',
   },
-  'supplier.model.form.specs': { zh: '部署(specs)', en: 'Specs' },
+  'supplier.model.form.specs': { zh: '供应商模型', en: 'Provider models' },
   'supplier.model.form.specsHint': {
     zh: '至少 1 个；edit 时整组替换',
     en: 'At least 1; full-replace on edit',
