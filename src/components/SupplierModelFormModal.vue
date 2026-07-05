@@ -4,7 +4,7 @@ import { apolloClient } from '@/api/graphql/client'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
-import { NODE_ID_PATTERN } from '@/types/supplier-model'
+import { MODEL_NAME_PATTERN } from '@/types/supplier-model'
 import {
   TEST_PROVIDER_CONNECTION,
   type ProviderModelNode,
@@ -143,7 +143,10 @@ watch(
   { immediate: true },
 )
 
-const nameValid = computed(() => NODE_ID_PATTERN.test(name.value.trim()))
+const nameValid = computed(() => {
+  const trimmed = name.value.trim()
+  return trimmed.length >= 2 && MODEL_NAME_PATTERN.test(trimmed)
+})
 const gatewayValid = computed(() => Boolean(gatewayId.value))
 const specValid = computed(() =>
   specDrafts.value.every(
@@ -295,6 +298,7 @@ function badgeClassForTestStatus(s: ProviderModelStatus) {
           <label>{{ locale.t('supplier.model.form.name') }}</label>
           <input
             :value="name"
+            minlength="2"
             maxlength="64"
             autocomplete="off"
             :readonly="isEditing"

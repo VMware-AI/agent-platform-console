@@ -7,7 +7,7 @@ import type {
   ModelRouteStrategy,
 } from '@/types/model-route'
 import { MODEL_ROUTE_STRATEGIES } from '@/types/model-route'
-import { NODE_ID_PATTERN } from '@/types/supplier-model'
+import { MODEL_NAME_PATTERN } from '@/types/supplier-model'
 import {
   LOAD_BALANCING_STRATEGIES,
   type LoadBalancingStrategy,
@@ -86,7 +86,10 @@ const contentPolicyFallbacks = ref<string[]>([])
 
 const isEditing = computed(() => Boolean(props.route))
 
-const nameValid = computed(() => NODE_ID_PATTERN.test(name.value.trim()))
+const nameValid = computed(() => {
+  const trimmed = name.value.trim()
+  return trimmed.length >= 2 && MODEL_NAME_PATTERN.test(trimmed)
+})
 const gatewayValid = computed(() =>
   props.gateways.some((gateway) => gateway.id === gatewayId.value),
 )

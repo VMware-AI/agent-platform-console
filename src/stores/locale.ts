@@ -1234,14 +1234,14 @@ export const STRINGS: Dict = {
   'supplier.model.form.createTitle': { zh: '新建模型', en: 'New Model' },
   'supplier.model.form.editTitle': { zh: '编辑供应商模型', en: 'Edit Provider Model' },
   'supplier.model.form.name': { zh: '模型名称', en: 'Model name' },
-  'supplier.model.form.namePlaceholder': { zh: '例如 EAST-OPENAI-001', en: 'e.g. EAST-OPENAI-001' },
+  'supplier.model.form.namePlaceholder': { zh: '例如 gpt-4o-mini 或 DeepSeek-V3.1', en: 'e.g. gpt-4o-mini or DeepSeek-V3.1' },
   'supplier.model.form.nameError': {
-    zh: '节点 ID 仅允许大写字母、数字与中划线',
-    en: 'Node ID may only contain uppercase letters, digits, and hyphens',
+    zh: '模型名仅允许大小写字母、数字、中划线与点',
+    en: 'Model name may only contain letters, digits, hyphens, and dots',
   },
   'supplier.model.form.nameHint': {
-    zh: '大写字母、数字与中划线,2-64 字符',
-    en: 'Uppercase letters, digits, and hyphens, 2-64 chars',
+    zh: '大小写字母、数字、中划线与点，2-64 字符',
+    en: 'Letters, digits, hyphens, and dots, 2-64 chars',
   },
   'supplier.model.form.nameLockedHint': {
     zh: '编辑时名称不可更改',

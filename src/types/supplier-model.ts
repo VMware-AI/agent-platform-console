@@ -24,7 +24,9 @@ export type ProviderModelSortField = 'NAME' | 'STATUS'
 
 export const PROVIDER_MODEL_SORT_FIELDS: ProviderModelSortField[] = ['NAME', 'STATUS']
 
-// Node ID regex — design doc §2.1: "Node ID 必须限制为纯大写字母、数字和中划线".
-// Reused by the form's inline validation.
-export const NODE_ID_PATTERN = /^[A-Z0-9-]+$/
-export const NODE_ID_PATTERN_HINT = 'supplier.model.nodeId.hint' // i18n key
+// Node / model-name regex — wire constraint: uppercase OR lowercase letters,
+// digits, hyphens, and dots. Reused by the form's inline validation.
+// (Was historically upper-only; the new ProviderModel API accepts case-mixed
+// names like `gpt-4o-mini` and `DeepSeek-V3.1`.)
+export const MODEL_NAME_PATTERN = /^[A-Za-z0-9.-]+$/
+export const MODEL_NAME_PATTERN_HINT = 'supplier.model.nodeId.hint' // i18n key
