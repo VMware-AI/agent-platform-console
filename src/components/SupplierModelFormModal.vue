@@ -358,14 +358,18 @@ function badgeClassForTestStatus(s: ProviderModelStatus) {
                 <template v-if="d.model">— {{ d.model }}</template>
                 <template v-else>(未填写)</template>
               </span>
-              <button
-                type="button"
+              <span
+                role="button"
+                tabindex="0"
                 class="spec-remove"
-                :disabled="specDrafts.length <= 1"
-                @click.stop="removeSpec(i)"
+                :class="{ disabled: specDrafts.length <= 1 }"
+                :aria-disabled="specDrafts.length <= 1"
+                @click.stop="specDrafts.length > 1 && removeSpec(i)"
+                @keydown.enter.stop.prevent="specDrafts.length > 1 && removeSpec(i)"
+                @keydown.space.stop.prevent="specDrafts.length > 1 && removeSpec(i)"
               >
                 {{ locale.t('supplier.model.form.spec.removeSpec') }}
-              </button>
+              </span>
             </button>
             <div v-if="openSpecIndex === i" class="spec-body">
               <div class="spec-grid">
@@ -649,7 +653,7 @@ function badgeClassForTestStatus(s: ProviderModelStatus) {
   margin-left: auto; padding: 4px 8px; border: 1px solid var(--cds-alias-object-border-color, #8c8c8c);
   border-radius: 3px; background: transparent; cursor: pointer; font: inherit; font-size: 12px;
 }
-.spec-remove:disabled { opacity: 0.5; cursor: not-allowed; }
+.spec-remove.disabled { opacity: 0.5; cursor: not-allowed; }
 .spec-body { padding: 12px; border-top: 1px solid var(--cds-alias-object-border-color, #e8e8e8); display: grid; gap: 12px; }
 .spec-grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
 .advanced-section { border: 1px solid var(--cds-alias-object-border-color, #e8e8e8); border-radius: 4px; padding: 8px 12px; }
