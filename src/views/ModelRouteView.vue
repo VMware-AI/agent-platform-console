@@ -9,12 +9,7 @@ import { useLocaleStore } from '@/stores/locale'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
-import type {
-  ModelRoute,
-  ModelRouteDraft,
-  ModelRouteGatewayOption,
-  ModelRouteStrategy,
-} from '@/types/model-route'
+import type { ModelRouteGatewayOption, ModelRouteStrategy } from '@/types/model-route'
 import { MODEL_ROUTE_STRATEGIES } from '@/types/model-route'
 import {
   MODEL_ROUTES_QUERY,
@@ -22,6 +17,7 @@ import {
   UPDATE_MODEL_ROUTE,
   SET_MODEL_ROUTE_ENABLED,
   DELETE_MODEL_ROUTE,
+  SYNC_ROUTER_SETTINGS,
   type ModelRoutesResult,
   type ModelRouteNode,
   type CreateModelRouteResult,
@@ -32,41 +28,25 @@ import {
   type SetModelRouteEnabledVars,
   type DeleteModelRouteResult,
   type DeleteModelRouteVars,
+  type SyncRouterSettingsResult,
 } from '@/api/graphql/queries/model-routes'
 import { MODEL_GATEWAYS_QUERY } from '@/api/graphql/queries/model-gateways'
+import {
+  PROVIDER_MODELS_QUERY,
+  type ProviderModelInfoResult,
+  type ProviderModelNode,
+} from '@/api/graphql/queries/supplier-models'
 import '@/components/icons'
 
 const locale = useLocaleStore()
 const auth = useAuthStore()
 const toast = useToast()
 
-// The backend denormalizes the gateway onto each route as `backendGatewayId` +
-// `gatewayName`; the UI models them as `gatewayId` + `gatewayName`, and treats
-// `uiStrategy` as the row's `strategy`.
-function toUiRoute(node: ModelRouteNode): ModelRoute {
-  return {
-    id: node.id,
-    name: node.name,
-    gatewayId: node.backendGatewayId ?? '',
-    gatewayName: node.gatewayName,
-    strategy: node.uiStrategy,
-    supportedModels: node.supportedModels,
-    enabled: node.enabled,
-    createdAt: node.createdAt,
-    updatedAt: node.updatedAt,
-  }
-}
-
-// The form draft maps back to the backend's create/update input shape.
-function toRouteInput(draft: ModelRouteDraft) {
-  return {
-    name: draft.name,
-    backendGatewayId: draft.gatewayId,
-    gatewayName: draft.gatewayName,
-    supportedModels: draft.supportedModels,
-    uiStrategy: draft.strategy,
-    enabled: draft.enabled,
-  }
+// We use ModelRouteNode directly (no toUiRoute adapter) — the GraphQL
+// shape now matches what the table + form need. The form still consumes
+// a `ModelRouteGatewayOption[]` for the picker; the rest is the raw node.
+function toRoute(node: ModelRouteNode): ModelRouteNode {
+  return node
 }
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const
@@ -78,7 +58,20 @@ type SortDirection = 'ASC' | 'DESC'
 type RouteFilterKey = RouteSortField
 
 const { result, loading, refetch } = useQuery<ModelRoutesResult>(MODEL_ROUTES_QUERY)
-const routes = computed<ModelRoute[]>(() => (result.value?.modelRoutes ?? []).map(toUiRoute))
+const routes = computed<ModelRouteNode[]>(() => (result.value?.modelRoutes ?? []).map(toRoute))
+
+// Provider models (供应商模型) — feed the M2 form's shuttle candidate list.
+// New API: ProviderModelInfo (paged). The shuttle needs `id / name /
+// provider / status` shape; provider now derives from the first spec's
+// customLlmProvider (top-level `provider` is gone), and we no longer
+// filter by `enabled` (top-level `enabled` is also gone).
+const { result: providerResult } = useQuery<ProviderModelInfoResult>(
+  PROVIDER_MODELS_QUERY,
+  { page: { limit: 1000, offset: 0 } },
+)
+const providerModels = computed<ProviderModelNode[]>(
+  () => providerResult.value?.providerModelInfo?.data ?? [],
+)
 
 // Gateway picker options come from the real model-gateway list (so a route can be
 // created even before any route references a gateway).
@@ -93,15 +86,38 @@ const GATEWAYS = computed<ModelRouteGatewayOption[]>(() =>
   })),
 )
 
+// Shuttle candidates: the form's left column. We pass the full ProviderModel
+// shape (ModelRouteFormModal's SlotItem is structural; the form only reads
+// id / name / provider / status). The form filters further by
+// !selectedIds internally.
+const shuttleCandidates = computed(() =>
+  providerModels.value.map((m) => ({
+    id: m.id,
+    name: m.name,
+    provider: m.modelSpecs[0]?.litellmParams.customLlmProvider ?? '—',
+    status: m.status,
+    gatewayName: m.modelGateway?.name,
+    specCount: m.modelSpecs.length,
+  })),
+)
+
+// allRoutesForFallback — every route in the system is a candidate to be
+// a fallback for any other route. The form filters out the current route
+// itself (a route can't fall back to its own name).
+const allRoutesForFallback = computed(() =>
+  routes.value.map((r) => ({ id: r.id, name: r.name })),
+)
+
 const selectedIds = ref<Set<string>>(new Set())
 const pageSize = ref<PageSize>(10)
 const currentPage = ref(1)
 const formOpen = ref(false)
-const editingRoute = ref<ModelRoute | null>(null)
+const editingRoute = ref<ModelRouteNode | null>(null)
+const hintVisible = ref(true)
 const saving = ref(false)
 const pendingDeleteIds = ref<string[]>([])
 const strategyMenuAnchor = ref<HTMLElement | null>(null)
-const strategyMenuTarget = ref<ModelRoute | null>(null)
+const strategyMenuTarget = ref<ModelRouteNode | null>(null)
 const sortField = ref<RouteSortField | null>(null)
 const sortDirection = ref<SortDirection>('ASC')
 const nameFilter = ref('')
@@ -117,8 +133,8 @@ const filteredRoutes = computed(() => {
   const modelsKeyword = modelsFilter.value.trim().toLocaleLowerCase()
   const filtered = routes.value.filter((route) => {
     if (nameKeyword && !route.name.toLocaleLowerCase().includes(nameKeyword)) return false
-    if (gatewayFilter.value !== 'ALL' && route.gatewayId !== gatewayFilter.value) return false
-    if (strategyFilter.value !== 'ALL' && route.strategy !== strategyFilter.value) return false
+    if (gatewayFilter.value !== 'ALL' && route.backendGatewayId !== gatewayFilter.value) return false
+    if (strategyFilter.value !== 'ALL' && route.uiStrategy !== strategyFilter.value) return false
     if (
       modelsKeyword &&
       !route.supportedModels.some((model) => model.toLocaleLowerCase().includes(modelsKeyword))
@@ -133,7 +149,7 @@ const filteredRoutes = computed(() => {
   if (!sortField.value) return filtered
   const direction = sortDirection.value === 'ASC' ? 1 : -1
   return [...filtered].sort((left, right) => {
-    const valueFor = (route: ModelRoute): string | number => {
+    const valueFor = (route: ModelRouteNode): string | number => {
       if (sortField.value === 'NAME') return route.name
       if (sortField.value === 'GATEWAY') return route.gatewayName
       if (sortField.value === 'STRATEGY') return route.strategy
@@ -206,7 +222,7 @@ function openCreate() {
   formOpen.value = true
 }
 
-function openEdit(route: ModelRoute) {
+function openEdit(route: ModelRouteNode) {
   editingRoute.value = route
   formOpen.value = true
 }
@@ -217,7 +233,13 @@ function closeForm() {
   editingRoute.value = null
 }
 
-async function submitRoute(draft: ModelRouteDraft) {
+function closeHint() {
+  hintVisible.value = false
+}
+
+async function submitRoute(
+  draft: import('@/components/ModelRouteFormModal.vue').ModelRouteFormDraft,
+) {
   if (saving.value) return
   const editing = editingRoute.value
   saving.value = true
@@ -225,13 +247,13 @@ async function submitRoute(draft: ModelRouteDraft) {
     if (editing) {
       await apolloClient.mutate<UpdateModelRouteResult, UpdateModelRouteVars>({
         mutation: UPDATE_MODEL_ROUTE,
-        variables: { id: editing.id, input: toRouteInput(draft) },
+        variables: { id: editing.id, input: draft },
       })
       toast.success(locale.t('gatewayModel.toast.updated'))
     } else {
       await apolloClient.mutate<CreateModelRouteResult, CreateModelRouteVars>({
         mutation: CREATE_MODEL_ROUTE,
-        variables: { input: toRouteInput(draft) },
+        variables: { input: draft },
       })
       currentPage.value = 1
       toast.success(locale.t('gatewayModel.toast.created'))
@@ -246,10 +268,10 @@ async function submitRoute(draft: ModelRouteDraft) {
   }
 }
 
-async function changeStrategy(route: ModelRoute, value: string) {
+async function changeStrategy(route: ModelRouteNode, value: string) {
   const strategy = value as ModelRouteStrategy
   if (!MODEL_ROUTE_STRATEGIES.includes(strategy)) return
-  if (strategy === route.strategy) return
+  if (strategy === route.uiStrategy) return
   try {
     await apolloClient.mutate<UpdateModelRouteResult, UpdateModelRouteVars>({
       mutation: UPDATE_MODEL_ROUTE,
@@ -262,7 +284,7 @@ async function changeStrategy(route: ModelRoute, value: string) {
   }
 }
 
-function openStrategyMenu(route: ModelRoute, event: MouseEvent) {
+function openStrategyMenu(route: ModelRouteNode, event: MouseEvent) {
   closeFilterMenu()
   strategyMenuTarget.value = route
   strategyMenuAnchor.value = event.currentTarget as HTMLElement
@@ -379,7 +401,7 @@ async function setEnabled(ids: string[], enabled: boolean) {
   await refetch()
 }
 
-function toggleEnabled(route: ModelRoute) {
+function toggleEnabled(route: ModelRouteNode) {
   void setEnabled([route.id], !route.enabled)
 }
 
@@ -396,7 +418,7 @@ function performBatch(action: BatchAction, close: () => void) {
   })
 }
 
-function requestDelete(route: ModelRoute) {
+function requestDelete(route: ModelRouteNode) {
   pendingDeleteIds.value = [route.id]
 }
 
@@ -431,7 +453,7 @@ async function confirmDelete() {
   if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
 }
 
-function manageGateway(route: ModelRoute) {
+function manageGateway(route: ModelRouteNode) {
   toast.info(locale.t('gatewayModel.toast.manageGateway').replace('{name}', route.gatewayName))
 }
 
@@ -442,6 +464,26 @@ async function refreshRoutes() {
     toast.success(locale.t('gatewayModel.toast.refreshed'))
   } catch (error) {
     toast.error(graphqlErrorMessage(error, locale.t('gatewayModel.toast.actionFailed')))
+  }
+}
+
+// syncRouterSettings — atomic 全量聚合覆盖刷新 (design doc §3.2). Re-aggregates
+// every active route + tier and POSTs /config/update. Per-route save already
+// triggers this server-side; this manual button is for impatient operators
+// or transient /config/update failure recovery.
+async function syncRouterSettings() {
+  if (loading.value) return
+  try {
+    const result = await apolloClient.mutate<SyncRouterSettingsResult>({
+      mutation: SYNC_ROUTER_SETTINGS,
+    })
+    if (result.data?.syncRouterSettings) {
+      toast.success(locale.t('gatewayModel.toast.syncSuccess'))
+    } else {
+      toast.error(locale.t('gatewayModel.toast.syncFailed'))
+    }
+  } catch (error) {
+    toast.error(graphqlErrorMessage(error, locale.t('gatewayModel.toast.syncFailed')))
   }
 }
 
@@ -464,6 +506,19 @@ function goToPage(page: number) {
       <h1 cds-text="title" class="heading">{{ locale.t('gatewayModel.title') }}</h1>
       <p cds-text="body" class="desc muted">{{ locale.t('gatewayModel.description') }}</p>
     </header>
+
+    <div v-if="hintVisible" class="info-banner" role="note">
+      <cds-icon class="info-banner-icon" shape="info-standard" size="md" aria-hidden="true"></cds-icon>
+      <span class="info-banner-text">{{ locale.t('gatewayModel.alert.routeNameHint') }}</span>
+      <button
+        type="button"
+        class="info-banner-close"
+        :aria-label="locale.t('common.close')"
+        @click="closeHint"
+      >
+        <cds-icon shape="times" size="sm" aria-hidden="true"></cds-icon>
+      </button>
+    </div>
 
     <div class="toolbar">
       <cds-button v-if="auth.role === 'admin'" action="outline" status="primary" @click="openCreate">
@@ -498,6 +553,17 @@ function goToPage(page: number) {
           </button>
         </template>
       </AppDropdown>
+
+      <cds-button
+        v-if="auth.role === 'admin'"
+        action="outline"
+        :disabled="loading"
+        :title="locale.t('gatewayModel.action.sync')"
+        @click="syncRouterSettings"
+      >
+        <cds-icon shape="sync" size="sm" aria-hidden="true"></cds-icon>
+        {{ locale.t('gatewayModel.action.sync') }}
+      </cds-button>
 
       <button
         type="button"
@@ -905,14 +971,14 @@ function goToPage(page: number) {
           :key="strategy"
           type="button"
           class="strategy-menu-option"
-          :class="{ active: strategyMenuTarget.strategy === strategy }"
+          :class="{ active: strategyMenuTarget.uiStrategy === strategy }"
           role="menuitemradio"
-          :aria-checked="strategyMenuTarget.strategy === strategy"
+          :aria-checked="strategyMenuTarget.uiStrategy === strategy"
           @click="chooseStrategy(strategy)"
         >
           <span>{{ locale.t(`gatewayModel.strategy.${strategy}`) }}</span>
           <cds-icon
-            v-if="strategyMenuTarget.strategy === strategy"
+            v-if="strategyMenuTarget.uiStrategy === strategy"
             shape="check"
             size="sm"
             aria-hidden="true"
@@ -1022,6 +1088,8 @@ function goToPage(page: number) {
       :open="formOpen"
       :route="editingRoute"
       :gateways="GATEWAYS"
+      :candidates="shuttleCandidates"
+      :all-routes="allRoutesForFallback"
       :saving="saving"
       @close="closeForm"
       @submit="submitRoute"
@@ -1049,6 +1117,51 @@ function goToPage(page: number) {
 }
 .page-head {
   flex: 0 0 auto;
+}
+/* Self-rolled info banner — replaced <cds-alert> because the cds-alert
+   shadow-DOM styles do not render reliably in this app's @cds/core
+   version. Visual mirrors the CDS docs example: 1px info border, 4px
+   radius, soft info tint, icon + text + close button. */
+.info-banner {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--cds-alias-status-info, #0079ad);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--cds-alias-status-info, #0079ad) 12%, transparent);
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.info-banner-icon {
+  flex: 0 0 auto;
+  color: var(--cds-alias-status-info, #0079ad);
+}
+.info-banner-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.info-banner-close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  margin: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.info-banner-close:hover {
+  background: color-mix(in srgb, var(--cds-alias-status-info, #0079ad) 18%, transparent);
+}
+.info-banner-close:focus-visible {
+  outline: 2px solid var(--cds-alias-status-info, #0079ad);
+  outline-offset: 1px;
 }
 .heading {
   margin: 0;
