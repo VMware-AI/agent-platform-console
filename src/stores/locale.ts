@@ -1369,7 +1369,7 @@ export const STRINGS: Dict = {
   },
 
   // Form fields (rewritten for create / edit / specs array editor)
-  'supplier.model.form.gateway': { zh: '所属网关', en: 'Gateway' },
+  'supplier.model.form.gateway': { zh: '模型网关', en: 'Model gateway' },
   'supplier.model.form.gatewayPlaceholder': {
     zh: '请选择 LiteLLM 网关',
     en: 'Select a LiteLLM gateway',

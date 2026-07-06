@@ -470,9 +470,14 @@ function formatCost(d: SpecDraft): string {
                 </cds-control-message>
               </cds-input>
 
-              <cds-select :status="attemptBasic && !gatewayValid ? 'error' : 'neutral'">
-                <label>{{ locale.t('supplier.model.form.gateway') }}</label>
+              <label for="supplier-gateway">{{ locale.t('supplier.model.form.gateway') }}</label>
+              <cds-select
+                id="supplier-gateway"
+                :status="attemptBasic && !gatewayValid ? 'error' : 'neutral'"
+                control-width="full"
+              >
                 <select
+                  id="supplier-gateway-select"
                   :value="gatewayId"
                   :disabled="isEditing"
                   :aria-label="locale.t('supplier.model.form.gateway')"
