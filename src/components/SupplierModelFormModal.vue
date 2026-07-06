@@ -391,6 +391,13 @@ function formatCost(d: SpecDraft): string {
     <cds-modal-content>
       <div class="wizard-grid">
         <nav class="wizard-sidebar" aria-label="wizard steps">
+          <div class="wizard-sidebar-title">
+            {{
+              locale.t(
+                isEditing ? 'supplier.model.form.editTitle' : 'supplier.model.form.createTitle',
+              )
+            }}
+          </div>
           <ol class="wizard-steps">
             <li
               v-for="(s, i) in STEPS"
@@ -426,13 +433,7 @@ function formatCost(d: SpecDraft): string {
 
         <section class="wizard-main">
           <header class="wizard-main-header">
-            <h2 cds-text="title">
-              {{
-                locale.t(
-                  isEditing ? 'supplier.model.form.editTitle' : 'supplier.model.form.createTitle',
-                )
-              }}
-            </h2>
+            <h2 class="step-heading">{{ locale.t(`supplier.model.form.step.${currentStep}`) }}</h2>
             <p class="step-indicator">
               {{
                 locale
@@ -947,12 +948,20 @@ function formatCost(d: SpecDraft): string {
 .wizard-grid {
   display: grid;
   grid-template-columns: 220px 1fr;
-  min-height: 480px;
+  min-height: 520px;
 }
 .wizard-sidebar {
   background: var(--cds-alias-object-app-background, #f4f4f4);
   border-right: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
   padding: 16px 0;
+}
+.wizard-sidebar-title {
+  padding: 4px 16px 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--cds-alias-status-danger, #c92100);
+  border-bottom: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
+  margin-bottom: 8px;
 }
 .wizard-steps {
   list-style: none;
@@ -1017,12 +1026,15 @@ function formatCost(d: SpecDraft): string {
 }
 .wizard-main-header {
   padding: 20px 24px 12px;
-  border-bottom: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
 }
 .wizard-main-header h2 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
+}
+.wizard-main-header h2.step-heading {
+  font-size: 20px;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
 .step-indicator {
   margin: 6px 0 0;
