@@ -18,6 +18,17 @@ import {
   type ProviderModelStatus,
 } from '@/api/graphql/queries/supplier-models'
 
+// ─── Wizard state machine ────────────────────────────────────────────────
+// Three steps: row-level identity (name + gateway), per-deployment detail
+// (spec array editor), and a read-only review before submit. Edit mode
+// renders step 1 as read-only (`name` and `modelGateway` are locked).
+type StepId = 'basic' | 'specs' | 'review'
+const STEPS: readonly StepId[] = ['basic', 'specs', 'review'] as const
+
+function stepIndex(s: StepId): number {
+  return STEPS.indexOf(s)
+}
+
 interface SpecDraft {
   specId: string | null
   model: string
@@ -93,6 +104,13 @@ const defaultApiKeyTpmLimit = ref<number | null>(null)
 const defaultApiKeyRpmLimit = ref<number | null>(null)
 const openSpecIndex = ref<number>(0)
 
+// Wizard step + per-step attempt flags (Task 2 / spec §3.2). Entering a
+// new step resets both flags so old error states don't bleed across
+// transitions. Step 'review' is read-only and never needs an attempt flag.
+const currentStep = ref<StepId>('basic')
+const attemptBasic = ref(false)
+const attemptSpecs = ref(false)
+
 const isEditing = computed(() => Boolean(props.model))
 
 watch(
@@ -139,6 +157,7 @@ watch(
     attempt.value = false
     testStatus.value = null
     openSpecIndex.value = 0
+    currentStep.value = 'basic'
   },
   { immediate: true },
 )
@@ -159,12 +178,16 @@ const apiKeyValid = computed(() =>
     : specDrafts.value.every((s) => s.apiKey.trim().length > 0),
 )
 
+const basicValid = computed(() => nameValid.value && gatewayValid.value)
+const specsValid = computed(() => specValid.value && apiKeyValid.value)
+
+// Legacy single-boolean validity for the submit() guard. Kept so the
+// submit() function below can keep its `if (!formValid.value || props.saving) return`
+// defensive check intact.
 const formValid = computed(
   () =>
-    nameValid.value &&
-    gatewayValid.value &&
-    specValid.value &&
-    apiKeyValid.value,
+    basicValid.value &&
+    specsValid.value,
 )
 
 const showUnsavedDropWarning = computed(() =>
@@ -184,6 +207,34 @@ function removeSpec(index: number) {
   if (openSpecIndex.value >= specDrafts.value.length) {
     openSpecIndex.value = specDrafts.value.length - 1
   }
+}
+
+ 
+function canAdvance(): boolean {
+  if (currentStep.value === 'basic') return basicValid.value
+  if (currentStep.value === 'specs') return specsValid.value
+  return true // review → submit is gated by the submit() guard, not by goNext
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function goNext() {
+  if (!canAdvance()) {
+    if (currentStep.value === 'basic') attemptBasic.value = true
+    else if (currentStep.value === 'specs') attemptSpecs.value = true
+    return
+  }
+  attemptBasic.value = false
+  attemptSpecs.value = false
+  const idx = stepIndex(currentStep.value)
+  if (idx < STEPS.length - 1) currentStep.value = STEPS[idx + 1]
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function goPrev() {
+  attemptBasic.value = false
+  attemptSpecs.value = false
+  const idx = stepIndex(currentStep.value)
+  if (idx > 0) currentStep.value = STEPS[idx - 1]
 }
 
 function close() {
@@ -280,6 +331,48 @@ function badgeClassForTestStatus(s: ProviderModelStatus) {
       : s === 'partial_outage'
         ? 'warning'
         : 'neutral'
+}
+
+// ─── Review (step 3) helpers ──────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const currentGatewayName = computed(() => {
+  const g = props.gateways.find((g) => g.id === gatewayId.value)
+  return g?.name ?? locale.t('supplier.model.form.review.unset')
+})
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function hasLimits(d: SpecDraft): boolean {
+  return Boolean(d.tpm ?? d.rpm ?? d.maxBudget ?? d.budgetDuration)
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function formatLimits(d: SpecDraft): string {
+  const parts: string[] = []
+  if (d.tpm) parts.push(`tpm ${d.tpm}`)
+  if (d.rpm) parts.push(`rpm ${d.rpm}`)
+  if (d.maxBudget) parts.push(`maxBudget ${d.maxBudget}`)
+  if (d.budgetDuration) parts.push(`budgetDuration ${d.budgetDuration}`)
+  return parts.join(' / ')
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function hasCost(d: SpecDraft): boolean {
+  return Boolean(
+    d.inputCostPerToken ??
+      d.outputCostPerToken ??
+      d.cacheReadInputTokenCost ??
+      d.cacheCreationInputTokenCost,
+  )
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function formatCost(d: SpecDraft): string {
+  const parts: string[] = []
+  if (d.inputCostPerToken != null) parts.push(`in ${d.inputCostPerToken}`)
+  if (d.outputCostPerToken != null) parts.push(`out ${d.outputCostPerToken}`)
+  if (d.cacheReadInputTokenCost != null) parts.push(`cr ${d.cacheReadInputTokenCost}`)
+  if (d.cacheCreationInputTokenCost != null) parts.push(`cw ${d.cacheCreationInputTokenCost}`)
+  return parts.join(' / ')
 }
 </script>
 
