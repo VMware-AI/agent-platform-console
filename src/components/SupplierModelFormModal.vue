@@ -216,7 +216,7 @@ function canAdvance(): boolean {
   return true // review → submit is gated by the submit() guard, not by goNext
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 function goNext() {
   if (!canAdvance()) {
     if (currentStep.value === 'basic') attemptBasic.value = true
@@ -229,7 +229,7 @@ function goNext() {
   if (idx < STEPS.length - 1) currentStep.value = STEPS[idx + 1]
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 function goPrev() {
   attemptBasic.value = false
   attemptSpecs.value = false
@@ -334,18 +334,18 @@ function badgeClassForTestStatus(s: ProviderModelStatus) {
 }
 
 // ─── Review (step 3) helpers ──────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 const currentGatewayName = computed(() => {
   const g = props.gateways.find((g) => g.id === gatewayId.value)
   return g?.name ?? locale.t('supplier.model.form.review.unset')
 })
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 function hasLimits(d: SpecDraft): boolean {
   return Boolean(d.tpm ?? d.rpm ?? d.maxBudget ?? d.budgetDuration)
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 function formatLimits(d: SpecDraft): string {
   const parts: string[] = []
   if (d.tpm) parts.push(`tpm ${d.tpm}`)
@@ -355,7 +355,7 @@ function formatLimits(d: SpecDraft): string {
   return parts.join(' / ')
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 function hasCost(d: SpecDraft): boolean {
   return Boolean(
     d.inputCostPerToken ??
@@ -365,7 +365,7 @@ function hasCost(d: SpecDraft): boolean {
   )
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 function formatCost(d: SpecDraft): string {
   const parts: string[] = []
   if (d.inputCostPerToken != null) parts.push(`in ${d.inputCostPerToken}`)
@@ -380,14 +380,27 @@ function formatCost(d: SpecDraft): string {
   <cds-modal :hidden="!open" :closable="!saving" size="lg" @closeChange="close">
     <cds-modal-header>
       <h2 cds-text="title" class="modal-title">
-        {{ locale.t(isEditing ? 'supplier.model.form.editTitle' : 'supplier.model.form.createTitle') }}
+        {{
+          locale.t(
+            isEditing ? 'supplier.model.form.editTitle' : 'supplier.model.form.createTitle',
+          )
+        }}
       </h2>
+      <div class="step-indicator">
+        {{
+          locale
+            .t('supplier.model.form.stepIndicator')
+            .replace('{current}', String(stepIndex(currentStep) + 1))
+            .replace('{total}', String(STEPS.length))
+            .replace('{label}', locale.t(`supplier.model.form.step.${currentStep}`))
+        }}
+      </div>
     </cds-modal-header>
 
     <cds-modal-content>
-      <form class="model-form" @submit.prevent="submit">
-        <!-- BASIC -->
-        <cds-input :status="attempt && !nameValid ? 'error' : 'neutral'">
+      <!-- STEP 1: BASIC (name + modelGateway) -->
+      <div v-show="currentStep === 'basic'" class="wizard-step">
+        <cds-input :status="attemptBasic && !nameValid ? 'error' : 'neutral'">
           <label>{{ locale.t('supplier.model.form.name') }}</label>
           <input
             :value="name"
@@ -398,7 +411,7 @@ function formatCost(d: SpecDraft): string {
             :placeholder="locale.t('supplier.model.form.namePlaceholder')"
             @input="name = ($event.target as HTMLInputElement).value"
           />
-          <cds-control-message v-if="attempt && !nameValid" status="error">
+          <cds-control-message v-if="attemptBasic && !nameValid" status="error">
             {{ locale.t('supplier.model.form.nameError') }}
           </cds-control-message>
           <cds-control-message v-else-if="isEditing" status="neutral">
@@ -409,7 +422,7 @@ function formatCost(d: SpecDraft): string {
           </cds-control-message>
         </cds-input>
 
-        <cds-select :status="attempt && !gatewayValid ? 'error' : 'neutral'">
+        <cds-select :status="attemptBasic && !gatewayValid ? 'error' : 'neutral'">
           <label>{{ locale.t('supplier.model.form.gateway') }}</label>
           <select
             :value="gatewayId"
@@ -424,8 +437,10 @@ function formatCost(d: SpecDraft): string {
             {{ locale.t('supplier.model.form.gatewayLockedHint') }}
           </cds-control-message>
         </cds-select>
+      </div>
 
-        <!-- SPECS -->
+      <!-- STEP 2: SPECS (spec array editor + advanced + test row) -->
+      <div v-show="currentStep === 'specs'" class="wizard-step">
         <div class="specs-section">
           <div class="specs-header">
             <strong>{{ locale.t('supplier.model.form.specs') }}</strong>
@@ -470,7 +485,7 @@ function formatCost(d: SpecDraft): string {
             </button>
             <div v-if="openSpecIndex === i" class="spec-body">
               <div class="spec-grid">
-                <cds-input :status="attempt && !d.model.trim() ? 'error' : 'neutral'">
+                <cds-input :status="attemptSpecs && !d.model.trim() ? 'error' : 'neutral'">
                   <label>model</label>
                   <input
                     :value="d.model"
@@ -478,9 +493,9 @@ function formatCost(d: SpecDraft): string {
                     placeholder="deepseek-chat"
                     @input="d.model = ($event.target as HTMLInputElement).value"
                   />
-                  <cds-control-message v-if="attempt && !d.model.trim()" status="error">必填</cds-control-message>
+                  <cds-control-message v-if="attemptSpecs && !d.model.trim()" status="error">必填</cds-control-message>
                 </cds-input>
-                <cds-input :status="attempt && !d.customLlmProvider.trim() ? 'error' : 'neutral'">
+                <cds-input :status="attemptSpecs && !d.customLlmProvider.trim() ? 'error' : 'neutral'">
                   <label>{{ locale.t('supplier.model.form.spec.customLlmProvider') }}</label>
                   <input
                     :value="d.customLlmProvider"
@@ -492,7 +507,7 @@ function formatCost(d: SpecDraft): string {
                     {{ locale.t('supplier.model.form.spec.customLlmProviderHint') }}
                   </cds-control-message>
                 </cds-input>
-                <cds-input :status="!isEditing && attempt && !d.apiKey.trim() ? 'error' : 'neutral'">
+                <cds-input :status="!isEditing && attemptSpecs && !d.apiKey.trim() ? 'error' : 'neutral'">
                   <label>{{ locale.t('supplier.model.form.spec.apiKey') }}</label>
                   <input
                     type="password"
@@ -676,7 +691,7 @@ function formatCost(d: SpecDraft): string {
           </cds-control-message>
         </div>
 
-        <!-- TEST ROW (create only) -->
+        <!-- test row (create only) -->
         <div v-if="!isEditing" class="test-row">
           <cds-button
             action="outline"
@@ -695,8 +710,8 @@ function formatCost(d: SpecDraft): string {
           </cds-badge>
         </div>
 
-        <!-- ADVANCED (create only) -->
-        <details v-if="!isEditing" class="advanced-section" :open="advancedOpen">
+        <!-- create-only whole-ProviderModel defaults -->
+        <details v-if="!isEditing" class="advanced-section" :open="false">
           <summary>{{ locale.t('supplier.model.form.advanced') }}</summary>
           <div class="advanced-grid">
             <cds-input>
@@ -717,7 +732,61 @@ function formatCost(d: SpecDraft): string {
             </cds-input>
           </div>
         </details>
-      </form>
+      </div>
+
+      <!-- STEP 3: REVIEW (read-only summary) -->
+      <div v-show="currentStep === 'review'" class="wizard-step review">
+        <section class="review-section">
+          <h3>{{ locale.t('supplier.model.form.review.basic') }}</h3>
+          <dl>
+            <dt>{{ locale.t('supplier.model.form.review.name') }}</dt>
+            <dd>{{ name }}</dd>
+            <dt>{{ locale.t('supplier.model.form.review.gateway') }}</dt>
+            <dd>{{ currentGatewayName }}</dd>
+          </dl>
+        </section>
+
+        <section class="review-section">
+          <h3>
+            {{ locale.t('supplier.model.form.step.specs') }}
+            ({{
+              locale.t('supplier.model.form.review.specsCount').replace('{count}', String(specDrafts.length))
+            }})
+          </h3>
+
+          <article
+            v-for="(d, i) in specDrafts"
+            :key="i"
+            class="review-spec"
+          >
+            <h4>
+              {{ locale.t('supplier.model.form.review.specHeading').replace('{n}', String(i + 1)) }}
+            </h4>
+            <dl>
+              <dt>{{ locale.t('supplier.model.form.review.model') }}</dt>
+              <dd>{{ d.model || locale.t('supplier.model.form.review.unset') }}</dd>
+              <dt>{{ locale.t('supplier.model.form.review.customLlmProvider') }}</dt>
+              <dd>{{ d.customLlmProvider || locale.t('supplier.model.form.review.unset') }}</dd>
+              <template v-if="d.apiBase">
+                <dt>{{ locale.t('supplier.model.form.review.apiBase') }}</dt>
+                <dd>{{ d.apiBase }}</dd>
+              </template>
+              <template v-if="d.tags.length">
+                <dt>{{ locale.t('supplier.model.form.review.tags') }}</dt>
+                <dd>{{ d.tags.join(', ') }}</dd>
+              </template>
+              <template v-if="hasLimits(d)">
+                <dt>{{ locale.t('supplier.model.form.review.limits') }}</dt>
+                <dd>{{ formatLimits(d) }}</dd>
+              </template>
+              <template v-if="hasCost(d)">
+                <dt>{{ locale.t('supplier.model.form.review.cost') }}</dt>
+                <dd>{{ formatCost(d) }}</dd>
+              </template>
+            </dl>
+          </article>
+        </section>
+      </div>
     </cds-modal-content>
 
     <cds-modal-actions>
@@ -725,11 +794,27 @@ function formatCost(d: SpecDraft): string {
         {{ locale.t('supplier.model.form.cancel') }}
       </cds-button>
       <cds-button
+        v-if="stepIndex(currentStep) > 0"
+        action="outline"
+        :disabled="saving"
+        @click="goPrev"
+      >
+        {{ locale.t('supplier.model.form.back') }}
+      </cds-button>
+      <cds-button
+        v-if="currentStep !== 'review'"
+        :disabled="saving"
+        @click="goNext"
+      >
+        {{ locale.t('supplier.model.form.next') }}
+      </cds-button>
+      <cds-button
+        v-else
         :loading-state="saving ? 'loading' : 'default'"
         :disabled="saving"
         @click="submit"
       >
-        {{ locale.t('supplier.model.form.submit') }}
+        {{ locale.t(isEditing ? 'supplier.model.form.submitUpdate' : 'supplier.model.form.submitCreate') }}
       </cds-button>
     </cds-modal-actions>
   </cds-modal>
@@ -760,4 +845,60 @@ function formatCost(d: SpecDraft): string {
 .test-row { display: flex; align-items: center; gap: 10px; }
 .test-status { text-transform: capitalize; }
 .drop-warning { margin-top: 8px; }
+.step-indicator {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--cds-alias-typography-color-300, #565656);
+}
+.wizard-step {
+  display: grid;
+  gap: 16px;
+}
+.wizard-step.review {
+  gap: 20px;
+}
+.review-section h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.review-section dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+}
+.review-section dt {
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 13px;
+}
+.review-section dd {
+  margin: 0;
+  font-size: 13px;
+}
+.review-spec {
+  border: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
+  border-radius: 4px;
+  padding: 12px;
+  margin-top: 8px;
+}
+.review-spec h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.review-spec dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+}
+.review-spec dt {
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 12px;
+}
+.review-spec dd {
+  margin: 0;
+  font-size: 12px;
+}
 </style>
