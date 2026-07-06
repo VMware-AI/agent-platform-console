@@ -470,13 +470,12 @@ function formatCost(d: SpecDraft): string {
                 </cds-control-message>
               </cds-input>
 
-              <div class="field-row">
-              <label for="supplier-gateway" class="field-label">{{ locale.t('supplier.model.form.gateway') }}</label>
               <cds-select
                 id="supplier-gateway"
                 :status="attemptBasic && !gatewayValid ? 'error' : 'neutral'"
                 control-width="full"
               >
+                <label>{{ locale.t('supplier.model.form.gateway') }}</label>
                 <select
                   id="supplier-gateway-select"
                   :value="gatewayId"
@@ -491,7 +490,6 @@ function formatCost(d: SpecDraft): string {
                   {{ locale.t('supplier.model.form.gatewayLockedHint') }}
                 </cds-control-message>
               </cds-select>
-            </div>
             </div>
 
             <!-- STEP 2: SPECS (spec array editor + advanced + test row) -->
