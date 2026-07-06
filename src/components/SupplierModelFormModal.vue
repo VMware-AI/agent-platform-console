@@ -237,6 +237,16 @@ function goPrev() {
   if (idx > 0) currentStep.value = STEPS[idx - 1]
 }
 
+ 
+function goToStep(s: StepId) {
+  if (s === currentStep.value) return
+  const targetIdx = STEPS.indexOf(s)
+  if (targetIdx > stepIndex(currentStep.value)) return // unvisited: no-op
+  attemptBasic.value = false
+  attemptSpecs.value = false
+  currentStep.value = s
+}
+
 function close() {
   if (!props.saving) emit('close')
 }
@@ -378,413 +388,453 @@ function formatCost(d: SpecDraft): string {
 
 <template>
   <cds-modal :hidden="!open" :closable="!saving" size="lg" @closeChange="close">
-    <cds-modal-header>
-      <h2 cds-text="title" class="modal-title">
-        {{
-          locale.t(
-            isEditing ? 'supplier.model.form.editTitle' : 'supplier.model.form.createTitle',
-          )
-        }}
-      </h2>
-      <div class="step-indicator">
-        {{
-          locale
-            .t('supplier.model.form.stepIndicator')
-            .replace('{current}', String(stepIndex(currentStep) + 1))
-            .replace('{total}', String(STEPS.length))
-            .replace('{label}', locale.t(`supplier.model.form.step.${currentStep}`))
-        }}
-      </div>
-    </cds-modal-header>
-
     <cds-modal-content>
-      <!-- STEP 1: BASIC (name + modelGateway) -->
-      <div v-show="currentStep === 'basic'" class="wizard-step">
-        <cds-input :status="attemptBasic && !nameValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('supplier.model.form.name') }}</label>
-          <input
-            :value="name"
-            minlength="2"
-            maxlength="64"
-            autocomplete="off"
-            :readonly="isEditing"
-            :placeholder="locale.t('supplier.model.form.namePlaceholder')"
-            @input="name = ($event.target as HTMLInputElement).value"
-          />
-          <cds-control-message v-if="attemptBasic && !nameValid" status="error">
-            {{ locale.t('supplier.model.form.nameError') }}
-          </cds-control-message>
-          <cds-control-message v-else-if="isEditing" status="neutral">
-            {{ locale.t('supplier.model.form.nameLockedHint') }}
-          </cds-control-message>
-          <cds-control-message v-else status="neutral">
-            {{ locale.t('supplier.model.form.nameHint') }}
-          </cds-control-message>
-        </cds-input>
-
-        <cds-select :status="attemptBasic && !gatewayValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('supplier.model.form.gateway') }}</label>
-          <select
-            :value="gatewayId"
-            :disabled="isEditing"
-            :aria-label="locale.t('supplier.model.form.gateway')"
-            @change="gatewayId = ($event.target as HTMLSelectElement).value"
-          >
-            <option value="">{{ locale.t('supplier.model.form.gatewayPlaceholder') }}</option>
-            <option v-for="g in gateways" :key="g.id" :value="g.id">{{ g.name }}</option>
-          </select>
-          <cds-control-message v-if="isEditing" status="neutral">
-            {{ locale.t('supplier.model.form.gatewayLockedHint') }}
-          </cds-control-message>
-        </cds-select>
-      </div>
-
-      <!-- STEP 2: SPECS (spec array editor + advanced + test row) -->
-      <div v-show="currentStep === 'specs'" class="wizard-step">
-        <div class="specs-section">
-          <div class="specs-header">
-            <strong>{{ locale.t('supplier.model.form.specs') }}</strong>
-            <cds-control-message status="neutral">
-              {{ locale.t('supplier.model.form.specsHint') }}
-            </cds-control-message>
-          </div>
-
-          <div
-            v-for="(d, i) in specDrafts"
-            :key="i"
-            class="spec-block"
-          >
-            <button
-              type="button"
-              class="spec-toggle"
-              :class="{ open: openSpecIndex === i }"
-              @click="openSpecIndex = openSpecIndex === i ? -1 : i"
+      <div class="wizard-grid">
+        <nav class="wizard-sidebar" aria-label="wizard steps">
+          <ol class="wizard-steps">
+            <li
+              v-for="(s, i) in STEPS"
+              :key="s"
+              class="wizard-step-item"
+              :class="{
+                active: s === currentStep,
+                visited: i < stepIndex(currentStep),
+                unvisited: i > stepIndex(currentStep),
+              }"
             >
-              <cds-icon
-                shape="angle"
-                :direction="openSpecIndex === i ? 'down' : 'right'"
-                size="sm"
-              ></cds-icon>
-              <span>
-                Spec #{{ i + 1 }}
-                <template v-if="d.model">— {{ d.model }}</template>
-                <template v-else>(未填写)</template>
-              </span>
-              <span
-                role="button"
-                tabindex="0"
-                class="spec-remove"
-                :class="{ disabled: specDrafts.length <= 1 }"
-                :aria-disabled="specDrafts.length <= 1"
-                @click.stop="specDrafts.length > 1 && removeSpec(i)"
-                @keydown.enter.stop.prevent="specDrafts.length > 1 && removeSpec(i)"
-                @keydown.space.stop.prevent="specDrafts.length > 1 && removeSpec(i)"
+              <button
+                type="button"
+                class="step-button"
+                :disabled="i >= stepIndex(currentStep)"
+                @click="i < stepIndex(currentStep) && goToStep(s)"
               >
-                {{ locale.t('supplier.model.form.spec.removeSpec') }}
-              </span>
-            </button>
-            <div v-if="openSpecIndex === i" class="spec-body">
-              <div class="spec-grid">
-                <cds-input :status="attemptSpecs && !d.model.trim() ? 'error' : 'neutral'">
-                  <label>model</label>
-                  <input
-                    :value="d.model"
-                    autocomplete="off"
-                    placeholder="deepseek-chat"
-                    @input="d.model = ($event.target as HTMLInputElement).value"
-                  />
-                  <cds-control-message v-if="attemptSpecs && !d.model.trim()" status="error">必填</cds-control-message>
-                </cds-input>
-                <cds-input :status="attemptSpecs && !d.customLlmProvider.trim() ? 'error' : 'neutral'">
-                  <label>{{ locale.t('supplier.model.form.spec.customLlmProvider') }}</label>
-                  <input
-                    :value="d.customLlmProvider"
-                    autocomplete="off"
-                    placeholder="deepseek"
-                    @input="d.customLlmProvider = ($event.target as HTMLInputElement).value"
-                  />
+                <span class="step-marker">
+                  <cds-icon
+                    v-if="i < stepIndex(currentStep)"
+                    shape="check"
+                    size="sm"
+                  ></cds-icon>
+                  <template v-else>{{ i + 1 }}</template>
+                </span>
+                <span class="step-label">
+                  {{ locale.t(`supplier.model.form.step.${s}`) }}
+                </span>
+              </button>
+            </li>
+          </ol>
+        </nav>
+
+        <section class="wizard-main">
+          <header class="wizard-main-header">
+            <h2 cds-text="title">
+              {{
+                locale.t(
+                  isEditing ? 'supplier.model.form.editTitle' : 'supplier.model.form.createTitle',
+                )
+              }}
+            </h2>
+            <p class="step-indicator">
+              {{
+                locale
+                  .t('supplier.model.form.stepIndicator')
+                  .replace('{current}', String(stepIndex(currentStep) + 1))
+                  .replace('{total}', String(STEPS.length))
+                  .replace('{label}', locale.t(`supplier.model.form.step.${currentStep}`))
+              }}
+            </p>
+          </header>
+
+          <div class="wizard-body">
+            <!-- STEP 1: BASIC (name + modelGateway) -->
+            <div v-show="currentStep === 'basic'" class="wizard-step">
+              <cds-input :status="attemptBasic && !nameValid ? 'error' : 'neutral'">
+                <label>{{ locale.t('supplier.model.form.name') }}</label>
+                <input
+                  :value="name"
+                  minlength="2"
+                  maxlength="64"
+                  autocomplete="off"
+                  :readonly="isEditing"
+                  :placeholder="locale.t('supplier.model.form.namePlaceholder')"
+                  @input="name = ($event.target as HTMLInputElement).value"
+                />
+                <cds-control-message v-if="attemptBasic && !nameValid" status="error">
+                  {{ locale.t('supplier.model.form.nameError') }}
+                </cds-control-message>
+                <cds-control-message v-else-if="isEditing" status="neutral">
+                  {{ locale.t('supplier.model.form.nameLockedHint') }}
+                </cds-control-message>
+                <cds-control-message v-else status="neutral">
+                  {{ locale.t('supplier.model.form.nameHint') }}
+                </cds-control-message>
+              </cds-input>
+
+              <cds-select :status="attemptBasic && !gatewayValid ? 'error' : 'neutral'">
+                <label>{{ locale.t('supplier.model.form.gateway') }}</label>
+                <select
+                  :value="gatewayId"
+                  :disabled="isEditing"
+                  :aria-label="locale.t('supplier.model.form.gateway')"
+                  @change="gatewayId = ($event.target as HTMLSelectElement).value"
+                >
+                  <option value="">{{ locale.t('supplier.model.form.gatewayPlaceholder') }}</option>
+                  <option v-for="g in gateways" :key="g.id" :value="g.id">{{ g.name }}</option>
+                </select>
+                <cds-control-message v-if="isEditing" status="neutral">
+                  {{ locale.t('supplier.model.form.gatewayLockedHint') }}
+                </cds-control-message>
+              </cds-select>
+            </div>
+
+            <!-- STEP 2: SPECS (spec array editor + advanced + test row) -->
+            <div v-show="currentStep === 'specs'" class="wizard-step">
+              <div class="specs-section">
+                <div class="specs-header">
+                  <strong>{{ locale.t('supplier.model.form.specs') }}</strong>
                   <cds-control-message status="neutral">
-                    {{ locale.t('supplier.model.form.spec.customLlmProviderHint') }}
+                    {{ locale.t('supplier.model.form.specsHint') }}
                   </cds-control-message>
-                </cds-input>
-                <cds-input :status="!isEditing && attemptSpecs && !d.apiKey.trim() ? 'error' : 'neutral'">
-                  <label>{{ locale.t('supplier.model.form.spec.apiKey') }}</label>
-                  <input
-                    type="password"
-                    autocomplete="off"
-                    :placeholder="locale.t('supplier.model.form.spec.apiKeyPlaceholder')"
-                    @input="d.apiKey = ($event.target as HTMLInputElement).value"
-                  />
-                </cds-input>
-                <cds-input>
-                  <label>apiBase</label>
-                  <input
-                    :value="d.apiBase"
-                    autocomplete="off"
-                    placeholder="https://api.deepseek.com"
-                    @input="d.apiBase = ($event.target as HTMLInputElement).value"
-                  />
-                </cds-input>
-                <cds-input>
-                  <label>organization</label>
-                  <input
-                    :value="d.organization"
-                    autocomplete="off"
-                    @input="d.organization = ($event.target as HTMLInputElement).value"
-                  />
-                </cds-input>
-                <cds-input>
-                  <label>{{ locale.t('supplier.model.form.spec.mode') }}</label>
-                  <input
-                    :value="d.mode"
-                    autocomplete="off"
-                    placeholder="chat"
-                    @input="d.mode = ($event.target as HTMLInputElement).value"
-                  />
-                </cds-input>
+                </div>
+
+                <div
+                  v-for="(d, i) in specDrafts"
+                  :key="i"
+                  class="spec-block"
+                >
+                  <button
+                    type="button"
+                    class="spec-toggle"
+                    :class="{ open: openSpecIndex === i }"
+                    @click="openSpecIndex = openSpecIndex === i ? -1 : i"
+                  >
+                    <cds-icon
+                      shape="angle"
+                      :direction="openSpecIndex === i ? 'down' : 'right'"
+                      size="sm"
+                    ></cds-icon>
+                    <span>
+                      Spec #{{ i + 1 }}
+                      <template v-if="d.model">— {{ d.model }}</template>
+                      <template v-else>(未填写)</template>
+                    </span>
+                    <span
+                      role="button"
+                      tabindex="0"
+                      class="spec-remove"
+                      :class="{ disabled: specDrafts.length <= 1 }"
+                      :aria-disabled="specDrafts.length <= 1"
+                      @click.stop="specDrafts.length > 1 && removeSpec(i)"
+                      @keydown.enter.stop.prevent="specDrafts.length > 1 && removeSpec(i)"
+                      @keydown.space.stop.prevent="specDrafts.length > 1 && removeSpec(i)"
+                    >
+                      {{ locale.t('supplier.model.form.spec.removeSpec') }}
+                    </span>
+                  </button>
+                  <div v-if="openSpecIndex === i" class="spec-body">
+                    <div class="spec-grid">
+                      <cds-input :status="attemptSpecs && !d.model.trim() ? 'error' : 'neutral'">
+                        <label>model</label>
+                        <input
+                          :value="d.model"
+                          autocomplete="off"
+                          placeholder="deepseek-chat"
+                          @input="d.model = ($event.target as HTMLInputElement).value"
+                        />
+                        <cds-control-message v-if="attemptSpecs && !d.model.trim()" status="error">必填</cds-control-message>
+                      </cds-input>
+                      <cds-input :status="attemptSpecs && !d.customLlmProvider.trim() ? 'error' : 'neutral'">
+                        <label>{{ locale.t('supplier.model.form.spec.customLlmProvider') }}</label>
+                        <input
+                          :value="d.customLlmProvider"
+                          autocomplete="off"
+                          placeholder="deepseek"
+                          @input="d.customLlmProvider = ($event.target as HTMLInputElement).value"
+                        />
+                        <cds-control-message status="neutral">
+                          {{ locale.t('supplier.model.form.spec.customLlmProviderHint') }}
+                        </cds-control-message>
+                      </cds-input>
+                      <cds-input :status="!isEditing && attemptSpecs && !d.apiKey.trim() ? 'error' : 'neutral'">
+                        <label>{{ locale.t('supplier.model.form.spec.apiKey') }}</label>
+                        <input
+                          type="password"
+                          autocomplete="off"
+                          :placeholder="locale.t('supplier.model.form.spec.apiKeyPlaceholder')"
+                          @input="d.apiKey = ($event.target as HTMLInputElement).value"
+                        />
+                      </cds-input>
+                      <cds-input>
+                        <label>apiBase</label>
+                        <input
+                          :value="d.apiBase"
+                          autocomplete="off"
+                          placeholder="https://api.deepseek.com"
+                          @input="d.apiBase = ($event.target as HTMLInputElement).value"
+                        />
+                      </cds-input>
+                      <cds-input>
+                        <label>organization</label>
+                        <input
+                          :value="d.organization"
+                          autocomplete="off"
+                          @input="d.organization = ($event.target as HTMLInputElement).value"
+                        />
+                      </cds-input>
+                      <cds-input>
+                        <label>{{ locale.t('supplier.model.form.spec.mode') }}</label>
+                        <input
+                          :value="d.mode"
+                          autocomplete="off"
+                          placeholder="chat"
+                          @input="d.mode = ($event.target as HTMLInputElement).value"
+                        />
+                      </cds-input>
+                    </div>
+
+                    <details class="advanced-section">
+                      <summary>{{ locale.t('supplier.model.form.advanced') }}</summary>
+                      <div class="advanced-grid">
+                        <cds-input>
+                          <label>tpm</label>
+                          <input
+                            type="number"
+                            :value="d.tpm ?? ''"
+                            @input="d.tpm = numOrNull(($event.target as HTMLInputElement).value)"
+                          />
+                        </cds-input>
+                        <cds-input>
+                          <label>rpm</label>
+                          <input
+                            type="number"
+                            :value="d.rpm ?? ''"
+                            @input="d.rpm = numOrNull(($event.target as HTMLInputElement).value)"
+                          />
+                        </cds-input>
+                        <cds-input>
+                          <label>maxBudget</label>
+                          <input
+                            type="number"
+                            step="any"
+                            :value="d.maxBudget ?? ''"
+                            @input="d.maxBudget = numOrNull(($event.target as HTMLInputElement).value)"
+                          />
+                        </cds-input>
+                        <cds-input>
+                          <label>budgetDuration</label>
+                          <input
+                            :value="d.budgetDuration"
+                            placeholder="30d"
+                            @input="d.budgetDuration = ($event.target as HTMLInputElement).value"
+                          />
+                        </cds-input>
+                        <cds-input>
+                          <label>tags</label>
+                          <input
+                            :value="d.tags.join(', ')"
+                            placeholder="production, reasoner"
+                            @input="d.tags = ($event.target as HTMLInputElement).value.split(/[,\n，]/).map((s) => s.trim()).filter(Boolean)"
+                          />
+                        </cds-input>
+                      </div>
+                      <div class="advanced-grid">
+                        <cds-input>
+                          <label>{{ locale.t('supplier.model.form.cost.input') }}</label>
+                          <input
+                            type="number"
+                            step="any"
+                            :value="d.inputCostPerToken ?? ''"
+                            @input="d.inputCostPerToken = numOrNull(($event.target as HTMLInputElement).value)"
+                          />
+                        </cds-input>
+                        <cds-input>
+                          <label>{{ locale.t('supplier.model.form.cost.output') }}</label>
+                          <input
+                            type="number"
+                            step="any"
+                            :value="d.outputCostPerToken ?? ''"
+                            @input="d.outputCostPerToken = numOrNull(($event.target as HTMLInputElement).value)"
+                          />
+                        </cds-input>
+                        <cds-input>
+                          <label>{{ locale.t('supplier.model.form.cost.cacheRead') }}</label>
+                          <input
+                            type="number"
+                            step="any"
+                            :value="d.cacheReadInputTokenCost ?? ''"
+                            @input="d.cacheReadInputTokenCost = numOrNull(($event.target as HTMLInputElement).value)"
+                          />
+                        </cds-input>
+                        <cds-input>
+                          <label>{{ locale.t('supplier.model.form.cost.cacheWrite') }}</label>
+                          <input
+                            type="number"
+                            step="any"
+                            :value="d.cacheCreationInputTokenCost ?? ''"
+                            @input="d.cacheCreationInputTokenCost = numOrNull(($event.target as HTMLInputElement).value)"
+                          />
+                        </cds-input>
+                      </div>
+                      <div class="advanced-grid flags-grid">
+                        <cds-control>
+                          <cds-toggle>
+                            <label>{{ locale.t('supplier.model.form.flag.useInPassThrough') }}</label>
+                            <input
+                              type="checkbox"
+                              slot="input"
+                              :checked="d.useInPassThrough"
+                              @change="d.useInPassThrough = ($event.target as HTMLInputElement).checked"
+                            />
+                          </cds-toggle>
+                        </cds-control>
+                        <cds-control>
+                          <cds-toggle>
+                            <label>{{ locale.t('supplier.model.form.flag.useLitellmProxy') }}</label>
+                            <input
+                              type="checkbox"
+                              slot="input"
+                              :checked="d.useLitellmProxy"
+                              @change="d.useLitellmProxy = ($event.target as HTMLInputElement).checked"
+                            />
+                          </cds-toggle>
+                        </cds-control>
+                        <cds-control>
+                          <cds-toggle>
+                            <label>{{ locale.t('supplier.model.form.flag.useChatCompletionsApi') }}</label>
+                            <input
+                              type="checkbox"
+                              slot="input"
+                              :checked="d.useChatCompletionsApi"
+                              @change="d.useChatCompletionsApi = ($event.target as HTMLInputElement).checked"
+                            />
+                          </cds-toggle>
+                        </cds-control>
+                        <cds-control>
+                          <cds-toggle>
+                            <label>{{ locale.t('supplier.model.form.flag.mergeReasoningContentInChoices') }}</label>
+                            <input
+                              type="checkbox"
+                              slot="input"
+                              :checked="d.mergeReasoningContentInChoices"
+                              @change="d.mergeReasoningContentInChoices = ($event.target as HTMLInputElement).checked"
+                            />
+                          </cds-toggle>
+                        </cds-control>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+
+                <cds-button action="outline" size="sm" @click="addSpec">
+                  <cds-icon shape="plus-circle" size="sm"></cds-icon>
+                  {{ locale.t('supplier.model.form.spec.addSpec') }}
+                </cds-button>
+
+                <cds-control-message
+                  v-if="showUnsavedDropWarning"
+                  status="warning"
+                  class="drop-warning"
+                >
+                  {{ locale.t('supplier.model.form.unsavedDropWarning') }}
+                </cds-control-message>
               </div>
 
-              <details class="advanced-section">
+              <!-- test row (create only) -->
+              <div v-if="!isEditing" class="test-row">
+                <cds-button
+                  action="outline"
+                  :disabled="testing || !nameValid || !specDrafts[0]?.model?.trim()"
+                  @click="testConnection"
+                >
+                  <cds-icon shape="network-globe" size="sm"></cds-icon>
+                  {{ locale.t('supplier.model.form.testConnection') }}
+                </cds-button>
+                <cds-badge
+                  v-if="testStatus"
+                  :status="badgeClassForTestStatus(testStatus)"
+                  class="test-status"
+                >
+                  {{ locale.t(`supplier.status.${testStatus}`) }}
+                </cds-badge>
+              </div>
+
+              <!-- create-only whole-ProviderModel defaults -->
+              <details v-if="!isEditing" class="advanced-section" :open="false">
                 <summary>{{ locale.t('supplier.model.form.advanced') }}</summary>
                 <div class="advanced-grid">
                   <cds-input>
-                    <label>tpm</label>
+                    <label>{{ locale.t('supplier.model.form.defaultApiKeyTpmLimit') }}</label>
                     <input
                       type="number"
-                      :value="d.tpm ?? ''"
-                      @input="d.tpm = numOrNull(($event.target as HTMLInputElement).value)"
+                      :value="defaultApiKeyTpmLimit ?? ''"
+                      @input="defaultApiKeyTpmLimit = numOrNull(($event.target as HTMLInputElement).value)"
                     />
                   </cds-input>
                   <cds-input>
-                    <label>rpm</label>
+                    <label>{{ locale.t('supplier.model.form.defaultApiKeyRpmLimit') }}</label>
                     <input
                       type="number"
-                      :value="d.rpm ?? ''"
-                      @input="d.rpm = numOrNull(($event.target as HTMLInputElement).value)"
+                      :value="defaultApiKeyRpmLimit ?? ''"
+                      @input="defaultApiKeyRpmLimit = numOrNull(($event.target as HTMLInputElement).value)"
                     />
                   </cds-input>
-                  <cds-input>
-                    <label>maxBudget</label>
-                    <input
-                      type="number"
-                      step="any"
-                      :value="d.maxBudget ?? ''"
-                      @input="d.maxBudget = numOrNull(($event.target as HTMLInputElement).value)"
-                    />
-                  </cds-input>
-                  <cds-input>
-                    <label>budgetDuration</label>
-                    <input
-                      :value="d.budgetDuration"
-                      placeholder="30d"
-                      @input="d.budgetDuration = ($event.target as HTMLInputElement).value"
-                    />
-                  </cds-input>
-                  <cds-input>
-                    <label>tags</label>
-                    <input
-                      :value="d.tags.join(', ')"
-                      placeholder="production, reasoner"
-                      @input="d.tags = ($event.target as HTMLInputElement).value.split(/[,\n，]/).map((s) => s.trim()).filter(Boolean)"
-                    />
-                  </cds-input>
-                </div>
-                <div class="advanced-grid">
-                  <cds-input>
-                    <label>{{ locale.t('supplier.model.form.cost.input') }}</label>
-                    <input
-                      type="number"
-                      step="any"
-                      :value="d.inputCostPerToken ?? ''"
-                      @input="d.inputCostPerToken = numOrNull(($event.target as HTMLInputElement).value)"
-                    />
-                  </cds-input>
-                  <cds-input>
-                    <label>{{ locale.t('supplier.model.form.cost.output') }}</label>
-                    <input
-                      type="number"
-                      step="any"
-                      :value="d.outputCostPerToken ?? ''"
-                      @input="d.outputCostPerToken = numOrNull(($event.target as HTMLInputElement).value)"
-                    />
-                  </cds-input>
-                  <cds-input>
-                    <label>{{ locale.t('supplier.model.form.cost.cacheRead') }}</label>
-                    <input
-                      type="number"
-                      step="any"
-                      :value="d.cacheReadInputTokenCost ?? ''"
-                      @input="d.cacheReadInputTokenCost = numOrNull(($event.target as HTMLInputElement).value)"
-                    />
-                  </cds-input>
-                  <cds-input>
-                    <label>{{ locale.t('supplier.model.form.cost.cacheWrite') }}</label>
-                    <input
-                      type="number"
-                      step="any"
-                      :value="d.cacheCreationInputTokenCost ?? ''"
-                      @input="d.cacheCreationInputTokenCost = numOrNull(($event.target as HTMLInputElement).value)"
-                    />
-                  </cds-input>
-                </div>
-                <div class="advanced-grid flags-grid">
-                  <cds-control>
-                    <cds-toggle>
-                      <label>{{ locale.t('supplier.model.form.flag.useInPassThrough') }}</label>
-                      <input
-                        type="checkbox"
-                        slot="input"
-                        :checked="d.useInPassThrough"
-                        @change="d.useInPassThrough = ($event.target as HTMLInputElement).checked"
-                      />
-                    </cds-toggle>
-                  </cds-control>
-                  <cds-control>
-                    <cds-toggle>
-                      <label>{{ locale.t('supplier.model.form.flag.useLitellmProxy') }}</label>
-                      <input
-                        type="checkbox"
-                        slot="input"
-                        :checked="d.useLitellmProxy"
-                        @change="d.useLitellmProxy = ($event.target as HTMLInputElement).checked"
-                      />
-                    </cds-toggle>
-                  </cds-control>
-                  <cds-control>
-                    <cds-toggle>
-                      <label>{{ locale.t('supplier.model.form.flag.useChatCompletionsApi') }}</label>
-                      <input
-                        type="checkbox"
-                        slot="input"
-                        :checked="d.useChatCompletionsApi"
-                        @change="d.useChatCompletionsApi = ($event.target as HTMLInputElement).checked"
-                      />
-                    </cds-toggle>
-                  </cds-control>
-                  <cds-control>
-                    <cds-toggle>
-                      <label>{{ locale.t('supplier.model.form.flag.mergeReasoningContentInChoices') }}</label>
-                      <input
-                        type="checkbox"
-                        slot="input"
-                        :checked="d.mergeReasoningContentInChoices"
-                        @change="d.mergeReasoningContentInChoices = ($event.target as HTMLInputElement).checked"
-                      />
-                    </cds-toggle>
-                  </cds-control>
                 </div>
               </details>
             </div>
+
+            <!-- STEP 3: REVIEW (read-only summary) -->
+            <div v-show="currentStep === 'review'" class="wizard-step review">
+              <section class="review-section">
+                <h3>{{ locale.t('supplier.model.form.review.basic') }}</h3>
+                <dl>
+                  <dt>{{ locale.t('supplier.model.form.review.name') }}</dt>
+                  <dd>{{ name }}</dd>
+                  <dt>{{ locale.t('supplier.model.form.review.gateway') }}</dt>
+                  <dd>{{ currentGatewayName }}</dd>
+                </dl>
+              </section>
+
+              <section class="review-section">
+                <h3>
+                  {{ locale.t('supplier.model.form.step.specs') }}
+                  ({{
+                    locale.t('supplier.model.form.review.specsCount').replace('{count}', String(specDrafts.length))
+                  }})
+                </h3>
+
+                <article
+                  v-for="(d, i) in specDrafts"
+                  :key="i"
+                  class="review-spec"
+                >
+                  <h4>
+                    {{ locale.t('supplier.model.form.review.specHeading').replace('{n}', String(i + 1)) }}
+                  </h4>
+                  <dl>
+                    <dt>{{ locale.t('supplier.model.form.review.model') }}</dt>
+                    <dd>{{ d.model || locale.t('supplier.model.form.review.unset') }}</dd>
+                    <dt>{{ locale.t('supplier.model.form.review.customLlmProvider') }}</dt>
+                    <dd>{{ d.customLlmProvider || locale.t('supplier.model.form.review.unset') }}</dd>
+                    <template v-if="d.apiBase">
+                      <dt>{{ locale.t('supplier.model.form.review.apiBase') }}</dt>
+                      <dd>{{ d.apiBase }}</dd>
+                    </template>
+                    <template v-if="d.tags.length">
+                      <dt>{{ locale.t('supplier.model.form.review.tags') }}</dt>
+                      <dd>{{ d.tags.join(', ') }}</dd>
+                    </template>
+                    <template v-if="hasLimits(d)">
+                      <dt>{{ locale.t('supplier.model.form.review.limits') }}</dt>
+                      <dd>{{ formatLimits(d) }}</dd>
+                    </template>
+                    <template v-if="hasCost(d)">
+                      <dt>{{ locale.t('supplier.model.form.review.cost') }}</dt>
+                      <dd>{{ formatCost(d) }}</dd>
+                    </template>
+                  </dl>
+                </article>
+              </section>
+            </div>
           </div>
-
-          <cds-button action="outline" size="sm" @click="addSpec">
-            <cds-icon shape="plus-circle" size="sm"></cds-icon>
-            {{ locale.t('supplier.model.form.spec.addSpec') }}
-          </cds-button>
-
-          <cds-control-message
-            v-if="showUnsavedDropWarning"
-            status="warning"
-            class="drop-warning"
-          >
-            {{ locale.t('supplier.model.form.unsavedDropWarning') }}
-          </cds-control-message>
-        </div>
-
-        <!-- test row (create only) -->
-        <div v-if="!isEditing" class="test-row">
-          <cds-button
-            action="outline"
-            :disabled="testing || !nameValid || !specDrafts[0]?.model?.trim()"
-            @click="testConnection"
-          >
-            <cds-icon shape="network-globe" size="sm"></cds-icon>
-            {{ locale.t('supplier.model.form.testConnection') }}
-          </cds-button>
-          <cds-badge
-            v-if="testStatus"
-            :status="badgeClassForTestStatus(testStatus)"
-            class="test-status"
-          >
-            {{ locale.t(`supplier.status.${testStatus}`) }}
-          </cds-badge>
-        </div>
-
-        <!-- create-only whole-ProviderModel defaults -->
-        <details v-if="!isEditing" class="advanced-section" :open="false">
-          <summary>{{ locale.t('supplier.model.form.advanced') }}</summary>
-          <div class="advanced-grid">
-            <cds-input>
-              <label>{{ locale.t('supplier.model.form.defaultApiKeyTpmLimit') }}</label>
-              <input
-                type="number"
-                :value="defaultApiKeyTpmLimit ?? ''"
-                @input="defaultApiKeyTpmLimit = numOrNull(($event.target as HTMLInputElement).value)"
-              />
-            </cds-input>
-            <cds-input>
-              <label>{{ locale.t('supplier.model.form.defaultApiKeyRpmLimit') }}</label>
-              <input
-                type="number"
-                :value="defaultApiKeyRpmLimit ?? ''"
-                @input="defaultApiKeyRpmLimit = numOrNull(($event.target as HTMLInputElement).value)"
-              />
-            </cds-input>
-          </div>
-        </details>
-      </div>
-
-      <!-- STEP 3: REVIEW (read-only summary) -->
-      <div v-show="currentStep === 'review'" class="wizard-step review">
-        <section class="review-section">
-          <h3>{{ locale.t('supplier.model.form.review.basic') }}</h3>
-          <dl>
-            <dt>{{ locale.t('supplier.model.form.review.name') }}</dt>
-            <dd>{{ name }}</dd>
-            <dt>{{ locale.t('supplier.model.form.review.gateway') }}</dt>
-            <dd>{{ currentGatewayName }}</dd>
-          </dl>
-        </section>
-
-        <section class="review-section">
-          <h3>
-            {{ locale.t('supplier.model.form.step.specs') }}
-            ({{
-              locale.t('supplier.model.form.review.specsCount').replace('{count}', String(specDrafts.length))
-            }})
-          </h3>
-
-          <article
-            v-for="(d, i) in specDrafts"
-            :key="i"
-            class="review-spec"
-          >
-            <h4>
-              {{ locale.t('supplier.model.form.review.specHeading').replace('{n}', String(i + 1)) }}
-            </h4>
-            <dl>
-              <dt>{{ locale.t('supplier.model.form.review.model') }}</dt>
-              <dd>{{ d.model || locale.t('supplier.model.form.review.unset') }}</dd>
-              <dt>{{ locale.t('supplier.model.form.review.customLlmProvider') }}</dt>
-              <dd>{{ d.customLlmProvider || locale.t('supplier.model.form.review.unset') }}</dd>
-              <template v-if="d.apiBase">
-                <dt>{{ locale.t('supplier.model.form.review.apiBase') }}</dt>
-                <dd>{{ d.apiBase }}</dd>
-              </template>
-              <template v-if="d.tags.length">
-                <dt>{{ locale.t('supplier.model.form.review.tags') }}</dt>
-                <dd>{{ d.tags.join(', ') }}</dd>
-              </template>
-              <template v-if="hasLimits(d)">
-                <dt>{{ locale.t('supplier.model.form.review.limits') }}</dt>
-                <dd>{{ formatLimits(d) }}</dd>
-              </template>
-              <template v-if="hasCost(d)">
-                <dt>{{ locale.t('supplier.model.form.review.cost') }}</dt>
-                <dd>{{ formatCost(d) }}</dd>
-              </template>
-            </dl>
-          </article>
         </section>
       </div>
     </cds-modal-content>
@@ -821,8 +871,6 @@ function formatCost(d: SpecDraft): string {
 </template>
 
 <style scoped>
-.modal-title { margin: 0; }
-.model-form { display: grid; gap: 16px; max-height: 70vh; overflow: auto; padding-right: 4px; }
 .specs-section { display: grid; gap: 8px; }
 .specs-header { display: flex; align-items: center; gap: 8px; }
 .spec-block { border: 1px solid var(--cds-alias-object-border-color, #e8e8e8); border-radius: 4px; }
@@ -845,11 +893,6 @@ function formatCost(d: SpecDraft): string {
 .test-row { display: flex; align-items: center; gap: 10px; }
 .test-status { text-transform: capitalize; }
 .drop-warning { margin-top: 8px; }
-.step-indicator {
-  margin-top: 6px;
-  font-size: 13px;
-  color: var(--cds-alias-typography-color-300, #565656);
-}
 .wizard-step {
   display: grid;
   gap: 16px;
@@ -900,5 +943,95 @@ function formatCost(d: SpecDraft): string {
 .review-spec dd {
   margin: 0;
   font-size: 12px;
+}
+.wizard-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 480px;
+}
+.wizard-sidebar {
+  background: var(--cds-alias-object-app-background, #f4f4f4);
+  border-right: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
+  padding: 16px 0;
+}
+.wizard-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wizard-step-item {
+  margin: 0;
+}
+.step-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--cds-alias-typography-color-300, #565656);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.step-button:disabled {
+  cursor: default;
+}
+.step-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid currentColor;
+  flex-shrink: 0;
+}
+.wizard-step-item.active .step-button {
+  color: #fff;
+  background: var(--cds-alias-object-app-blue, #0072a3);
+}
+.wizard-step-item.active .step-marker {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.wizard-step-item.visited .step-button {
+  color: var(--cds-alias-typography-color-300, #565656);
+}
+.wizard-step-item.visited .step-marker {
+  background: var(--cds-alias-object-app-blue, #0072a3);
+  color: #fff;
+  border-color: var(--cds-alias-object-app-blue, #0072a3);
+}
+.step-label {
+  font-size: 14px;
+}
+.wizard-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.wizard-main-header {
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
+}
+.wizard-main-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+.step-indicator {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--cds-alias-typography-color-300, #565656);
+}
+.wizard-body {
+  padding: 16px 24px 24px;
+  overflow: auto;
+  max-height: 60vh;
 }
 </style>
