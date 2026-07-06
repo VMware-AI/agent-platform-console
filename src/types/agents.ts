@@ -28,6 +28,12 @@ export interface AgentCredentials {
    * never returned by the API.
    */
   username: string
+  /** VM guest IP address (queried from vCenter). */
+  ip: string
+  /** Pre-built SSH command string, e.g. "ssh admin@172.16.85.200". */
+  sshCommand: string
+  /** Human-readable password hint (platform never stores plaintext). */
+  passwordHint: string
 }
 
 export interface Agent {

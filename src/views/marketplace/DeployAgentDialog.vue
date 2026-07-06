@@ -1,565 +1,249 @@
 <script setup lang="ts">
-/**
- * Deploy Agent Dialog — creates a NEW agent from an OVA template version. Picks a
- * version + target resource pool, names the agent, and optionally sets a cloud-init
- * hostname / per-key budget cap.
- *
- * The marketplace no longer picks or creates a virtual key: the backend ISSUES the
- * gateway key as part of provisioning and returns its secret ONCE
- * (DeployedAgent.virtualKeySecret), surfaced afterward in a reveal dialog
- * (see AgentMarketplaceView → VirtualKeySecretDialog).
- */
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
-import { VSPHERE_RESOURCE_POOLS_QUERY, VSPHERE_NETWORKS_QUERY, UNBOUND_KEYS_QUERY } from '@/api/graphql/queries/vsphere'
+import { VSPHERE_RESOURCE_POOLS_QUERY, VSPHERE_NETWORKS_QUERY, UNBOUND_KEYS_QUERY, INSTANT_CLONE_PARENTS_QUERY } from '@/api/graphql/queries/vsphere'
 import type { ResourcePool } from '@/types/resource-pool'
 import type {
-  DeployAgentInput,
-  OvaTemplateFamily,
-  OvaTemplateVersion,
-  VsphereResourcePool,
-  VsphereResourcePoolsQueryResult,
-  VsphereResourcePoolsQueryVars,
-  VsphereNetwork,
-  VsphereNetworksQueryResult,
-  VsphereNetworksQueryVars,
+  DeployAgentInput, OvaTemplateFamily,
+  VsphereResourcePool, VsphereResourcePoolsQueryResult, VsphereResourcePoolsQueryVars,
+  VsphereNetwork, VsphereNetworksQueryResult, VsphereNetworksQueryVars,
 } from '@/types/marketplace'
 import '@/components/icons'
 
-const props = defineProps<{
-  open: boolean
-  template: OvaTemplateFamily | null
-  pools: ResourcePool[]
-  deploying: boolean
-}>()
-
-const emit = defineEmits<{
-  (e: 'close'): void
-  (e: 'submit', input: DeployAgentInput): void
-}>()
-
+const props = defineProps<{ open: boolean; template: OvaTemplateFamily | null; pools: ResourcePool[]; deploying: boolean }>()
+const emit = defineEmits<{ (e: 'close'): void; (e: 'submit', input: DeployAgentInput): void }>()
 const locale = useLocaleStore()
 
-const templateVersionId = ref<string>('')
-const resourcePoolId = ref<string>('')
-const departmentId = ref<string>('')
-const name = ref('')
-const targetResourcePool = ref('')
-const targetNetwork = ref('')
-const hostname = ref('')
-const maxBudget = ref<string | number>('')
-const keySource = ref<'new' | 'existing'>('new')
-const existingKeyId = ref<string>('')
-const ovfPropertyValues = ref<Record<string, string>>({})
-const ovfPasswordConfirm = ref<Record<string, string>>({})
-const deployNotes = ref('')
-const batchMode = ref(false)
-const batchCount = ref(3)
-const batchNamePrefix = ref('')
-const batchStartIP = ref('')
+/* ════════════ 区块 1: 基础运行环境 ════════════ */
+const globalForm = reactive({
+  versionId: '', resourcePoolId: '', placementPool: '', targetNetwork: '',
+  cloneMode: 'full' as 'full' | 'instant', instantCloneParent: '',
+  parentSource: 'existing' as 'existing' | 'create',
+  newParents: [{ name: 'ic-p', ip: '' }] as Array<{ name: string; ip: string }>,
+})
+
+/* ════════════ 区块 2: 全局安全与认证 ════════════ */
+const securityForm = reactive({ runAsUser: 'svc_robot', password: '', confirmPassword: '', sshKey: '' })
+const showPw = ref(false); const showCpw = ref(false)
+const pwErr = ref(''); const cpwErr = ref('')
+
+/* 密码校验 */
+function validatePassword() {
+  pwErr.value = ''; cpwErr.value = ''
+  const pw = securityForm.password; const cpw = securityForm.confirmPassword
+  if (!pw) { pwErr.value = '密码不能为空'; return false }
+  if (pw.length < 8) { pwErr.value = '密码至少 8 位'; return false }
+  if (cpw && pw !== cpw) { cpwErr.value = '两次密码不一致'; return false }
+  return true
+}
+
+/* ════════════ 区块 3: 部署与网络策略 ════════════ */
+const deployPolicy = reactive({ deployMode: 'single' as 'single' | 'batch', ipMode: 'dhcp' as 'dhcp' | 'static', netmask: '255.255.255.0', gateway: '172.16.85.1', dns: '172.16.85.1' })
+
+/* ════════════ 区块 4: 实例清单 ════════════ */
+interface InstanceRow { hostname: string; ip: string; keyBinding: string }
+const instanceList = reactive<InstanceRow[]>([{ hostname: '', ip: '', keyBinding: '' }])
+const batchCount = ref(3); const batchPrefix = ref(''); const batchStartIP = ref('')
 const attempted = ref(false)
 
-watch(
-  () => props.open,
-  (o) => {
-    if (o && props.template) {
-      // Backend returns versions NEWEST-first, so the newest is index 0.
-      const latest = props.template.versions[0]
-      templateVersionId.value = latest?.id ?? ''
-      resourcePoolId.value = props.pools[0]?.id ?? ''
-      departmentId.value = ''
-      name.value = `${props.template.name}_${Date.now() % 100000}`
-      targetResourcePool.value = ''
-      targetNetwork.value = ''
-      hostname.value = ''
-      maxBudget.value = ''
-      keySource.value = 'new'
-      existingKeyId.value = ''
-      ovfPropertyValues.value = {}
-      ovfPasswordConfirm.value = {}
-      deployNotes.value = ''
-    }
-  },
-  { immediate: true },
+/* ---- vSphere 查询 ---- */
+const vVars = computed<VsphereResourcePoolsQueryVars>(() => ({ resourcePoolId: globalForm.resourcePoolId }))
+const vOn = computed(() => props.open && !!globalForm.resourcePoolId)
+const { result: vRes } = useQuery<VsphereResourcePoolsQueryResult, VsphereResourcePoolsQueryVars>(VSPHERE_RESOURCE_POOLS_QUERY, vVars, () => ({ enabled: vOn.value, fetchPolicy: 'cache-and-network' }))
+const vspherePools = computed<VsphereResourcePool[]>(() => vRes.value?.vsphereResourcePools ?? [])
+const { result: nRes } = useQuery<VsphereNetworksQueryResult, VsphereNetworksQueryVars>(VSPHERE_NETWORKS_QUERY, () => ({ resourcePoolId: globalForm.resourcePoolId }), () => ({ enabled: vOn.value, fetchPolicy: 'cache-and-network' }))
+const vsphereNetworks = computed<VsphereNetwork[]>(() => nRes.value?.vsphereNetworks ?? [])
+const { result: uRes } = useQuery(UNBOUND_KEYS_QUERY, null, () => ({ enabled: computed(() => props.open), fetchPolicy: 'cache-and-network' }))
+const unboundKeys = computed(() => uRes.value?.unboundKeys ?? [])
+const { result: pRes } = useQuery(INSTANT_CLONE_PARENTS_QUERY, () => ({ resourcePoolId: globalForm.resourcePoolId }), () => ({ enabled: computed(() => globalForm.cloneMode === 'instant' && globalForm.parentSource === 'existing' && !!globalForm.resourcePoolId) }))
+const instantParents = computed(() =>
+  ((pRes.value as any)?.instantCloneParents ?? []).filter((v: any) => v.name.startsWith('ic-p'))
 )
 
-/* ---- Live vSphere placement pools (keyed off the selected platform pool) ----
-   Re-queries whenever the platform resource pool changes. Only enabled while the
-   dialog is open with a pool selected, so we don't dial vCenter unnecessarily. */
-const vsphereVars = computed<VsphereResourcePoolsQueryVars>(() => ({
-  resourcePoolId: resourcePoolId.value,
-}))
-const vsphereEnabled = computed(() => props.open && !!resourcePoolId.value)
-const {
-  result: vsphereResult,
-  loading: vspherePoolsLoading,
-} = useQuery<VsphereResourcePoolsQueryResult, VsphereResourcePoolsQueryVars>(
-  VSPHERE_RESOURCE_POOLS_QUERY,
-  vsphereVars,
-  () => ({ enabled: vsphereEnabled.value, fetchPolicy: 'cache-and-network' }),
-)
-const vspherePools = computed<VsphereResourcePool[]>(
-  () => vsphereResult.value?.vsphereResourcePools ?? [],
-)
+const versionList = computed(() => props.template ? [...props.template.versions].reverse() : [])
 
-// When the available pools change (pool switched / first load), keep the
-// selection valid: clear it if the previously picked path is no longer offered.
-watch(vspherePools, (pools) => {
-  if (targetResourcePool.value && !pools.some((p) => p.path === targetResourcePool.value)) {
-    targetResourcePool.value = ''
-  }
-})
-
-/* ---- Live vSphere networks / portgroups ---- */
-const networksVars = computed<VsphereNetworksQueryVars>(() => ({
-  resourcePoolId: resourcePoolId.value,
-}))
-const {
-  result: networksResult,
-  loading: networksLoading,
-} = useQuery<VsphereNetworksQueryResult, VsphereNetworksQueryVars>(
-  VSPHERE_NETWORKS_QUERY,
-  networksVars,
-  () => ({ enabled: vsphereEnabled.value, fetchPolicy: 'cache-and-network' }),
-)
-const vsphereNetworks = computed<VsphereNetwork[]>(
-  () => networksResult.value?.vsphereNetworks ?? [],
-)
-
-// Group portgroups by their dvSwitch name (distributed) or 'Standard' bucket.
 const networksGrouped = computed(() => {
-  const groups: Record<string, VsphereNetwork[]> = {}
-  for (const n of vsphereNetworks.value) {
-    const key = n.type === 'distributed' ? (n.dvsName || 'Distributed vSwitch') : 'Standard'
-    if (!groups[key]) groups[key] = []
-    groups[key].push(n)
-  }
-  return groups
+  const g: Record<string, VsphereNetwork[]> = {}
+  for (const n of vsphereNetworks.value) { const k = n.type === 'distributed' ? (n.dvsName || 'Distributed') : 'Standard'; if (!g[k]) g[k] = []; g[k].push(n) }
+  return g
 })
 
-/* ---- Unbound keys (key-source picker) ---- */
-const { result: unboundResult } = useQuery(UNBOUND_KEYS_QUERY, null, () => ({
-  enabled: computed(() => props.open),
-  fetchPolicy: 'cache-and-network',
-}))
-const unboundKeys = computed(() => unboundResult.value?.unboundKeys ?? [])
-
-watch(vsphereNetworks, (nets) => {
-  if (targetNetwork.value && !nets.some((n) => n.path === targetNetwork.value)) {
-    targetNetwork.value = ''
+/* ---- 批量生成 ---- */
+function incrementIP(ip: string, offset: number): string {
+  const p = ip.split('.').map(Number); if (p.length === 4 && p.every(x => !isNaN(x))) { p[3] += offset; return p.join('.') }; return ''
+}
+function generateBatch() {
+  const n = Math.max(1, Math.min(50, batchCount.value)); instanceList.length = 0
+  for (let i = 0; i < n; i++) {
+    const idx = String(i + 1).padStart(2, '0')
+    instanceList.push({ hostname: batchPrefix.value ? `${batchPrefix.value}-${idx}` : '', ip: batchStartIP.value ? incrementIP(batchStartIP.value, i) : '', keyBinding: '' })
   }
+}
+
+/* ---- 校验 ---- */
+const errors = computed(() => {
+  const e: Record<string, string> = {}
+  if (!attempted.value) return e
+  if (!globalForm.versionId) e.version = '请选择版本'
+  if (!globalForm.resourcePoolId) e.pool = '请选择资源池'
+  if (securityForm.password && securityForm.password !== securityForm.confirmPassword) e.pw = '两次密码不一致'
+  if (deployPolicy.deployMode === 'single') { if (!instanceList[0]?.hostname.trim()) e.host = '请输入名称'; if (deployPolicy.ipMode === 'static' && !instanceList[0]?.ip) e.ip0 = 'IP 必填' }
+  else {
+    const names = instanceList.map(r => r.hostname.trim()).filter(Boolean)
+    if (new Set(names).size !== names.length) e.ndup = '主机名不可重复'
+    if (deployPolicy.ipMode === 'static') {
+      const ips = instanceList.map(r => r.ip).filter(Boolean)
+      if (ips.length < instanceList.length) e.ipmiss = '所有实例的 IP 必填'
+      else if (new Set(ips).size !== ips.length) e.idup = 'IP 地址不可重复'
+    }
+  }
+  return e
 })
+const valid = computed(() => Object.keys(errors.value).length === 0)
 
-const versionValid = () => !!templateVersionId.value
-const poolValid = () => !!resourcePoolId.value
-const nameValid = () => name.value.trim().length > 0
-const budgetValid = () => {
-  const raw = String(maxBudget.value).trim()
-  if (!raw) return true
-  const n = Number(raw)
-  return Number.isFinite(n) && n >= 0
-}
-// A placement pool is required when vCenter offers any (a real OVA template has
-// no source pool). When the list is empty (vcsim / regular-VM sources), an empty
-// selection is allowed — the clone inherits the source template's pool.
-const targetPoolValid = () =>
-  vspherePools.value.length === 0 || !!targetResourcePool.value
-
-function formValid(): boolean {
-  return versionValid() && poolValid() && nameValid() && targetPoolValid() && budgetValid()
-}
-
+/* ---- 提交 ---- */
 function submit() {
-  attempted.value = true
-  if (!formValid()) return
-  const rawBudget = String(maxBudget.value).trim()
-  const budget = rawBudget ? Number(rawBudget) : null
-  // Build OVF properties from the dynamic form values.
-  const ovfProps = Object.entries(ovfPropertyValues.value)
-    .filter(([, v]) => v !== '')
-    .map(([key, value]) => ({ key, value }))
-    const doSubmit = (agentName: string, agentHostname: string | null, agentProps: any[]) => {
-      emit('submit', {
-        name: agentName,
-        templateFamilyId: props.template?.id ?? '',
-        templateVersionId: templateVersionId.value,
-        resourcePoolId: resourcePoolId.value,
-        targetResourcePool: targetResourcePool.value || null,
-        targetNetwork: targetNetwork.value || null,
-        hostname: agentHostname,
-        maxBudget: budget,
-        departmentId: departmentId.value || null,
-        keySource: keySource.value,
-        existingKeyId: keySource.value === 'existing' ? (existingKeyId.value || null) : null,
-        ovfProperties: agentProps.length > 0 ? agentProps : null,
-        notes: deployNotes.value.trim() || null,
-      })
+  attempted.value = true; validatePassword(); if (!valid.value || pwErr.value || cpwErr.value) return
+  const mk = (r: InstanceRow): DeployAgentInput => {
+    const ovf: Array<{ key: string; value: string }> = []
+    if (securityForm.runAsUser) ovf.push({ key: 'guestinfo.run_as_user', value: securityForm.runAsUser })
+    if (securityForm.password) ovf.push({ key: 'guestinfo.password', value: securityForm.password })
+    if (securityForm.sshKey) ovf.push({ key: 'guestinfo.ssh_key', value: securityForm.sshKey })
+    if (deployPolicy.ipMode === 'static') {
+      ovf.push({ key: 'guestinfo.ip_mode', value: 'static' })
+      ovf.push({ key: 'guestinfo.static_ip', value: r.ip })
+      ovf.push({ key: 'guestinfo.netmask', value: deployPolicy.netmask })
+      ovf.push({ key: 'guestinfo.gateway', value: deployPolicy.gateway })
+      ovf.push({ key: 'guestinfo.dns', value: deployPolicy.dns })
     }
-    if (batchMode.value && batchCount.value > 0) {
-      const prefix = batchNamePrefix.value || name.value.trim()
-      for (let i = 0; i < batchCount.value; i++) {
-        const idx = String(i + 1).padStart(2, '0')
-        const bName = prefix + '-' + idx
-        let bProps = [...ovfProps]
-        if (batchStartIP.value) {
-          bProps = bProps.map(p => p.key === 'guestinfo.static_ip' ? { key: p.key, value: incrIP(batchStartIP.value, i) } : p)
-        }
-        doSubmit(bName, bName, bProps)
-      }
-    } else {
-      doSubmit(name.value.trim(), hostname.value.trim() || null, ovfProps)
-    }
+    return {
+      name: r.hostname.trim(), templateFamilyId: props.template?.id ?? '', templateVersionId: globalForm.versionId,
+      resourcePoolId: globalForm.resourcePoolId, targetResourcePool: globalForm.placementPool || null,
+      targetNetwork: globalForm.targetNetwork || null, hostname: r.hostname.trim() || null,
+      keySource: 'new', cloneMode: globalForm.cloneMode,
+      instantCloneParent: globalForm.cloneMode === 'instant' && globalForm.parentSource === 'existing' ? globalForm.instantCloneParent || null : null,
+      _createParents: globalForm.cloneMode === 'instant' && globalForm.parentSource === 'create' ? globalForm.newParents.filter(p => p.name.trim() && p.ip.trim()).map(p => ({ name: p.name.trim(), ip: p.ip.trim() })) : null,
+      ovfProperties: ovf.length > 0 ? ovf : null,
+    } as any
+  }
+  if (deployPolicy.deployMode === 'single') emit('submit', mk(instanceList[0]))
+  else instanceList.forEach(r => emit('submit', mk(r)))
 }
 
-function close() {
-  emit('close')
-}
-
-// The currently selected OVA version (for OVF property rendering).
-const selectedVersion = computed<OvaTemplateVersion | null>(() => {
-  const v = props.template?.versions?.find(v => v.id === templateVersionId.value)
-  return v ?? null
-})
-
-function incrIP(ip: string, delta: number): string { const p = ip.split("."); p[3] = String(Math.min(255, parseInt(p[3])+delta)); return p.join("."); }
-function fmtVersionRow(v: OvaTemplateVersion): string {
-  const isLatest = v.version === props.template?.latestVersion
-  return `${v.version}${isLatest ? ` · ${locale.t('marketplace.deploy.versionLatest')}` : ''}`
-}
+/* ---- 重置 ---- */
+watch(() => props.open, (o) => {
+  if (o && props.template) {
+    const v = props.template.versions[0]
+    Object.assign(globalForm, { versionId: v?.id ?? '', resourcePoolId: props.pools[0]?.id ?? '', placementPool: '', targetNetwork: '', cloneMode: 'full', instantCloneParent: '', parentSource: 'existing', newParents: [{ name: 'ic-p', ip: '' }] })
+    Object.assign(securityForm, { runAsUser: 'svc_robot', password: '', confirmPassword: '', sshKey: '' })
+    Object.assign(deployPolicy, { deployMode: 'single', ipMode: 'dhcp', netmask: '255.255.255.0', gateway: '172.16.85.1', dns: '172.16.85.1' })
+    instanceList.length = 0; instanceList.push({ hostname: '', ip: '', keyBinding: '' })
+    batchCount.value = 3; batchPrefix.value = ''; batchStartIP.value = ''; attempted.value = false
+  }
+}, { immediate: true })
 </script>
 
 <template>
-  <cds-modal
-    :hidden="!props.open"
-    :closable="!props.deploying"
-    size="lg"
-    @closeChange="close"
-  >
-    <cds-modal-header>
-      <h2 cds-text="title" class="modal-title">
-        {{ locale.t('marketplace.deploy.title') }}
-      </h2>
-    </cds-modal-header>
+  <cds-modal :hidden="!props.open" size="lg" @closeChange="emit('close')">
+    <cds-modal-header><h2 cds-text="title" class="t">部署智能体 — {{ props.template?.name }}</h2></cds-modal-header>
     <cds-modal-content>
-      <form class="deploy-form" @submit.prevent="submit">
-        <!-- 模板信息条 -->
-        <cds-alert v-if="props.template" status="info" class="deploy-info">
-          <cds-alert-content>
-            {{ props.template.name }} ·
-            {{ props.template.versions.length }} 个版本可选
-          </cds-alert-content>
-        </cds-alert>
+      <div class="f">
 
-        <!-- 版本 -->
-        <cds-select
-          class="full-row"
-          :status="attempted && !versionValid() ? 'error' : 'neutral'"
-        >
-          <label>{{ locale.t('marketplace.deploy.version') }}</label>
-          <select v-model="templateVersionId">
-            <option
-              v-for="v in props.template?.versions ?? []"
-              :key="v.id"
-              :value="v.id"
-            >
-              {{ fmtVersionRow(v) }}
-            </option>
-          </select>
-          <cds-control-message v-if="attempted && !versionValid()" status="error">
-            {{ locale.t('marketplace.deploy.error.version') }}
-          </cds-control-message>
-        </cds-select>
-
-        <!-- 资源池 -->
-        <cds-select
-          class="full-row"
-          :status="attempted && !poolValid() ? 'error' : 'neutral'"
-        >
-          <label>{{ locale.t('marketplace.deploy.pool') }}</label>
-          <select v-model="resourcePoolId">
-            <option
-              v-for="p in props.pools"
-              :key="p.id"
-              :value="p.id"
-            >
-              {{ p.name }} — {{ p.endpoint }}
-            </option>
-          </select>
-          <cds-control-message v-if="attempted && !poolValid()" status="error">
-            {{ locale.t('marketplace.deploy.error.pool') }}
-          </cds-control-message>
-        </cds-select>
-
-        <!-- 智能体名 -->
-        <cds-input :status="attempted && !nameValid() ? 'error' : 'neutral'">
-          <label>{{ locale.t('marketplace.deploy.name') }}</label>
-          <input
-            v-model="name"
-            :placeholder="locale.t('marketplace.deploy.namePlaceholder')"
-          />
-          <cds-control-message v-if="attempted && !nameValid()" status="error">
-            {{ locale.t('marketplace.deploy.error.name') }}
-          </cds-control-message>
-        </cds-input>
-
-        <!-- 密钥来源 -->
-        <div class="full-row" style="margin:4px 0">
-          <label style="display:block;font-weight:500;margin-bottom:6px">密钥来源</label>
-          <div style="display:flex;gap:16px">
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-              <input type="radio" v-model="keySource" value="new" /> 现场新建密钥
-            </label>
-            <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-              <input type="radio" v-model="keySource" value="existing" /> 使用已有未绑定密钥
-            </label>
+        <!-- ══ 区块1: 基础运行环境 ══ -->
+        <div class="blk"><h3 class="bh">基础运行环境</h3><p class="bd">所有实例共享的底层 IaaS 资源配置</p>
+          <div class="g2">
+            <cds-select control-width="shrink"><label>选择版本</label><select v-model="globalForm.versionId"><option v-for="v in versionList" :key="v.id" :value="v.id">{{ v.version }}</option></select></cds-select>
+            <cds-select control-width="shrink"><label>vSphere 放置资源池</label><select v-model="globalForm.placementPool"><option value="">继承模板默认</option><option v-for="p in vspherePools" :key="p.path" :value="p.path">{{ p.name }}</option></select></cds-select>
+            <cds-select control-width="shrink"><label>目标端口组</label><select v-model="globalForm.targetNetwork"><option value="">保持模板默认</option><optgroup v-for="(nets,g) in networksGrouped" :key="g" :label="g"><option v-for="n in nets" :key="n.path" :value="n.path">{{ n.name }}</option></optgroup></select></cds-select>
+            <cds-select control-width="shrink"><label>克隆模式</label><select v-model="globalForm.cloneMode"><option value="full">全量克隆</option><option value="instant">即时克隆</option></select></cds-select>
           </div>
-        </div>
-        <cds-select v-if="keySource === 'existing'" class="full-row">
-          <label>选择密钥</label>
-          <select v-model="existingKeyId">
-            <option value="">-- 选择 --</option>
-            <option v-for="k in unboundKeys" :key="k.id" :value="k.id">{{ k.alias || 'Key ' + k.id.slice(0, 8) }}</option>
-          </select>
-        </cds-select>
-
-        <!-- 主机名（可选） -->
-        <cds-input>
-          <label>{{ locale.t('marketplace.deploy.hostname') }}</label>
-          <input
-            v-model="hostname"
-            :placeholder="locale.t('marketplace.deploy.hostnamePlaceholder')"
-          />
-        </cds-input>
-
-        
-        <!-- 批量部署 -->
-        <div class="full-row" style="margin:8px 0;padding:10px;border:1px dashed #ccc;border-radius:6px">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500">
-            <input type="checkbox" v-model="batchMode" /> 批量部署
-          </label>
-          <template v-if="batchMode">
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">
-              <cds-input><label>数量</label><input v-model.number="batchCount" type="number" min="1" max="50" /></cds-input>
-              <cds-input><label>名称前缀</label><input v-model="batchNamePrefix" :placeholder="name || ''" /></cds-input>
-              <cds-input><label>起始 IP（DHCP 忽略）</label><input v-model="batchStartIP" placeholder="172.16.85.200" /></cds-input>
-            </div>
-            <div style="margin-top:6px;font-size:0.8rem;color:#666" v-if="batchCount && batchNamePrefix">
-              {{ batchCount }} 台: {{ batchNamePrefix }}-01, {{ batchNamePrefix }}-02...
+          <template v-if="globalForm.cloneMode==='instant'">
+            <div class="ic-sec">
+              <div class="rr"><label class="ir" :class="{a:globalForm.parentSource==='existing'}"><input type="radio" v-model="globalForm.parentSource" value="existing"/>选择已有父虚拟机</label><label class="ir" :class="{a:globalForm.parentSource==='create'}"><input type="radio" v-model="globalForm.parentSource" value="create"/>创建新父虚拟机</label></div>
+              <cds-select v-if="globalForm.parentSource==='existing'" control-width="shrink" style="margin-top:8px"><label>父虚拟机</label><select v-model="globalForm.instantCloneParent"><option value="">-- 选择 --</option><option v-for="p in instantParents" :key="p.name" :value="p.name">{{ p.name }}</option></select></cds-select>
+              <template v-else><div v-for="(p,i) in globalForm.newParents" :key="i" style="display:flex;gap:8px;align-items:flex-end;margin-top:8px"><cds-input style="flex:1"><label>名称</label><input v-model="p.name"/></cds-input><cds-input style="flex:1"><label>静态 IP</label><input v-model="p.ip"/></cds-input><cds-button-action v-if="globalForm.newParents.length>1" shape="times" @click="globalForm.newParents.splice(i,1)"/></div><cds-button size="sm" action="outline" style="margin-top:8px" @click="globalForm.newParents.push({name:'ic-p',ip:''})"><cds-icon shape="plus" size="sm"/>添加父虚拟机</cds-button></template>
             </div>
           </template>
         </div>
 
-        <!-- vApp / OVF 属性（来自模板，动态渲染） -->
-        <template v-if="template && template.versions.length > 0">
-          <div v-if="selectedVersion?.ovfProperties?.length" class="full-row vapp-section">
-            <cds-alert status="info" class="vapp-header">
-              <cds-alert-content>vApp 属性（来自模板 {{ selectedVersion?.ovaIdentifier }}）</cds-alert-content>
-            </cds-alert>
-            <template v-for="prop in selectedVersion!.ovfProperties" :key="prop.key">
-              <!-- IP Mode: DHCP vs Static radio -->
-              <div v-if="prop.key === 'guestinfo.ip_mode' && prop.type?.startsWith('string')" class="vapp-field">
-                <label class="vapp-label">{{ prop.label }}</label>
-                <div class="vapp-radio-group">
-                  <label class="vapp-radio">
-                    <input type="radio" v-model="ovfPropertyValues['guestinfo.ip_mode']" value="dhcp" />
-                    DHCP
-                  </label>
-                  <label class="vapp-radio">
-                    <input type="radio" v-model="ovfPropertyValues['guestinfo.ip_mode']" value="static" />
-                    静态IP
-                  </label>
-                </div>
-              </div>
-
-              <!-- Static IP fields: only visible when ip_mode === 'static' -->
-              <template v-if="ovfPropertyValues['guestinfo.ip_mode'] === 'static'">
-                <cds-input v-if="['guestinfo.static_ip','guestinfo.netmask','guestinfo.gateway','guestinfo.dns'].includes(prop.key)">
-                  <label>{{ prop.label }}</label>
-                  <input v-model="ovfPropertyValues[prop.key]" :placeholder="prop.defaultValue || ''" />
-                </cds-input>
-              </template>
-
-              <!-- Password fields with confirmation -->
-              <div v-if="prop.type?.startsWith('password')" class="vapp-field full-row">
-                <cds-input>
-                  <label>{{ prop.label }} <span v-if="prop.required" class="required">*</span></label>
-                  <input type="password" v-model="ovfPropertyValues[prop.key]" :placeholder="prop.description || ''" />
-                </cds-input>
-                <cds-input>
-                  <label>确认{{ prop.label }}</label>
-                  <input type="password" v-model="ovfPasswordConfirm[prop.key]" :placeholder="prop.description || ''" />
-                </cds-input>
-              </div>
-
-              <!-- Boolean: checkbox -->
-              <cds-checkbox v-else-if="prop.type === 'boolean'" class="full-row">
-                <label>{{ prop.label }}</label>
-                <input type="checkbox" v-model="ovfPropertyValues[prop.key]" true-value="True" false-value="False" />
-              </cds-checkbox>
-
-              <!-- Other string/int types -->
-              <cds-input v-else-if="!['guestinfo.ip_mode','guestinfo.static_ip','guestinfo.netmask','guestinfo.gateway','guestinfo.dns'].includes(prop.key) && !prop.type?.startsWith('password')">
-                <label>{{ prop.label }} <span v-if="prop.required" class="required">*</span></label>
-                <input v-model="ovfPropertyValues[prop.key]" :placeholder="prop.defaultValue || prop.description || ''" />
-              </cds-input>
-            </template>
+        <!-- ══ 区块2: 全局安全与认证 ══ -->
+        <div class="blk"><h3 class="bh">全局安全与认证</h3><p class="bd">所有实例统一的 Cloud-Init / vApp 系统凭据</p>
+          <div class="g2">
+            <cds-input><label>RunAs User</label><input v-model="securityForm.runAsUser" placeholder="svc_robot" class="uline"/></cds-input>
+            <!-- 密码 -->
+            <div class="field">
+              <label class="fl">密码 <span class="rq">*</span></label>
+              <div class="pw-wrap"><input :type="showPw ? 'text' : 'password'" v-model="securityForm.password" placeholder="至少 8 位" class="uline" :class="{ 'uline-err': attempted && pwErr }" @input="pwErr = ''"/><cds-button-action :shape="showPw ? 'eye-hide' : 'eye'" :title="showPw ? '隐藏' : '显示'" @click="showPw = !showPw"/></div>
+              <p v-if="attempted && pwErr" class="er">{{ pwErr }}</p>
+            </div>
+            <!-- 确认密码 -->
+            <div class="field">
+              <label class="fl">确认密码 <span class="rq">*</span></label>
+              <div class="pw-wrap"><input :type="showCpw ? 'text' : 'password'" v-model="securityForm.confirmPassword" placeholder="再次输入" class="uline" :class="{ 'uline-err': attempted && cpwErr }" @input="cpwErr = ''"/><cds-button-action :shape="showCpw ? 'eye-hide' : 'eye'" :title="showCpw ? '隐藏' : '显示'" @click="showCpw = !showCpw"/></div>
+              <p v-if="attempted && cpwErr" class="er">{{ cpwErr }}</p>
+            </div>
+            <cds-input><label>SSH 公钥（可选）</label><input v-model="securityForm.sshKey" placeholder="ssh-rsa AAA..." class="uline"/></cds-input>
           </div>
-        </template>
+        </div>
 
-        <!-- vSphere 放置资源池：真实 OVA 模板无源资源池，部署必须指定一个放置池。
-             列表来自所选平台资源池对应 vCenter 的实时枚举；为空（vcsim/常规 VM）时
-             允许不选，克隆继承源模板所在池。 -->
-        <cds-select
-          class="full-row"
-          :status="attempted && !targetPoolValid() ? 'error' : 'neutral'"
-        >
-          <label>{{ locale.t('marketplace.deploy.targetPool') }}</label>
-          <select
-            v-model="targetResourcePool"
-            :disabled="vspherePoolsLoading || vspherePools.length === 0"
-          >
-            <option value="">
-              {{
-                vspherePoolsLoading
-                  ? locale.t('marketplace.deploy.targetPoolLoading')
-                  : vspherePools.length === 0
-                    ? locale.t('marketplace.deploy.targetPoolEmpty')
-                    : locale.t('marketplace.deploy.targetPoolPlaceholder')
-              }}
-            </option>
-            <option
-              v-for="p in vspherePools"
-              :key="p.path"
-              :value="p.path"
-            >
-              {{ p.name }} — {{ p.path }}
-            </option>
-          </select>
-          <cds-control-message v-if="attempted && !targetPoolValid()" status="error">
-            {{ locale.t('marketplace.deploy.error.targetPool') }}
-          </cds-control-message>
-        </cds-select>
+        <!-- ══ 区块3: 部署与网络策略 ══ -->
+        <div class="blk"><h3 class="bh">部署与网络策略</h3>
+          <div class="g2">
+            <div><label class="sl">部署模式</label><div class="rr"><label class="ir" :class="{a:deployPolicy.deployMode==='single'}"><input type="radio" v-model="deployPolicy.deployMode" value="single"/>单台部署</label><label class="ir" :class="{a:deployPolicy.deployMode==='batch'}"><input type="radio" v-model="deployPolicy.deployMode" value="batch"/>批量部署</label></div></div>
+            <div><label class="sl">IP 分配模式</label><div class="rr"><label class="ir" :class="{a:deployPolicy.ipMode==='dhcp'}"><input type="radio" v-model="deployPolicy.ipMode" value="dhcp"/>DHCP</label><label class="ir" :class="{a:deployPolicy.ipMode==='static'}"><input type="radio" v-model="deployPolicy.ipMode" value="static"/>静态 IP</label></div></div>
+          </div>
+          <template v-if="deployPolicy.ipMode==='static'">
+            <div class="g3" style="margin-top:12px">
+              <cds-input><label>子网掩码</label><input v-model="deployPolicy.netmask" placeholder="255.255.255.0"/></cds-input>
+              <cds-input><label>网关</label><input v-model="deployPolicy.gateway" placeholder="172.16.85.1"/></cds-input>
+              <cds-input><label>DNS（逗号分隔多个）</label><input v-model="deployPolicy.dns" placeholder="172.16.85.1,8.8.8.8"/></cds-input>
+            </div>
+          </template>
+        </div>
 
-        <!-- 目标网络/端口组（可选）：标准端口组直接列出，分布式端口组按 dvSwitch 分组 -->
-        <cds-select class="full-row">
-          <label>{{ locale.t('marketplace.deploy.targetNetwork') }}</label>
-          <select
-            v-model="targetNetwork"
-            :disabled="networksLoading || vsphereNetworks.length === 0"
-          >
-            <option value="">
-              {{
-                networksLoading
-                  ? locale.t('marketplace.deploy.targetNetworkLoading')
-                  : vsphereNetworks.length === 0
-                    ? locale.t('marketplace.deploy.targetNetworkEmpty')
-                    : locale.t('marketplace.deploy.targetNetworkPlaceholder')
-              }}
-            </option>
-            <template v-for="(nets, groupName) in networksGrouped" :key="groupName">
-              <optgroup :label="String(groupName)">
-                <option
-                  v-for="n in nets"
-                  :key="n.path"
-                  :value="n.path"
-                >
-                  {{ n.name }}
-                </option>
-              </optgroup>
-            </template>
-          </select>
-        </cds-select>
+        <!-- ══ 区块4: 实例配置清单 ══ -->
+        <div class="blk"><h3 class="bh">实例配置清单</h3>
+          <!-- 单台 -->
+          <template v-if="deployPolicy.deployMode==='single'">
+            <div class="g2">
+              <cds-input><label>智能体名称 <span class="rq">*</span></label><input v-model="instanceList[0].hostname" placeholder="my-agent-01"/></cds-input>
+              <cds-input v-if="deployPolicy.ipMode==='static'"><label>IP 地址 <span class="rq">*</span></label><input v-model="instanceList[0].ip" placeholder="172.16.85.200"/></cds-input>
+              <cds-select control-width="shrink"><label>网关密钥绑定</label><select v-model="instanceList[0].keyBinding"><option value="">-- 新建密钥 --</option><option v-for="k in unboundKeys" :key="k.id" :value="k.id">{{ k.alias||k.id.slice(0,8) }}</option></select></cds-select>
+            </div>
+            <p v-if="attempted&&errors.host" class="er">{{errors.host}}</p>
+            <p v-if="attempted&&errors.ip0" class="er">{{errors.ip0}}</p>
+          </template>
+          <!-- 批量 -->
+          <template v-if="deployPolicy.deployMode==='batch'">
+            <div class="bt"><cds-input style="width:100px"><label>数量</label><input v-model.number="batchCount" type="number" min="1" max="50"/></cds-input><cds-input style="width:160px"><label>名称前缀</label><input v-model="batchPrefix" placeholder="agent"/></cds-input><cds-input v-if="deployPolicy.ipMode==='static'" style="width:160px"><label>起始 IP</label><input v-model="batchStartIP" placeholder="172.16.85.200"/></cds-input><cds-button size="sm" action="outline" @click="generateBatch">生成清单</cds-button></div>
+            <div class="tw" v-if="instanceList.length">
+              <table class="it"><thead><tr><th style="width:50px">#</th><th>主机名 <span class="rq">*</span></th><th v-if="deployPolicy.ipMode==='static'">IP 地址 <span class="rq">*</span></th><th>密钥绑定</th></tr></thead>
+                <tbody><tr v-for="(row,i) in instanceList" :key="i"><td class="ix">{{i+1}}</td><td><input class="ci" v-model="row.hostname" :class="{er2:attempted&&!row.hostname.trim()}"/></td><td v-if="deployPolicy.ipMode==='static'"><input class="ci" v-model="row.ip" :class="{er2:attempted&&!row.ip}"/></td><td><select class="cs" v-model="row.keyBinding"><option value="">-- 新建 --</option><option v-for="k in unboundKeys" :key="k.id" :value="k.id">{{k.alias||k.id.slice(0,8)}}</option></select></td></tr></tbody>
+              </table>
+              <p v-if="attempted&&errors.ndup" class="er">{{errors.ndup}}</p><p v-if="attempted&&errors.idup" class="er">{{errors.idup}}</p><p v-if="attempted&&errors.ipmiss" class="er">{{errors.ipmiss}}</p>
+            </div>
+          </template>
+        </div>
 
-        <!-- 预算上限（可选） -->
-        <cds-input :status="attempted && !budgetValid() ? 'error' : 'neutral'">
-          <label>{{ locale.t('marketplace.deploy.maxBudget') }}</label>
-          <input
-            v-model="maxBudget"
-            type="number"
-            min="0"
-            step="0.01"
-            :placeholder="locale.t('marketplace.deploy.maxBudgetPlaceholder')"
-          />
-          <cds-control-message v-if="attempted && !budgetValid()" status="error">
-            {{ locale.t('marketplace.deploy.error.maxBudget') }}
-          </cds-control-message>
-        </cds-input>
-
-        <!-- 部署说明（可选） -->
-        <cds-input class="full-row">
-          <label>{{ locale.t('marketplace.deploy.notes') }}</label>
-          <input
-            v-model="deployNotes"
-            :placeholder="locale.t('marketplace.deploy.notesPlaceholder')"
-          />
-        </cds-input>
-      </form>
+      </div>
     </cds-modal-content>
-    <cds-modal-actions>
-      <cds-button action="outline" :disabled="props.deploying" @click="close">
-        {{ locale.t('marketplace.deploy.cancel') }}
-      </cds-button>
-      <cds-button
-        :loading-state="props.deploying ? 'loading' : 'default'"
-        :disabled="props.deploying"
-        @click="submit"
-      >
-        {{ locale.t('marketplace.deploy.submit') }}
-      </cds-button>
-    </cds-modal-actions>
+    <cds-modal-actions><cds-button action="outline" @click="emit('close')">取消</cds-button><cds-button :loading-state="props.deploying?'loading':'default'" status="primary" @click="submit">部署</cds-button></cds-modal-actions>
   </cds-modal>
 </template>
 
 <style scoped>
-.deploy-form {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-.deploy-form .full-row {
-  grid-column: 1 / -1;
-}
-.deploy-info {
-  margin: 0 0 4px 0;
-}
-.modal-title {
-  margin: 0;
-}
-.vapp-section {
-  border: 1px solid var(--cds-border-subtle);
-  border-radius: 6px;
-  padding: 12px;
-  margin: 4px 0;
-}
-.vapp-header {
-  margin: -12px -12px 8px -12px;
-  border-radius: 6px 6px 0 0;
-}
-.vapp-field {
-  grid-column: 1 / -1;
-  margin-bottom: 8px;
-}
-.vapp-label {
-  display: block;
-  font-weight: 500;
-  margin-bottom: 6px;
-  font-size: 0.875rem;
-}
-.vapp-radio-group {
-  display: flex;
-  gap: 16px;
-}
-.vapp-radio {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-}
-.vapp-radio input[type="radio"] {
-  accent-color: var(--cds-primary);
-}
-.required {
-  color: var(--cds-danger);
-}
+.t{margin:0;font-size:18px;font-weight:600}.f{display:flex;flex-direction:column;gap:16px;max-height:60vh;overflow-y:auto}
+.blk{padding:12px;border:1px solid #e5e6eb;border-radius:8px}.bh{margin:0 0 4px;font-size:15px;font-weight:600}.bd{margin:0 0 12px;font-size:12px;color:#86909c}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.ic-sec{margin-top:8px;padding:10px;border:1px solid #e5e6eb;border-radius:6px;background:#f9fafb}
+.rr{display:flex;gap:16px}.ir{display:flex;align-items:center;gap:6px;cursor:pointer}.ir input[type=radio]{accent-color:#0072a3}.ir.a{font-weight:600;color:#0072a3}
+.sl{font-size:14px;font-weight:500;display:block;margin-bottom:6px}.rq{color:#c92100}
+.bt{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.tw{overflow-x:auto}.it{width:100%;border-collapse:collapse;font-size:13px}.it th{text-align:left;padding:8px 6px;background:#f7f8fa;font-weight:600;border-bottom:2px solid #e5e6eb}.it td{padding:4px 6px;border-bottom:1px solid #f0f0f0}
+.ix{text-align:center;color:#86909c}.ci{width:100%;padding:6px 8px;border:1px solid #d0d5dd;border-radius:4px;font-size:13px;box-sizing:border-box}.ci:focus{border-color:#0072a3;outline:none}.ci.er2{border-color:#c92100}.cs{width:100%;padding:6px 8px;border:1px solid #d0d5dd;border-radius:4px;font-size:13px;background:#fff}
+.er{color:#c92100;font-size:12px;margin:6px 0 0}
+.pw-wrap{display:flex;align-items:center;gap:4px}.pw-wrap input{flex:1}
+.uline{border:none;border-bottom:1px solid #d0d5dd;border-radius:0;padding:6px 0;font-size:14px;width:100%;outline:none;background:transparent}.uline:focus{border-bottom-color:#0072a3}.uline-err{border-bottom-color:#c92100}
+.fl{font-size:14px;color:#4e5969;display:block;margin-bottom:4px}.field{display:flex;flex-direction:column}
 </style>

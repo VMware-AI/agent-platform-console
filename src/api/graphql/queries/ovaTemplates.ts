@@ -118,6 +118,12 @@ export const ADD_OVA_TEMPLATE_VERSION_MUTATION = gql`
   }
 `
 
+export const DELETE_OVA_TEMPLATE_FAMILY_MUTATION = gql`
+  mutation DeleteOvaTemplateFamily($id: ID!) {
+    deleteOvaTemplateFamily(id: $id)
+  }
+`
+
 // Deploy a NEW agent from an OVA template version. The backend creates the agent,
 // provisions its VM, issues the gateway key, and returns its secret ONCE via
 // `virtualKeySecret` (surfaced in a reveal dialog) — there is no separate

@@ -86,6 +86,8 @@ export interface CreateOvaTemplateVersionInput {
   version: string
   ovaIdentifier: string
   notes?: string | null
+  cloneMode?: "full" | "instant" | null
+  instantCloneParent?: string | null
 }
 
 export interface CreateOvaTemplateFamilyInput {
@@ -105,6 +107,8 @@ export interface AddOvaTemplateVersionInput {
   version: string
   ovaIdentifier: string
   notes?: string | null
+  cloneMode?: "full" | "instant" | null
+  instantCloneParent?: string | null
 }
 
 export interface CreateOvaTemplateFamilyPayload {
@@ -214,6 +218,8 @@ export interface DeployAgentInput {
   existingKeyId?: string | null
   /** Optional free-text deploy notes. */
   notes?: string | null
+  cloneMode?: "full" | "instant" | null
+  instantCloneParent?: string | null
 }
 
 export interface DeployAgentPayload {

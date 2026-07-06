@@ -6,10 +6,15 @@ import { useAgentExport } from '@/composables/useAgentExport'
 import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import AppDropdown from '@/components/AppDropdown.vue'
+import AccessInfoDialog from '@/components/AccessInfoDialog.vue'
+import ConfigureAgentDialog from '@/components/ConfigureAgentDialog.vue'
 
-import { AGENTS_QUERY } from '@/api/graphql/queries/agents'
+import { AGENTS_QUERY, AGENT_QUERY } from '@/api/graphql/queries/agents'
+import { apolloClient } from '@/api/graphql/client'
 import type {
   Agent,
+  AgentQueryResult,
+  AgentQueryVars,
   AgentSortField,
   AgentsQueryResult,
   AgentsQueryVars,
@@ -275,6 +280,7 @@ const ICON_FOR_ACTION: Record<RowActionKey, string> = {
   stop: 'stop',
   update: 'update',
   delete: 'trash',
+  copyAccess: 'eye',
 }
 
 function badgeStatusFor(status: Agent['status']): 'success' | 'neutral' | 'danger' {
@@ -293,11 +299,34 @@ function onVisit(agent: Agent) {
 }
 
 function onConfigure(agent: Agent) {
-  noop('configure', { id: agent.id })
+  try {
+    configureTarget.value = agent
+    configureDialogOpen.value = true
+  } catch (err: unknown) {
+    console.warn('[agents] configure dialog failed', err)
+    toast.error('无法打开配置面板')
+  }
+}
+function closeConfigureDialog() {
+  configureDialogOpen.value = false
+  configureTarget.value = null
+}
+function onConfigureRotateKey(agent: Agent) {
+  closeConfigureDialog()
+  // Delegate to existing key rotation (noop stub for now — wired later)
+  noop('rotateKey', { id: agent.id })
+}
+function onConfigureRestart(agent: Agent) {
+  closeConfigureDialog()
+  noop('restart', { id: agent.id })
 }
 
 function onRowAction(agent: Agent, key: RowActionKey) {
-  noop(`row:${key}`, { id: agent.id })
+  if (key === 'copyAccess') {
+    onCopyAccess(agent)
+  } else {
+    noop(`row:${key}`, { id: agent.id })
+  }
   closeRowActions()
 }
 
@@ -333,49 +362,96 @@ const { runExport, exporting } = useAgentExport({
 /** Map export-in-flight → cds-button's `loadingState` enum. */
 const exportState = computed(() => (exporting.value ? 'loading' : 'default'))
 
+// Access info dialog state
+const accessDialogOpen = ref(false)
+const accessTarget = ref<Agent | null>(null)
+const accessLoading = ref(false)
+const accessError = ref<string | null>(null)
+
+// Configure dialog state
+const configureDialogOpen = ref(false)
+const configureTarget = ref<Agent | null>(null)
+
 async function onCopyKey(agent: Agent) {
   if (!agent.apiKey) return
   const text = agent.apiKey.name
+  const fallbackCopy = () => {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+  }
   try {
-    if (navigator.clipboard?.writeText) {
+    // Secure-context clipboard API — only on HTTPS or localhost
+    if (window.isSecureContext && navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text)
     } else {
-      // Fallback for non-secure contexts / older browsers
-      const ta = document.createElement('textarea')
-      ta.value = text
-      ta.style.position = 'fixed'
-      ta.style.opacity = '0'
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
+      fallbackCopy()
     }
     toast.success(locale.t('agents.action.copyKeyOk').replace('{name}', text))
   } catch (err) {
     console.warn('[agents] copy-key failed', { id: agent.id, err })
-    toast.error(graphqlErrorMessage(err, locale.t('agents.action.copyKeyFail')))
+    // Try fallback if clipboard API threw
+    try { fallbackCopy(); toast.success(locale.t('agents.action.copyKeyOk').replace('{name}', text)) }
+    catch { toast.error(locale.t('agents.action.copyKeyFail')) }
   }
 }
 
 async function onCopyAccess(agent: Agent) {
-  const creds = agent.credentials
-  const ip = creds?.ip || ''
-  const user = creds?.username || ''
-  const text = `IP: ${ip}  User: ${user}  Password: (set at deploy)`
+  accessTarget.value = agent
+  accessDialogOpen.value = true
+  accessLoading.value = true
+  accessError.value = null
+
   try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text)
-    } else {
-      const ta = document.createElement('textarea')
-      ta.value = text; ta.style.position='fixed'; ta.style.opacity='0'
-      document.body.appendChild(ta); ta.select()
-      document.execCommand('copy'); document.body.removeChild(ta)
+    const { data } = await apolloClient.query<AgentQueryResult, AgentQueryVars>({
+      query: AGENT_QUERY,
+      variables: { id: agent.id },
+      fetchPolicy: 'network-only', // bypass cache — credentials come from vCenter
+    })
+    if (data?.agent?.credentials) {
+      // Merge fresh credentials into target so the dialog sees them
+      accessTarget.value = { ...agent, credentials: data.agent.credentials }
     }
-    toast.success(locale.t('agents.action.copyAccessOk').replace('{ip}', ip))
-  } catch (err) {
-    toast.error(locale.t('agents.action.copyAccessFail'))
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    accessError.value = msg || '无法获取虚拟机凭据'
+  } finally {
+    accessLoading.value = false
   }
 }
+function closeAccessDialog() {
+  accessDialogOpen.value = false
+  accessTarget.value = null
+  accessLoading.value = false
+  accessError.value = null
+}
+function retryAccessInfo() {
+  const agent = accessTarget.value
+  if (!agent) return
+  // Re-trigger the full fetch flow
+  accessLoading.value = true
+  accessError.value = null
+  apolloClient.query<AgentQueryResult, AgentQueryVars>({
+    query: AGENT_QUERY,
+    variables: { id: agent.id },
+    fetchPolicy: 'network-only',
+  }).then(({ data }) => {
+    if (data?.agent?.credentials) {
+      accessTarget.value = { ...agent, credentials: data.agent.credentials }
+    }
+  }).catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err)
+    accessError.value = msg || '重试失败'
+  }).finally(() => {
+    accessLoading.value = false
+  })
+}
+
 
 const BATCH_KEYS = ['start', 'stop', 'update', 'delete'] as const
 
@@ -448,6 +524,74 @@ const summaryText = computed(() => {
       <h1 cds-text="title" class="heading">{{ locale.t('agents.list.title') }}</h1>
       <p cds-text="body" class="desc muted">{{ locale.t('agents.list.description') }}</p>
     </header>
+
+    <!-- Multi-condition filter bar -->
+    <div class="filter-bar">
+      <cds-input class="filter-input">
+        <input
+          type="text"
+          :placeholder="locale.t('agents.col.name.search')"
+          :aria-label="locale.t('agents.col.name.search')"
+          :value="columnFilters.nameKeyword"
+          @input="(e: Event) => setColumnFilter('nameKeyword', (e.target as HTMLInputElement).value)"
+        />
+        <cds-icon slot="prefix" shape="search" size="sm" aria-hidden="true"></cds-icon>
+      </cds-input>
+
+      <AppDropdown align="start">
+        <template #trigger>
+          <cds-button action="outline" size="sm">
+            {{ typeFilter === 'all' ? locale.t('agents.type.filter.all') : locale.t(`agents.type.${typeFilter}`) }}
+            <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
+          </cds-button>
+        </template>
+        <template #default="{ close }">
+          <button
+            v-for="t in TYPE_OPTIONS"
+            :key="t"
+            type="button"
+            class="menu-opt"
+            :class="{ active: typeFilter === t }"
+            @click="setTypeFilter(t); close()"
+          >
+            <span>{{ t === 'all' ? locale.t('agents.type.filter.all') : locale.t(`agents.type.${t}`) }}</span>
+            <cds-icon v-if="typeFilter === t" shape="check" size="sm"></cds-icon>
+          </button>
+        </template>
+      </AppDropdown>
+
+      <AppDropdown align="start">
+        <template #trigger>
+          <cds-button action="outline" size="sm">
+            {{ statusFilter === 'all' ? locale.t('agents.status.filter.all') : locale.t(`agents.status.${statusFilter}`) }}
+            <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
+          </cds-button>
+        </template>
+        <template #default="{ close }">
+          <button
+            v-for="s in STATUS_OPTIONS"
+            :key="s"
+            type="button"
+            class="menu-opt"
+            :class="{ active: statusFilter === s }"
+            @click="setStatusFilter(s); close()"
+          >
+            <span>{{ s === 'all' ? locale.t('agents.status.filter.all') : locale.t(`agents.status.${s}`) }}</span>
+            <cds-icon v-if="statusFilter === s" shape="check" size="sm"></cds-icon>
+          </button>
+        </template>
+      </AppDropdown>
+
+      <cds-input class="filter-input">
+        <input
+          type="text"
+          :placeholder="locale.t('agents.col.username.search')"
+          :aria-label="locale.t('agents.col.username.search')"
+          :value="columnFilters.usernameKeyword"
+          @input="(e: Event) => setColumnFilter('usernameKeyword', (e.target as HTMLInputElement).value)"
+        />
+      </cds-input>
+    </div>
 
     <!-- Toolbar: export / batch / refresh -->
     <div class="toolbar">
@@ -807,6 +951,12 @@ const summaryText = computed(() => {
               :status="badgeStatusFor(agent.status)"
               class="status-badge"
             >
+              <cds-icon
+                :shape="agent.status === 'running' ? 'success' : agent.status === 'exception' ? 'error' : 'pause'"
+                size="xs"
+                aria-hidden="true"
+                class="status-icon"
+              ></cds-icon>
               {{ locale.t(`agents.status.${STATUS_FROM_GQL[agent.status]}`) }}
             </cds-badge>
           </cds-grid-cell>
@@ -823,17 +973,26 @@ const summaryText = computed(() => {
             </span>
           </cds-grid-cell>
           <cds-grid-cell>
-            <span>{{ agent.credentials?.username ?? '—' }}</span>
+            <span
+              class="username-cell"
+              :title="agent.credentials?.username || undefined"
+            >{{ agent.credentials?.username ?? '—' }}</span>
           </cds-grid-cell>
           <cds-grid-cell class="muted time-cell">{{ fmtDateTime(agent.createdAt) }}</cds-grid-cell>
           <cds-grid-cell class="muted time-cell">{{ fmtDateTime(agent.updatedAt) }}</cds-grid-cell>
           <cds-grid-cell>
             <span class="actions-cell">
-              <cds-button action="outline" size="sm" @click="onVisit(agent)">
+              <cds-button action="outline" size="sm" @click="onCopyAccess(agent)">
                 <cds-icon shape="eye" size="sm" aria-hidden="true"></cds-icon>
                 {{ locale.t('agents.action.visit') }}
               </cds-button>
-              <cds-button action="outline" size="sm" @click="onConfigure(agent)">
+              <cds-button
+                action="outline"
+                size="sm"
+                :disabled="agent.status === 'exception'"
+                :title="agent.status === 'exception' ? '异常状态实例暂不支持配置' : undefined"
+                @click="onConfigure(agent)"
+              >
                 <cds-icon shape="cog" size="sm" aria-hidden="true"></cds-icon>
                 {{ locale.t('agents.action.configure') }}
               </cds-button>
@@ -1054,6 +1213,26 @@ const summaryText = computed(() => {
       </div>
     </cds-dropdown>
 
+    <!-- Access Info Dialog -->
+    <AccessInfoDialog
+      :open="accessDialogOpen"
+      :agent="accessTarget"
+      :loading="accessLoading"
+      :error="accessError"
+      @close="closeAccessDialog"
+      @retry="retryAccessInfo"
+    />
+
+    <!-- Configure Agent Dialog -->
+    <ConfigureAgentDialog
+      :open="configureDialogOpen"
+      :agent="configureTarget"
+      @close="closeConfigureDialog"
+      @rotate-key="onConfigureRotateKey"
+      @restart="onConfigureRestart"
+      @open-access-info="(agent: Agent) => { closeConfigureDialog(); onCopyAccess(agent) }"
+    />
+
     <!-- Per-row "more" actions dropdown (official row-action pattern) -->
     <cds-dropdown
       id="row-actions"
@@ -1101,7 +1280,7 @@ const summaryText = computed(() => {
 .heading {
   margin: 0;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 28px;
+  font-size: 18px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -1120,6 +1299,34 @@ const summaryText = computed(() => {
 }
 
 /* ---------- Toolbar ---------- */
+
+/* ---------- Multi-condition filter bar ---------- */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.filter-input {
+  width: 200px;
+}
+
+/* ---------- Username cell (truncate + hover tooltip) ---------- */
+.username-cell {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* ---------- Status icon ---------- */
+.status-icon {
+  margin-right: 4px;
+  flex-shrink: 0;
+}
 
 .toolbar {
   display: flex;

@@ -190,7 +190,7 @@ function close() {
           class="full-row"
           :status="attempted && !nameValid ? 'error' : 'neutral'"
         >
-          <label>{{ locale.t('marketplace.form.name') }}</label>
+          <label class="field-label">{{ locale.t('marketplace.form.name') }} <span class="required">*</span></label>
           <input
             :value="name"
             :placeholder="locale.t('marketplace.form.namePlaceholder')"
@@ -206,12 +206,12 @@ function close() {
           class="full-row"
           :status="attempted && !typeValid ? 'error' : 'neutral'"
         >
-          <label>{{ locale.t('marketplace.form.type') }}</label>
+          <label class="field-label">{{ locale.t('marketplace.form.type') }} <span class="required">*</span></label>
           <select
             :value="type"
             @change="(e: Event) => (type = (e.target as HTMLSelectElement).value as AgentType)"
           >
-            <option value="" disabled>--</option>
+            <option value="" disabled>请选择智能体类型</option>
             <option v-for="opt in TYPE_OPTIONS" :key="opt.value" :value="opt.value">
               {{ locale.t(`marketplace.type.${opt.key}`) }}
             </option>
@@ -223,7 +223,7 @@ function close() {
 
         <!-- 初始版本号 -->
         <cds-input :status="attempted && !versionValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('marketplace.form.initialVersion') }}</label>
+          <label class="field-label">{{ locale.t('marketplace.form.initialVersion') }}</label>
           <input
             :value="version"
             :placeholder="locale.t('marketplace.form.versionPlaceholder')"
@@ -236,7 +236,7 @@ function close() {
 
         <!-- 资源池 -->
         <cds-select :status="attempted && !poolValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('marketplace.form.resourcePool') }}</label>
+          <label class="field-label">{{ locale.t('marketplace.form.resourcePool') }}</label>
           <select
             :value="resourcePoolId"
             @change="(e: Event) => (resourcePoolId = (e.target as HTMLSelectElement).value)"
@@ -265,7 +265,7 @@ function close() {
           class="full-row"
           :status="attempted && !ovaIdValid ? 'error' : 'neutral'"
         >
-          <label>{{ locale.t('marketplace.form.ovaIdentifier') }}</label>
+          <label class="field-label">{{ locale.t('marketplace.form.ovaIdentifier') }} <span class="required">*</span></label>
           <input
             :value="ovaIdentifier"
             :placeholder="locale.t('marketplace.form.ovaIdentifierPlaceholder')"
@@ -343,7 +343,9 @@ function close() {
             :value="toolsText"
             rows="4"
             @input="(e: Event) => (toolsText = (e.target as HTMLTextAreaElement).value)"
+            placeholder="每行一条"
           ></textarea>
+          <span class="field-hint">每行仅填写一条内容</span>
           <cds-control-message v-if="attempted && !toolsValid" status="error">
             {{ locale.t('marketplace.form.error.name') }}
           </cds-control-message>
@@ -359,7 +361,9 @@ function close() {
             :value="scenariosText"
             rows="4"
             @input="(e: Event) => (scenariosText = (e.target as HTMLTextAreaElement).value)"
+            placeholder="每行一条"
           ></textarea>
+          <span class="field-hint">每行仅填写一条内容</span>
           <cds-control-message v-if="attempted && !scenariosValid" status="error">
             {{ locale.t('marketplace.form.error.name') }}
           </cds-control-message>
@@ -374,9 +378,10 @@ function close() {
           <textarea
             :value="skillsText"
             rows="4"
-            placeholder="一行一条"
             @input="(e: Event) => (skillsText = (e.target as HTMLTextAreaElement).value)"
+            placeholder="每行一条"
           ></textarea>
+          <span class="field-hint">每行仅填写一条内容</span>
           <cds-control-message v-if="attempted && !skillsValid" status="error">
             {{ locale.t('marketplace.form.error.name') }}
           </cds-control-message>
@@ -427,4 +432,12 @@ function close() {
 .mode-btn:hover {
   background: var(--cds-alias-object-interaction-background-hover, #f0f0f0);
 }
+
+.field-label { font-size: 14px; font-weight: 400; color: #333; }
+.required { color: #ef4444; }
+.field-hint { display: block; font-size: 12px; color: #86909c; margin-top: 4px; line-height: 1.4; }
+.modal-title { font-size: 16px !important; font-weight: 600 !important; color: #1d2129 !important; }
+.mode-hint { font-size: 12px; color: #86909c; }
+.tpl-form { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 14px; color: #333; }
+
 </style>

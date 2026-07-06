@@ -63,3 +63,12 @@ export const UNBOUND_KEYS_QUERY = gql`
     }
   }
 `
+
+export const INSTANT_CLONE_PARENTS_QUERY = gql`
+  query InstantCloneParents($resourcePoolId: ID!) {
+    instantCloneParents(resourcePoolId: $resourcePoolId) {
+      name
+      uuid
+    }
+  }
+`
