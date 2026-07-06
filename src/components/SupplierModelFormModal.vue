@@ -948,18 +948,18 @@ function formatCost(d: SpecDraft): string {
 .wizard-grid {
   display: grid;
   grid-template-columns: 220px 1fr;
-  min-height: 520px;
+  min-height: 540px;
 }
 .wizard-sidebar {
   background: var(--cds-alias-object-app-background, #f4f4f4);
-  border-right: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
+  box-shadow: inset -1px 0 0 var(--cds-alias-object-border-color, #e8e8e8);
   padding: 16px 0;
 }
 .wizard-sidebar-title {
   padding: 4px 16px 16px;
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 600;
-  color: var(--cds-alias-status-danger, #c92100);
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
   border-bottom: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
   margin-bottom: 8px;
 }
