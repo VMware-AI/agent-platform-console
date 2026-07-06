@@ -470,7 +470,8 @@ function formatCost(d: SpecDraft): string {
                 </cds-control-message>
               </cds-input>
 
-              <label for="supplier-gateway">{{ locale.t('supplier.model.form.gateway') }}</label>
+              <div class="field-row">
+              <label for="supplier-gateway" class="field-label">{{ locale.t('supplier.model.form.gateway') }}</label>
               <cds-select
                 id="supplier-gateway"
                 :status="attemptBasic && !gatewayValid ? 'error' : 'neutral'"
@@ -490,6 +491,7 @@ function formatCost(d: SpecDraft): string {
                   {{ locale.t('supplier.model.form.gatewayLockedHint') }}
                 </cds-control-message>
               </cds-select>
+            </div>
             </div>
 
             <!-- STEP 2: SPECS (spec array editor + advanced + test row) -->
@@ -877,6 +879,21 @@ function formatCost(d: SpecDraft): string {
 </template>
 
 <style scoped>
+.field-label {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  margin-right: 8px;
+}
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.field-row .field-label {
+  flex-shrink: 0;
+}
 .specs-section { display: grid; gap: 8px; }
 .specs-header { display: flex; align-items: center; gap: 8px; }
 .spec-block { border: 1px solid var(--cds-alias-object-border-color, #e8e8e8); border-radius: 4px; }
