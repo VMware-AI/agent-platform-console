@@ -53,6 +53,10 @@ vi.mock('@vue/apollo-composable', () => ({
       refetch: refetchSpy,
     }
   },
+  // #44 wired the row/batch actions to real mutations (setAgentStatus /
+  // recycleAgent). The view only destructures `mutate`; no test here exercises
+  // the actions, so a resolving stub is enough for setup to succeed.
+  useMutation: () => ({ mutate: () => Promise.resolve({ data: {} }) }),
 }))
 
 /* ---------- Mock the raw apollo client (export path) ---------- */

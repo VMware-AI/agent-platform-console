@@ -4,6 +4,7 @@ import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
+import { csvCell } from '@/utils/csv'
 import {
   SPEND_REPORT_QUERY,
   BUDGETS_QUERY,
@@ -122,7 +123,9 @@ function exportCsv() {
   const lines = [header.join(',')]
   for (const r of rows.value) {
     lines.push(
-      [r.key, `"${r.label.replace(/"/g, '""')}"`, r.spend, r.promptTokens, r.completionTokens, r.totalTokens, r.requests].join(','),
+      [r.key, r.label, r.spend, r.promptTokens, r.completionTokens, r.totalTokens, r.requests]
+        .map(csvCell)
+        .join(','),
     )
   }
   // UTF-8 BOM so Excel renders Chinese department/model labels correctly.

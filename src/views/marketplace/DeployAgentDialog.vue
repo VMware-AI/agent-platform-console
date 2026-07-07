@@ -53,6 +53,11 @@ const hostname = ref('')
 // number, so the runtime type is string | number ('' when blank). Normalize via
 // String(...) before any string op (see budgetValid / submit).
 const maxBudget = ref<string | number>('')
+// Initial login password for the agent VM (UI + OS). Optional — empty seeds nothing.
+// A typo would lock the user out (they'd never know the seeded password), so we
+// require a matching confirm + mirror the webadmin policy (12–72 bytes, no ':'/ctrl).
+const initialPassword = ref('')
+const confirmPassword = ref('')
 const attempted = ref(false)
 
 watch(
@@ -68,6 +73,8 @@ watch(
       targetNetwork.value = ''
       hostname.value = ''
       maxBudget.value = ''
+      initialPassword.value = ''
+      confirmPassword.value = ''
       attempted.value = false
     }
   },
@@ -143,6 +150,27 @@ const budgetValid = () => {
   const n = Number(raw)
   return Number.isFinite(n) && n >= 0
 }
+// '' = fine (no password seeded). Otherwise mirror the webadmin policy and require
+// the confirm to match. Returns the locale key of the first violation, or '' if ok.
+function pwErrorKey(): string {
+  const p = initialPassword.value
+  if (!p && !confirmPassword.value) return ''
+  // Mirror the backend seed policy (agent-platform-backend
+  // internal/graph/deploy_targets.go validateInitialPassword), which itself
+  // mirrors the VM webadmin: reject edge whitespace (the seeder trims, so a
+  // padded value silently seeds a different credential), then ≥12 code points,
+  // ≤72 bytes (bcrypt truncates past 72), no ':' (htpasswd/chpasswd delimiter),
+  // and no control chars incl. C1 (an interior newline smuggles a second
+  // "user:password" line into chpasswd).
+  if (p !== p.trim()) return 'marketplace.deploy.error.passwordChars'
+  if ([...p].length < 12 || new TextEncoder().encode(p).length > 72) {
+    return 'marketplace.deploy.error.passwordWeak'
+  }
+  if (p.includes(':') || /\p{Cc}/u.test(p)) return 'marketplace.deploy.error.passwordChars'
+  if (p !== confirmPassword.value) return 'marketplace.deploy.error.passwordMismatch'
+  return ''
+}
+const pwValid = () => pwErrorKey() === ''
 // A placement pool is required when vCenter offers any (a real OVA template has
 // no source pool). When the list is empty (vcsim / regular-VM sources), an empty
 // selection is allowed — the clone inherits the source template's pool.
@@ -150,7 +178,9 @@ const targetPoolValid = () =>
   vspherePools.value.length === 0 || !!targetResourcePool.value
 
 function formValid(): boolean {
-  return versionValid() && poolValid() && nameValid() && targetPoolValid() && budgetValid()
+  return (
+    versionValid() && poolValid() && nameValid() && targetPoolValid() && budgetValid() && pwValid()
+  )
 }
 
 function submit() {
@@ -170,6 +200,8 @@ function submit() {
     targetNetwork: targetNetwork.value || null,
     hostname: hostname.value.trim() || null,
     maxBudget: budget,
+    // Empty = no credential seeded; otherwise the VM's webadmin seeds UI + OS at boot.
+    initialPassword: initialPassword.value || null,
   })
 }
 
@@ -265,6 +297,23 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
             :placeholder="locale.t('marketplace.deploy.hostnamePlaceholder')"
           />
         </cds-input>
+
+        <!-- 初始登录密码（可选）：留空则首启不种密码；填写则 VM 内 webadmin 首启把它
+             同时写入网页登录(nginx htpasswd)与系统用户。带确认框防打错锁死。 -->
+        <cds-input :status="attempted && !pwValid() ? 'error' : 'neutral'">
+          <label>{{ locale.t('marketplace.deploy.initialPassword') }}</label>
+          <input v-model="initialPassword" type="password" autocomplete="new-password" />
+        </cds-input>
+        <cds-input :status="attempted && !pwValid() ? 'error' : 'neutral'">
+          <label>{{ locale.t('marketplace.deploy.confirmPassword') }}</label>
+          <input v-model="confirmPassword" type="password" autocomplete="new-password" />
+          <cds-control-message v-if="attempted && !pwValid()" status="error">
+            {{ locale.t(pwErrorKey()) }}
+          </cds-control-message>
+        </cds-input>
+        <cds-alert status="info" class="full-row deploy-info">
+          <cds-alert-content>{{ locale.t('marketplace.deploy.initialPasswordHint') }}</cds-alert-content>
+        </cds-alert>
 
         <!-- vSphere 放置资源池：真实 OVA 模板无源资源池，部署必须指定一个放置池。
              列表来自所选平台资源池对应 vCenter 的实时枚举；为空（vcsim/常规 VM）时

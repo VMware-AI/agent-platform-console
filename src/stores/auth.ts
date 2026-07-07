@@ -235,6 +235,7 @@ export const useAuthStore = defineStore('auth', () => {
       // No/expired cookie or network down — trust nothing stale.
       user.value = null
       role.value = null
+      mustChangePassword.value = false
       clearStoredUser()
     }
   }

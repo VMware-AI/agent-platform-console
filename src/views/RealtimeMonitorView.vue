@@ -4,7 +4,11 @@ import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
-import { GATEWAY_HEALTH_QUERY, type GatewayHealthResult } from '@/api/graphql/queries/gateway-health'
+import {
+  GATEWAY_HEALTH_QUERY,
+  type GatewayHealth,
+  type GatewayHealthResult,
+} from '@/api/graphql/queries/gateway-health'
 import {
   REQUEST_METRICS_QUERY,
   type RequestMetrics,
@@ -153,6 +157,15 @@ const { result: healthResult } = useQuery<GatewayHealthResult>(GATEWAY_HEALTH_QU
   fetchPolicy: 'no-cache',
 })
 const gatewayHealth = computed(() => healthResult.value?.gatewayHealth ?? [])
+
+// Text alternative for the color-coded status dot, so state is not conveyed by
+// color alone. Mirrors the dot's class logic (error → down, any unhealthy
+// endpoint → partial, otherwise up).
+function healthStatusLabel(g: GatewayHealth): string {
+  if (g.error) return locale.t('monitor.health.status.down')
+  if (g.unhealthyCount > 0) return locale.t('monitor.health.status.partial')
+  return locale.t('monitor.health.status.up')
+}
 
 const metrics = computed<RequestMetrics | null>(() => result.value?.requestMetrics ?? null)
 const summary = computed(() => metrics.value?.summary ?? null)
@@ -549,11 +562,17 @@ function toggleFocus(key: string) {
 
     <!-- Upstream health matrix (fan-out to litellm /health) -->
     <cds-card v-if="gatewayHealth.length > 0" class="health-card">
-      <div class="card-content">
+      <div class="card-content" role="region" :aria-label="locale.t('monitor.health.title')">
         <h2>{{ locale.t('monitor.health.title') }}</h2>
         <div class="health-grid">
           <div v-for="g in gatewayHealth" :key="g.gatewayId" class="health-item">
-            <span class="health-dot" :class="g.error ? 'down' : g.unhealthyCount > 0 ? 'partial' : 'up'"></span>
+            <span
+              class="health-dot"
+              :class="g.error ? 'down' : g.unhealthyCount > 0 ? 'partial' : 'up'"
+              role="img"
+              :aria-label="healthStatusLabel(g)"
+              :title="healthStatusLabel(g)"
+            ></span>
             <span class="health-name">{{ g.gatewayName }}</span>
             <span class="health-detail muted">
               <template v-if="g.error">{{ locale.t('monitor.health.unreachable') }}</template>

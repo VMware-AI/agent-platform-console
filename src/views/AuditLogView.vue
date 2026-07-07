@@ -4,6 +4,7 @@ import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
+import { csvCell } from '@/utils/csv'
 import {
   AUDIT_LOGS_QUERY,
   type AuditLogNode,
@@ -218,19 +219,20 @@ async function exportCsv() {
       return
     }
     const header = ['createdAt', 'actor', 'action', 'resourceType', 'resourceId', 'ip', 'result']
-    const cell = (v: string | null) => `"${(v ?? '').replace(/"/g, '""')}"`
     const lines = [header.join(',')]
     for (const l of rows) {
       lines.push(
         [
-          cell(l.createdAt),
-          cell(l.actorName ?? l.actorUserId),
-          cell(l.action),
-          cell(l.resourceType),
-          cell(l.resourceId),
-          cell(l.ip),
-          cell(l.result),
-        ].join(','),
+          l.createdAt,
+          l.actorName ?? l.actorUserId,
+          l.action,
+          l.resourceType,
+          l.resourceId,
+          l.ip,
+          l.result,
+        ]
+          .map(csvCell)
+          .join(','),
       )
     }
     // UTF-8 BOM so Excel renders Chinese actor/resource names correctly.

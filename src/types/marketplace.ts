@@ -179,6 +179,13 @@ export interface DeployAgentInput {
   maxBudget?: number | null
   /** Optional target portgroup path for the agent VM's NIC (VsphereNetwork.path). */
   targetNetwork?: string | null
+  /**
+   * Optional initial login password for the agent VM (UI + OS). deployAgent stamps
+   * it into guestinfo.agentmgr.initial_password; the VM's webadmin seeds it into the
+   * nginx htpasswd + OS user at first boot. Empty = no credential seeded. Policy:
+   * 12–72 bytes, no ':' or control chars. SENSITIVE — never logged/persisted client-side.
+   */
+  initialPassword?: string | null
 }
 
 export interface DeployAgentPayload {

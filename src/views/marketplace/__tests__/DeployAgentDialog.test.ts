@@ -171,7 +171,8 @@ function targetPoolSelect(): HTMLSelectElement {
 function inputs(): HTMLInputElement[] {
   return Array.from(wrapper!.element.querySelectorAll<HTMLInputElement>('input'))
 }
-// Inputs in DOM order: [0] name, [1] hostname, [2] maxBudget(number).
+// Text inputs in DOM order: [0] name, [1] hostname; then the two password fields
+// (initialPassword / confirmPassword, #52); budget is the sole type="number".
 function nameInput(): HTMLInputElement {
   return inputs()[0]
 }
@@ -179,7 +180,7 @@ function hostnameInput(): HTMLInputElement {
   return inputs()[1]
 }
 function budgetInput(): HTMLInputElement {
-  return inputs()[2]
+  return inputs().find((i) => i.type === 'number')!
 }
 function setValue(el: HTMLInputElement | HTMLSelectElement, v: string) {
   el.value = v
@@ -368,6 +369,7 @@ describe('DeployAgentDialog — submit emits deploy input', () => {
       targetNetwork: null, // empty selection → null (inherit source NIC)
       hostname: 'agent-vm-01', // trimmed
       maxBudget: null, // blank budget → null
+      initialPassword: null, // blank password → null (#52)
     })
   })
 
