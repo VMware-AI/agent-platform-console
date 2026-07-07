@@ -181,6 +181,35 @@ export const STRINGS: Dict = {
   'agents.batch.delete': { zh: '批量删除', en: 'Delete Selected' },
   'agents.batch.disabled': { zh: '请先选择智能体', en: 'Select agents first' },
   'agents.batch.done': { zh: '批量操作完成：成功 {ok} 个，失败 {fail} 个', en: 'Batch finished: {ok} succeeded, {fail} failed' },
+  'agents.upgrade.title': { zh: '升级智能体版本', en: 'Upgrade agent version' },
+  'agents.upgrade.single': {
+    zh: '将为「{name}」下发升级命令，VM 内 agent-manager 会在下次心跳时拉取安装。',
+    en: 'Enqueues an upgrade for "{name}"; the in-VM agent-manager installs it on its next heartbeat.',
+  },
+  'agents.upgrade.batch': {
+    zh: '将为选中的 {n} 个智能体下发同一升级命令（各自下次心跳时执行）。',
+    en: 'Enqueues the same upgrade for the {n} selected agents (each runs on its next heartbeat).',
+  },
+  'agents.upgrade.version': { zh: '目标版本', en: 'Target version' },
+  'agents.upgrade.versionPlaceholder': { zh: '如 1.37.0', en: 'e.g. 1.37.0' },
+  'agents.upgrade.versionHint': {
+    zh: '从内网镜像安装该版本包；版本号仅允许字母数字与 . _ -（不含路径/空格）。',
+    en: 'Installs this version from the internal mirror; only letters, digits and . _ - are allowed (no path/space).',
+  },
+  'agents.upgrade.versionError': {
+    zh: '请输入合法版本号（字母数字开头，仅含字母数字与 . _ -，≤128 位）',
+    en: 'Enter a valid version (alphanumeric start; only letters, digits and . _ -; ≤128 chars)',
+  },
+  'agents.upgrade.submit': { zh: '下发升级', en: 'Enqueue upgrade' },
+  'agents.upgrade.cancel': { zh: '取消', en: 'Cancel' },
+  'agents.upgrade.enqueuedOk': {
+    zh: '已为「{name}」下发升级命令',
+    en: 'Upgrade enqueued for "{name}"',
+  },
+  'agents.upgrade.batchEnqueuedOk': {
+    zh: '已下发升级命令：{n} 台',
+    en: 'Upgrade enqueued for {n} agent(s)',
+  },
   'agents.toolbar.selected': { zh: '已选 {count} 项', en: '{count} selected' },
   'agents.col.name.search': { zh: '搜索名称', en: 'Search name' },
   'agents.col.key.search': { zh: '搜索密钥名称', en: 'Search key' },
