@@ -90,7 +90,7 @@ const networks = computed(() => (netResult.value as any)?.vsphereNetworks ?? [])
 /* ---------- Diff computation ---------- */
 const hasChanges = computed(() =>
   dirtyCpu.value !== 0 || dirtyMemory.value !== 0 || dirtyDisk.value !== 0 ||
-  !!dirtyPortGroup.value || !!dirtyRunAs.value || dirtyVApp.value?.length ?? 0 > 0
+  !!dirtyPortGroup.value || !!dirtyRunAs.value || (dirtyVApp.value?.length ?? 0) > 0
 )
 
 const diffs = computed(() => {
