@@ -777,12 +777,21 @@ export const STRINGS: Dict = {
   'marketplace.deploy.hostname': { zh: '主机名（可选）', en: 'Hostname (optional)' },
   'marketplace.deploy.hostnamePlaceholder': { zh: '如 agent-vm-01', en: 'e.g. agent-vm-01' },
   'marketplace.deploy.initialPassword': {
-    zh: '初始登录密码（可选）',
-    en: 'Initial login password (optional)',
+    zh: '初始登录密码',
+    en: 'Initial login password',
   },
   'marketplace.deploy.initialPasswordHint': {
-    zh: '用于智能体管理页与系统登录；留空则首启不设置密码，需另行配置。首登后可自助修改。',
-    en: 'For the agent management page + OS login. Empty = no credential is seeded (configure later). Changeable after first login.',
+    zh: '必填：用于智能体管理页与系统登录。可点「生成」自动生成，部署后会显示一次，请及时保存。首登后可自助修改。',
+    en: 'Required: for the agent management page + OS login. Click Generate for a random one; it is shown once after deploy — save it. Changeable after first login.',
+  },
+  'marketplace.deploy.generate': { zh: '生成', en: 'Generate' },
+  'marketplace.deploy.generateHint': {
+    zh: '已生成随机密码，部署后会显示一次',
+    en: 'Random password generated — shown once after deploy',
+  },
+  'marketplace.deploy.error.passwordRequired': {
+    zh: '请设置初始登录密码（或点「生成」）',
+    en: 'Set an initial login password (or click Generate)',
   },
   'marketplace.deploy.confirmPassword': { zh: '确认密码', en: 'Confirm password' },
   'marketplace.deploy.error.passwordWeak': {
@@ -1059,8 +1068,13 @@ export const STRINGS: Dict = {
     zh: '该密钥仅显示这一次，对话框关闭后将无法再次查看，请妥善保存。',
     en: 'This secret is shown only once — you will not be able to view it again after closing this dialog.',
   },
-  'virtualKey.secret.copy': { zh: '复制密钥', en: 'Copy key' },
-  'virtualKey.secret.copied': { zh: '密钥已复制到剪贴板', en: 'Key copied to clipboard' },
+  'virtualKey.secret.copy': { zh: '复制', en: 'Copy' },
+  'virtualKey.secret.keyLabel': { zh: '网关密钥', en: 'Gateway key' },
+  'virtualKey.secret.passwordLabel': {
+    zh: '初始登录密码（管理页 + 系统）',
+    en: 'Initial login password (webadmin + OS)',
+  },
+  'virtualKey.secret.copied': { zh: '已复制到剪贴板', en: 'Copied to clipboard' },
   'virtualKey.secret.done': { zh: '我已保存', en: 'Done' },
 
   // Rate-limit policies

@@ -6,9 +6,13 @@ import { graphqlErrorMessage } from '@/api/graphql/errors'
 
 // Shown ONCE after a key is issued or regenerated — the backend never returns the
 // secret again. Lets the operator copy it before dismissing.
-const props = defineProps<{
+defineProps<{
   open: boolean
   secret: string
+  /** Optional second one-time credential (deploy: the VM's initial login password,
+   *  which may be auto-generated so the operator never saw it). Shown as a second
+   *  block; callers that omit it (key regenerate) see only the secret. */
+  password?: string
 }>()
 
 const emit = defineEmits<{ (event: 'close'): void }>()
@@ -29,16 +33,16 @@ function copyWithFallback(value: string) {
   if (!ok) throw new Error('Copy command rejected')
 }
 
-async function copy() {
+async function copyValue(value: string) {
   try {
     if (navigator.clipboard?.writeText) {
       try {
-        await navigator.clipboard.writeText(props.secret)
+        await navigator.clipboard.writeText(value)
       } catch {
-        copyWithFallback(props.secret)
+        copyWithFallback(value)
       }
     } else {
-      copyWithFallback(props.secret)
+      copyWithFallback(value)
     }
     copied.value = true
     toast.success(locale.t('virtualKey.secret.copied'))
@@ -59,12 +63,25 @@ async function copy() {
         <cds-alert status="warning" :closable="false">
           {{ locale.t('virtualKey.secret.warning') }}
         </cds-alert>
-        <div class="secret-row">
-          <code class="secret-value">{{ secret }}</code>
-          <cds-button action="outline" size="sm" @click="copy">
-            <cds-icon shape="copy" size="sm"></cds-icon>
-            {{ locale.t('virtualKey.secret.copy') }}
-          </cds-button>
+        <div class="secret-field">
+          <span class="secret-label">{{ locale.t('virtualKey.secret.keyLabel') }}</span>
+          <div class="secret-row">
+            <code class="secret-value">{{ secret }}</code>
+            <cds-button action="outline" size="sm" @click="copyValue(secret)">
+              <cds-icon shape="copy" size="sm"></cds-icon>
+              {{ locale.t('virtualKey.secret.copy') }}
+            </cds-button>
+          </div>
+        </div>
+        <div v-if="password" class="secret-field">
+          <span class="secret-label">{{ locale.t('virtualKey.secret.passwordLabel') }}</span>
+          <div class="secret-row">
+            <code class="secret-value">{{ password }}</code>
+            <cds-button action="outline" size="sm" @click="copyValue(password)">
+              <cds-icon shape="copy" size="sm"></cds-icon>
+              {{ locale.t('virtualKey.secret.copy') }}
+            </cds-button>
+          </div>
         </div>
       </div>
     </cds-modal-content>
@@ -84,6 +101,14 @@ async function copy() {
 .secret-body {
   display: grid;
   gap: 16px;
+}
+.secret-field {
+  display: grid;
+  gap: 4px;
+}
+.secret-label {
+  font-size: 12px;
+  color: var(--cds-alias-typography-color-02, #6f6f6f);
 }
 .secret-row {
   display: flex;

@@ -59,6 +59,9 @@ const maxBudget = ref<string | number>('')
 const initialPassword = ref('')
 const confirmPassword = ref('')
 const attempted = ref(false)
+// True after clicking 生成 — shows a one-line "saved after deploy" note. The generated
+// value stays hidden (type=password); it is revealed once after a successful deploy.
+const showGenerated = ref(false)
 
 watch(
   () => props.open,
@@ -76,6 +79,7 @@ watch(
       initialPassword.value = ''
       confirmPassword.value = ''
       attempted.value = false
+      showGenerated.value = false
     }
   },
   { immediate: true },
@@ -154,7 +158,9 @@ const budgetValid = () => {
 // the confirm to match. Returns the locale key of the first violation, or '' if ok.
 function pwErrorKey(): string {
   const p = initialPassword.value
-  if (!p && !confirmPassword.value) return ''
+  // Method A (LLD-16 PR-4): the initial password is REQUIRED — an empty one seeds no
+  // credential and permanently locks the VM's webadmin. Operators can click 生成.
+  if (!p) return 'marketplace.deploy.error.passwordRequired'
   // Mirror the backend seed policy (agent-platform-backend
   // internal/graph/deploy_targets.go validateInitialPassword), which itself
   // mirrors the VM webadmin: reject edge whitespace (the seeder trims, so a
@@ -171,6 +177,19 @@ function pwErrorKey(): string {
   return ''
 }
 const pwValid = () => pwErrorKey() === ''
+
+// Generate a policy-compliant random password (≥12 code points, ≤72 bytes, no ':' /
+// whitespace / control chars; excludes look-alike 0/O/1/l/I). Fills both fields so the
+// operator can deploy at once; it is revealed once after a successful deploy.
+function generatePassword() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#%^&*-_=+.'
+  const buf = new Uint32Array(20)
+  crypto.getRandomValues(buf)
+  const pw = Array.from(buf, (n) => alphabet[n % alphabet.length]).join('')
+  initialPassword.value = pw
+  confirmPassword.value = pw
+  showGenerated.value = true
+}
 // A placement pool is required when vCenter offers any (a real OVA template has
 // no source pool). When the list is empty (vcsim / regular-VM sources), an empty
 // selection is allowed — the clone inherits the source template's pool.
@@ -311,6 +330,15 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
             {{ locale.t(pwErrorKey()) }}
           </cds-control-message>
         </cds-input>
+        <div class="full-row pw-actions">
+          <cds-button action="outline" size="sm" @click="generatePassword">
+            <cds-icon shape="renew" size="sm"></cds-icon>
+            {{ locale.t('marketplace.deploy.generate') }}
+          </cds-button>
+          <span v-if="showGenerated" class="pw-generated-note">
+            {{ locale.t('marketplace.deploy.generateHint') }}
+          </span>
+        </div>
         <cds-alert status="info" class="full-row deploy-info">
           <cds-alert-content>{{ locale.t('marketplace.deploy.initialPasswordHint') }}</cds-alert-content>
         </cds-alert>
@@ -421,6 +449,15 @@ function fmtVersionRow(v: OvaTemplateVersion): string {
 }
 .deploy-info {
   margin: 0 0 4px 0;
+}
+.pw-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pw-generated-note {
+  font-size: 12px;
+  color: var(--cds-alias-typography-color-02, #6f6f6f);
 }
 .modal-title {
   margin: 0;

@@ -203,6 +203,9 @@ const deployingTemplate = ref<OvaTemplateFamily | null>(null)
 /* ---- One-time virtual-key secret reveal (after a successful deploy) ---- */
 const secretDialogOpen = ref(false)
 const issuedSecret = ref('')
+// Method A (LLD-16 PR-4): the initial login password (possibly auto-generated, so the
+// operator never saw it) is revealed once alongside the gateway key.
+const issuedPassword = ref('')
 const deployedAgentId = ref<string | null>(null)
 
 /* ---- Template detail modal ---- */
@@ -244,6 +247,7 @@ async function onSubmitDeploy(payload: DeployAgentInput) {
       closeDeployDialog()
       // Surface the issued gateway key ONCE — the backend never returns it again.
       issuedSecret.value = virtualKeySecret
+      issuedPassword.value = payload.initialPassword ?? ''
       deployedAgentId.value = agent.id
       secretDialogOpen.value = true
     }
@@ -261,6 +265,7 @@ async function onSubmitDeploy(payload: DeployAgentInput) {
 async function onSecretDialogClose() {
   secretDialogOpen.value = false
   issuedSecret.value = ''
+  issuedPassword.value = ''
   const aid = deployedAgentId.value
   deployedAgentId.value = null
   if (aid) {
@@ -564,6 +569,7 @@ const typeFilterLabel = computed(() => {
     <VirtualKeySecretDialog
       :open="secretDialogOpen"
       :secret="issuedSecret"
+      :password="issuedPassword"
       @close="onSecretDialogClose"
     />
 
