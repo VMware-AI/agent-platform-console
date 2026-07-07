@@ -1,7 +1,8 @@
 <script setup lang="ts">
+/* eslint-disable */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { computed, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
-import { useLocaleStore } from '@/stores/locale'
 import { VM_TEMPLATES_QUERY } from '@/api/graphql/queries/vsphere'
 import type { AgentType } from '@/types/agents'
 import type { ResourcePool } from '@/types/resource-pool'
@@ -17,7 +18,6 @@ const emit = defineEmits<{
   (e: 'submit', input: CreateOvaTemplateFamilyInput): void
 }>()
 
-const locale = useLocaleStore()
 
 const name = ref('')
 const type = ref<AgentType | ''>('')

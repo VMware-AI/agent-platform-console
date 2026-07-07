@@ -280,7 +280,7 @@ async function onSubmitDeploy(payload: DeployAgentInput & { _createParents?: Arr
         // Deploy instant clone from this parent
         toast.info(`父虚拟机 ${parentAgent.endpoint} 就绪，正在即时克隆...`)
         const childPayload = { ...payload, instantCloneParent: parentAgent.endpoint }
-        delete (childPayload as any)._createParents
+        delete (childPayload as Record<string, unknown>)._createParents
         const childR = await deployMutate({ input: childPayload })
         const childResult = childR?.data?.deployAgent
         if (childResult?.agent) {

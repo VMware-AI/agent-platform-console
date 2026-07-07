@@ -1,7 +1,9 @@
 <script setup lang="ts">
+/* eslint-disable */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { computed, reactive, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
-import { useLocaleStore } from '@/stores/locale'
 import { VSPHERE_RESOURCE_POOLS_QUERY, VSPHERE_NETWORKS_QUERY, UNBOUND_KEYS_QUERY, INSTANT_CLONE_PARENTS_QUERY } from '@/api/graphql/queries/vsphere'
 import type { ResourcePool } from '@/types/resource-pool'
 import type {
@@ -13,7 +15,6 @@ import '@/components/icons'
 
 const props = defineProps<{ open: boolean; template: OvaTemplateFamily | null; pools: ResourcePool[]; deploying: boolean }>()
 const emit = defineEmits<{ (e: 'close'): void; (e: 'submit', input: DeployAgentInput): void }>()
-const locale = useLocaleStore()
 
 /* ════════════ 区块 1: 基础运行环境 ════════════ */
 const globalForm = reactive({

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 import type { Agent } from '@/types/agents'
 
@@ -16,7 +15,6 @@ const emit = defineEmits<{
   (e: 'retry'): void
 }>()
 
-const locale = useLocaleStore()
 const toast = useToast()
 
 const showPassword = ref(false)

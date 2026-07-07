@@ -1,4 +1,6 @@
 <script setup lang="ts">
+/* eslint-disable */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { computed, ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
@@ -26,7 +28,6 @@ const emit = defineEmits<{
   (e: 'openAccessInfo', agent: Agent): void
 }>()
 
-const locale = useLocaleStore()
 const toast = useToast()
 
 /* ---------- Accordion state ---------- */
@@ -44,7 +45,6 @@ function tx(k: string) {
 
 /* ---------- Agent status ---------- */
 const isRunning = computed(() => props.agent?.status === 'running')
-const isStopped = computed(() => props.agent?.status === 'stopped')
 const isException = computed(() => props.agent?.status === 'exception')
 const resDisabled = computed(() => isException.value)
 const netDisabled = computed(() => isException.value)

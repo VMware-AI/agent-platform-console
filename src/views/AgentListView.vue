@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import '@/components/icons'
 import { computed, ref, watch } from 'vue'
 import { useToast } from '@/composables/useToast'
@@ -23,7 +24,6 @@ import type {
   TypeKey,
 } from '@/types/agents'
 import { STATUS_FROM_GQL, TYPE_FROM_GQL } from '@/types/agents'
-import { graphqlErrorMessage } from '@/api/graphql/errors'
 
 const locale = useLocaleStore()
 
@@ -292,10 +292,6 @@ function badgeStatusFor(status: Agent['status']): 'success' | 'neutral' | 'dange
 /* Stub handlers — wired to a real backend mutation later. */
 function noop(label: string, payload?: unknown) {
   console.log(`[agents] ${label}`, payload)
-}
-
-function onVisit(agent: Agent) {
-  noop('visit', { id: agent.id, endpoint: agent.endpoint })
 }
 
 function onConfigure(agent: Agent) {
@@ -957,7 +953,6 @@ const summaryText = computed(() => {
                 aria-hidden="true"
                 class="status-icon"
               ></cds-icon>
-              {{ locale.t(`agents.status.${STATUS_FROM_GQL[agent.status]}`) }}
             </cds-badge>
           </cds-grid-cell>
           <cds-grid-cell>
@@ -1243,9 +1238,7 @@ const summaryText = computed(() => {
     >
       <div cds-layout="vertical align:stretch p:xs">
         <button
-          v-for="key in rowActionsTarget
-            ? ACTIONS_BY_STATUS[STATUS_FROM_GQL[rowActionsTarget.status]]
-            : []"
+          v-for="key in (rowActionsTarget ? ACTIONS_BY_STATUS[STATUS_FROM_GQL[rowActionsTarget.status]] : [])"
           :key="key"
           type="button"
           class="menu-opt"

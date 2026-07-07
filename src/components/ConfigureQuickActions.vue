@@ -13,7 +13,6 @@ defineEmits<{
 }>()
 
 const isRunning = (s: string) => s === 'running'
-const isStopped = (s: string) => s === 'stopped'
 </script>
 
 <template>
