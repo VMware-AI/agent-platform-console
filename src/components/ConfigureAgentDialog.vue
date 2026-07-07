@@ -90,7 +90,7 @@ const networks = computed(() => (netResult.value as any)?.vsphereNetworks ?? [])
 /* ---------- Diff computation ---------- */
 const hasChanges = computed(() =>
   dirtyCpu.value !== 0 || dirtyMemory.value !== 0 || dirtyDisk.value !== 0 ||
-  !!dirtyPortGroup.value || !!dirtyRunAs.value || dirtyVApp.value.length > 0
+  !!dirtyPortGroup.value || !!dirtyRunAs.value || dirtyVApp.value?.length ?? 0 > 0
 )
 
 const diffs = computed(() => {
@@ -100,7 +100,7 @@ const diffs = computed(() => {
   if (dirtyDisk.value) d.push({ label: '磁盘', before: `${vmDisk.value} GB`, after: `${dirtyDisk.value} GB` })
   if (dirtyPortGroup.value) d.push({ label: '端口组', before: vmNetworkLabel.value || '—', after: dirtyPortGroup.value })
   if (dirtyRunAs.value) d.push({ label: '运行账户', before: props.agent?.credentials?.username || '—', after: dirtyRunAs.value })
-  dirtyVApp.value.forEach(p => d.push({ label: `vApp:${p.key}`, before: '—', after: p.value }))
+  dirtyVApp.value?.forEach(p => d.push({ label: `vApp:${p.key}`, before: '—', after: p.value }))
   return d
 })
 
@@ -124,7 +124,7 @@ async function onConfirmSave() {
       if (dirtyDisk.value) vars.resource.disk = dirtyDisk.value
     }
     if (dirtyPortGroup.value) vars.network = { portGroup: dirtyPortGroup.value }
-    if (dirtyVApp.value.length) vars.vAppProperties = dirtyVApp.value
+    if (dirtyVApp.value?.length ?? 0) vars.vAppProperties = dirtyVApp.value
     await apolloClient.mutate({ mutation: RECONFIG_AGENT_VM_MUTATION, variables: vars })
     toast.success('配置已保存，vCenter 同步中...')
     diffOpen.value = false; emit('close')

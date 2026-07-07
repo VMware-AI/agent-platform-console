@@ -271,7 +271,7 @@ type RowActionKey = 'rotateKey' | 'restart' | 'stop' | 'update' | 'delete' | 'co
 const ACTIONS_BY_STATUS: Record<StatusKey, RowActionKey[]> = {
   running: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
   stopped: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
-  error: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
+  exception: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
 }
 
 const ICON_FOR_ACTION: Record<RowActionKey, string> = {

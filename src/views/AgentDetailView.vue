@@ -110,7 +110,7 @@ function fmtTime(iso: string): string {
           <dt>{{ locale.t('agentDetail.status') }}</dt>
           <dd>
             <cds-badge
-              :status="agent.status === 'RUNNING' ? 'success' : agent.status === 'STOPPED' ? 'neutral' : 'danger'"
+              :status="agent.status === 'running' ? 'success' : agent.status === 'stopped' ? 'neutral' : 'danger'"
             >
               {{ statusLabel }}
             </cds-badge>
