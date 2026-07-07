@@ -7,13 +7,8 @@ import { useMutation, useQuery } from '@vue/apollo-composable'
 import { useRouter } from 'vue-router'
 import { useLocaleStore } from '@/stores/locale'
 import AppDropdown from '@/components/AppDropdown.vue'
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
-import {
-  AGENTS_QUERY,
-  RECYCLE_AGENT_MUTATION,
-  SET_AGENT_STATUS_MUTATION,
-} from '@/api/graphql/queries/agents'
+import { AGENTS_QUERY, RECYCLE_AGENT_MUTATION, SET_AGENT_STATUS_MUTATION } from '@/api/graphql/queries/agents'
 import type {
   Agent,
   AgentSortField,

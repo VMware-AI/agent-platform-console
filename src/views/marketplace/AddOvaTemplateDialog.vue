@@ -162,6 +162,7 @@ const versionValid = computed(() => version.value.trim().length > 0)
 const poolValid = computed(() => !!resourcePoolId.value)
 // Library only required in custom mode (and only when vCenter is reachable).
 const libraryValid = computed(() => !customMode.value || !!libsError.value || !!contentLibraryName.value)
+
 // Manual input must stay within the vCenter-safe identifier charset; custom mode
 // selects a real library item name from the backend list, so non-empty suffices.
 const ovaIdentifierPattern = /^[a-zA-Z0-9._-]+$/
@@ -170,6 +171,7 @@ const ovaIdValid = computed(() => {
   if (v.length === 0) return false
   return customMode.value || ovaIdentifierPattern.test(v)
 })
+
 const descValid = computed(() => description.value.trim().length > 0)
 const toolsValid = computed(
   () => toolsText.value.split('\n').map((s) => s.trim()).filter(Boolean).length > 0,
