@@ -5,6 +5,7 @@ import { apolloClient } from '@/api/graphql/client'
 import AppDropdown from '@/components/AppDropdown.vue'
 import SupplierModelFormModal from '@/components/SupplierModelFormModal.vue'
 import SupplierModelSpecsDrawer from '@/components/SupplierModelSpecsDrawer.vue'
+import SupplierModelViewModal from '@/components/SupplierModelViewModal.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useAuthStore } from '@/stores/auth'
@@ -16,8 +17,6 @@ import {
   UPDATE_PROVIDER_MODEL,
   DELETE_PROVIDER_MODEL,
   TEST_PROVIDER_CONNECTION,
-  BLOCK_PROVIDER_MODEL_SPEC,
-  REFRESH_PROVIDER_MODEL_STATUS,
   type ProviderModelInfoResult,
   type ProviderModelNode,
   type ProviderModelStatus,
@@ -31,10 +30,6 @@ import {
   type DeleteProviderModelVars,
   type TestProviderConnectionResult,
   type TestProviderConnectionVars,
-  type BlockProviderModelSpecResult,
-  type BlockProviderModelSpecVars,
-  type RefreshProviderModelStatusResult,
-  type RefreshProviderModelStatusVars,
   type ProviderModelSortField,
   type SortDirection,
 } from '@/api/graphql/queries/supplier-models'
@@ -72,6 +67,7 @@ const formOpen = ref(false)
 const editingModel = ref<ProviderModelNode | null>(null)
 const saving = ref(false)
 const specsDrawerModel = ref<ProviderModelNode | null>(null)
+const specsViewModel = ref<ProviderModelNode | null>(null)
 const pendingDeleteIds = ref<string[]>([])
 
 const { result, loading, refetch } = useQuery<ProviderModelInfoResult>(
@@ -132,21 +128,38 @@ const summaryText = computed(() => {
 
 const deleteDialogTitle = computed(() =>
   pendingDeleteIds.value.length > 1
-    ? locale.t('supplier.confirm.batchDeleteTitle')
-    : locale.t('supplier.confirm.deleteTitle'),
+    ? locale.t('supplier.model.confirm.batchDeleteTitle')
+    : locale.t('supplier.model.confirm.deleteTitle'),
 )
 const deleteDialogBody = computed(() => {
   if (pendingDeleteIds.value.length > 1) {
     return locale
-      .t('supplier.confirm.batchDeleteBody')
+      .t('supplier.model.confirm.batchDeleteBody')
       .replace('{count}', String(pendingDeleteIds.value.length))
+      .replace('{token}', BATCH_DELETE_TOKEN)
   }
   const target = models.value.find(
     (m) => m.id === pendingDeleteIds.value[0],
   )
   return locale
-    .t('supplier.confirm.deleteBody')
+    .t('supplier.model.confirm.deleteBody')
     .replace('{name}', target?.name ?? '')
+})
+
+// Single-row delete: user must type the model's exact name to enable the
+// confirm button. Batch delete: user must type the literal confirmation
+// token (BATCH_DELETE_TOKEN). This is a stronger secondary guard than a
+// bare OK/Cancel dialog — it forces the user to slow down for
+// irreversible actions, matching the project's type-to-confirm pattern
+// (Users tab delete flow does the same).
+const BATCH_DELETE_TOKEN = '确认删除'
+const deleteExpectedInput = computed(() => {
+  if (pendingDeleteIds.value.length <= 1) {
+    return (
+      models.value.find((m) => m.id === pendingDeleteIds.value[0])?.name ?? ''
+    )
+  }
+  return BATCH_DELETE_TOKEN
 })
 
 function toggleSelect(id: string, checked: boolean) {
@@ -257,14 +270,14 @@ async function submitModel(
       })
     }
     toast.success(
-      locale.t(isEditing ? 'supplier.toast.updated' : 'supplier.toast.created'),
+      locale.t(isEditing ? 'supplier.model.toast.updated' : 'supplier.model.toast.created'),
     )
     if (!isEditing) currentPage.value = 1
     formOpen.value = false
     editingModel.value = null
     await refetch()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, locale.t('supplier.toast.saveFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('supplier.model.toast.saveFailed')))
   } finally {
     saving.value = false
   }
@@ -279,6 +292,39 @@ function closeSpecsDrawer() {
   specsDrawerModel.value = null
 }
 
+function openSpecsView(m: ProviderModelNode) {
+  specsViewModel.value = m
+}
+
+function closeSpecsView() {
+  specsViewModel.value = null
+}
+
+// `formatDateTime` matches VirtualKeyView.formatDateTime so the
+// timestamp columns read consistently across the admin surface. ISO
+// strings are converted to "YYYY-MM-DD HH:mm" in the user's local
+// timezone; null/invalid fall through to an em-dash so the cell never
+// renders the raw ISO string.
+function formatDateTime(value: string | null): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+// `organization` lives on each spec (litellmParams.organization) and
+// is broadcast from a single row-level input on submit — so most rows
+// share one value across all specs. We surface the first non-empty
+// value; heterogeneous rows (rare in practice) show the first spec's
+// value. Empty → empty string so the cell renders "—".
+function primaryOrganization(m: ProviderModelNode): string {
+  for (const s of m.modelSpecs) {
+    if (s.litellmParams.organization) return s.litellmParams.organization
+  }
+  return ''
+}
+
 async function refreshOne(m: ProviderModelNode) {
   try {
     const r = await apolloClient.mutate<
@@ -288,55 +334,43 @@ async function refreshOne(m: ProviderModelNode) {
       mutation: TEST_PROVIDER_CONNECTION,
       variables: { name: m.name },
     })
+    // Defensive: an Apollo errorPolicy of 'none' (the default) throws on
+    // graphQLErrors, so reaching this line usually means r.data.testProviderConnection
+    // is a non-null status. Guard the implicit chain with explicit checks
+    // so a malformed response (data === null, data.testProviderConnection === null
+    // because the backend resolver returned null on failure, etc.) surfaces
+    // as an error toast instead of silently doing nothing.
     if (r.data?.testProviderConnection) {
-      toast.success(locale.t('supplier.toast.refreshed'))
+      toast.success(locale.t('supplier.model.toast.healthChecked'))
       await refetch()
+      return
     }
+    if (r.errors && r.errors.length > 0) {
+      toast.error(
+        graphqlErrorMessage(
+          { graphQLErrors: r.errors },
+          locale.t('supplier.model.toast.refreshFailed'),
+        ),
+      )
+      return
+    }
+    // No error, no usable data — treat as failure so the user is told
+    // something happened instead of seeing no feedback at all.
+    toast.error(locale.t('supplier.model.toast.refreshFailed'))
   } catch (error) {
     toast.error(
-      graphqlErrorMessage(error, locale.t('supplier.toast.refreshFailed')),
+      graphqlErrorMessage(error, locale.t('supplier.model.toast.refreshFailed')),
     )
   }
-}
-
-async function batchBlockSpecIds(blocked: boolean) {
-  const rows = models.value.filter((m) => selectedIds.value.has(m.id))
-  const specPairs = rows.flatMap((m) =>
-    m.modelSpecs.map((s) => ({ specId: s.modelInfo.id, name: m.name })),
-  )
-  if (specPairs.length === 0) return
-  const outcomes = await Promise.allSettled(
-    specPairs.map((p) =>
-      apolloClient.mutate<BlockProviderModelSpecResult, BlockProviderModelSpecVars>({
-        mutation: BLOCK_PROVIDER_MODEL_SPEC,
-        variables: { input: { specId: p.specId, blocked } },
-      }),
-    ),
-  )
-  const ok = outcomes.filter((o) => o.status === 'fulfilled').length
-  const failure = outcomes.find(
-    (o): o is PromiseRejectedResult => o.status === 'rejected',
-  )
-  if (ok > 0) {
-    const key = blocked
-      ? 'supplier.specs.toast.blocked'
-      : 'supplier.specs.toast.unblocked'
-    toast.success(locale.t(key).replace('{count}', String(ok)))
-  }
-  if (failure) {
-    toast.error(graphqlErrorMessage(failure.reason, locale.t('supplier.toast.saveFailed')))
-  }
-  selectedIds.value = new Set()
-  await refetch()
 }
 
 async function refreshAll() {
   if (loading.value) return
   try {
     await refetch()
-    toast.success(locale.t('supplier.toast.refreshed'))
+    toast.success(locale.t('supplier.model.toast.refreshed'))
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, locale.t('supplier.toast.refreshFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('supplier.model.toast.refreshFailed')))
   }
 }
 
@@ -392,13 +426,13 @@ async function confirmDelete() {
   if (deletedIds.length > 0) {
     toast.success(
       locale
-        .t('supplier.toast.deleted')
+        .t('supplier.model.toast.deleted')
         .replace('{count}', String(deletedIds.length)),
     )
   }
   if (failures.length > 0) {
     toast.error(
-      graphqlErrorMessage(failures[0].reason, locale.t('supplier.toast.deleteFailed')),
+      graphqlErrorMessage(failures[0].reason, locale.t('supplier.model.toast.deleteFailed')),
     )
   }
   selectedIds.value = new Set(
@@ -406,24 +440,6 @@ async function confirmDelete() {
   )
   await refetch()
   if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
-}
-
-async function refreshOneStatus(m: ProviderModelNode) {
-  try {
-    await apolloClient.mutate<
-      RefreshProviderModelStatusResult,
-      RefreshProviderModelStatusVars
-    >({
-      mutation: REFRESH_PROVIDER_MODEL_STATUS,
-      variables: { id: m.id },
-    })
-    await refetch()
-    toast.success(locale.t('supplier.specs.toast.refreshed'))
-  } catch (error) {
-    toast.error(
-      graphqlErrorMessage(error, locale.t('supplier.toast.refreshFailed')),
-    )
-  }
 }
 </script>
 
@@ -463,14 +479,6 @@ async function refreshOneStatus(m: ProviderModelNode) {
             </cds-button>
           </template>
           <template #default="{ close }">
-            <button class="menu-option" type="button" @click="(batchBlockSpecIds(true), close())">
-              <cds-icon shape="ban" size="sm"></cds-icon>
-              {{ locale.t('supplier.specs.blockAll') }}
-            </button>
-            <button class="menu-option" type="button" @click="(batchBlockSpecIds(false), close())">
-              <cds-icon shape="unlock" size="sm"></cds-icon>
-              {{ locale.t('supplier.specs.unblockAll') }}
-            </button>
             <button class="menu-option danger" type="button" @click="(requestBatchDelete(), close())">
               <cds-icon shape="trash" size="sm"></cds-icon>
               {{ locale.t('supplier.batch.delete') }}
@@ -507,7 +515,7 @@ async function refreshOneStatus(m: ProviderModelNode) {
           />
         </cds-grid-column>
 
-        <cds-grid-column width="22%">
+        <cds-grid-column width="16%">
           <div class="column-head">
             <span>{{ locale.t('supplier.col.name') }}</span>
             <span class="column-head-actions">
@@ -529,9 +537,11 @@ async function refreshOneStatus(m: ProviderModelNode) {
           </div>
         </cds-grid-column>
 
-        <cds-grid-column width="14%">{{ locale.t('supplier.col.gateway') }}</cds-grid-column>
+        <cds-grid-column width="8%">{{ locale.t('supplier.col.gateway') }}</cds-grid-column>
 
-        <cds-grid-column width="22%">
+        <cds-grid-column width="8%">{{ locale.t('supplier.col.status') }}</cds-grid-column>
+
+        <cds-grid-column width="13%">
           <div class="column-head">
             <span>{{ locale.t('supplier.col.specs') }}</span>
             <span class="column-head-actions">
@@ -547,7 +557,15 @@ async function refreshOneStatus(m: ProviderModelNode) {
           </div>
         </cds-grid-column>
 
-        <cds-grid-column width="22%">{{ locale.t('supplier.col.actions') }}</cds-grid-column>
+        <cds-grid-column width="8%">{{ locale.t('supplier.col.organization') }}</cds-grid-column>
+
+        <cds-grid-column width="10%">{{ locale.t('supplier.col.lastCheckedAt') }}</cds-grid-column>
+
+        <cds-grid-column width="9%">{{ locale.t('supplier.col.createdAt') }}</cds-grid-column>
+
+        <cds-grid-column width="9%">{{ locale.t('supplier.col.updatedAt') }}</cds-grid-column>
+
+        <cds-grid-column width="19%">{{ locale.t('supplier.col.actions') }}</cds-grid-column>
 
         <cds-grid-row v-for="m in visibleModels" :key="m.id">
           <cds-grid-cell>
@@ -562,20 +580,10 @@ async function refreshOneStatus(m: ProviderModelNode) {
           <cds-grid-cell>
             <strong class="model-name" :title="m.name">{{ m.name }}</strong>
           </cds-grid-cell>
-          <cds-grid-cell>
-            <cds-badge status="neutral" class="provider-badge">
-              {{ m.modelGateway.name }}
-            </cds-badge>
+          <cds-grid-cell class="muted-cell">
+            {{ m.modelGateway.name }}
           </cds-grid-cell>
           <cds-grid-cell>
-            <button
-              type="button"
-              class="specs-link"
-              :title="`${m.modelSpecs.length} 个 deployment`"
-              @click="openSpecsDrawer(m)"
-            >
-              {{ m.modelSpecs.length }} 个 deployment
-            </button>
             <cds-badge :status="healthBadgeStatus(m.status)" class="status-badge">
               <cds-icon
                 :shape="
@@ -591,16 +599,50 @@ async function refreshOneStatus(m: ProviderModelNode) {
             </cds-badge>
           </cds-grid-cell>
           <cds-grid-cell>
+            <button
+              type="button"
+              class="specs-link-pill"
+              :title="locale.t('supplier.action.view')"
+              :aria-label="locale.t('supplier.action.view')"
+              @click="openSpecsView(m)"
+            >
+              <span class="specs-count-badge">{{ m.modelSpecs.length }}</span>
+              <cds-icon shape="eye" size="sm" aria-hidden="true"></cds-icon>
+              <span>{{ locale.t('supplier.action.view') }}</span>
+            </button>
+          </cds-grid-cell>
+          <cds-grid-cell class="muted-cell">
+            {{ primaryOrganization(m) || '—' }}
+          </cds-grid-cell>
+          <cds-grid-cell class="muted-cell">
+            {{ formatDateTime(m.lastCheckedAt) }}
+          </cds-grid-cell>
+          <cds-grid-cell class="muted-cell">
+            {{ formatDateTime(m.createdAt) }}
+          </cds-grid-cell>
+          <cds-grid-cell class="muted-cell">
+            {{ formatDateTime(m.updatedAt) }}
+          </cds-grid-cell>
+          <cds-grid-cell>
             <div class="row-actions">
               <button
                 v-if="auth.role === 'admin'"
                 type="button"
                 class="row-action"
-                :title="locale.t('supplier.action.test')"
+                :title="locale.t('supplier.action.checkHealth')"
                 @click="refreshOne(m)"
               >
                 <cds-icon shape="network-globe" size="sm"></cds-icon>
-                <span>{{ locale.t('supplier.action.test') }}</span>
+                <span>{{ locale.t('supplier.action.checkHealth') }}</span>
+              </button>
+              <button
+                v-if="auth.role === 'admin'"
+                type="button"
+                class="row-action"
+                @click="openSpecsDrawer(m)"
+              >
+                <cds-icon shape="list" size="sm"></cds-icon>
+                <span>{{ locale.t('supplier.action.manageSpecs') }}</span>
               </button>
               <button
                 v-if="auth.role === 'admin'"
@@ -610,23 +652,6 @@ async function refreshOneStatus(m: ProviderModelNode) {
               >
                 <cds-icon shape="pencil" size="sm"></cds-icon>
                 <span>{{ locale.t('supplier.action.edit') }}</span>
-              </button>
-              <button
-                v-if="auth.role === 'admin'"
-                type="button"
-                class="row-action"
-                @click="openSpecsDrawer(m)"
-              >
-                <cds-icon shape="list" size="sm"></cds-icon>
-                <span>{{ locale.t('supplier.specs.title').replace('{name}', '') }}</span>
-              </button>
-              <button
-                v-if="auth.role === 'admin'"
-                type="button"
-                class="row-action"
-                @click="refreshOneStatus(m)"
-              >
-                <cds-icon shape="refresh" size="sm"></cds-icon>
               </button>
               <button
                 v-if="auth.role === 'admin'"
@@ -742,10 +767,19 @@ async function refreshOneStatus(m: ProviderModelNode) {
       @changed="refetch"
     />
 
+    <SupplierModelViewModal
+      v-if="specsViewModel"
+      :open="Boolean(specsViewModel)"
+      :model="specsViewModel"
+      @close="closeSpecsView"
+    />
+
     <ConfirmDialog
       :open="pendingDeleteIds.length > 0"
       :title="deleteDialogTitle"
       :body="deleteDialogBody"
+      :expected-input="deleteExpectedInput"
+      :input-placeholder="locale.t('supplier.model.confirm.tokenPlaceholder')"
       danger
       @close="closeDelete"
       @confirm="confirmDelete"
@@ -809,10 +843,10 @@ async function refreshOneStatus(m: ProviderModelNode) {
   border-radius: 0;
 }
 .refresh-button:hover:not(:disabled) {
-  color: var(--cds-alias-object-app-blue, #0072a3);
+  color: inherit;
 }
 .refresh-button:focus-visible {
-  outline: 2px solid var(--cds-alias-object-app-blue, #0072a3);
+  outline: 2px solid currentColor;
   outline-offset: 2px;
 }
 .refresh-button:disabled {
@@ -861,8 +895,7 @@ async function refreshOneStatus(m: ProviderModelNode) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.status-badge,
-.provider-badge {
+.status-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -873,41 +906,137 @@ async function refreshOneStatus(m: ProviderModelNode) {
 .row-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
-  white-space: nowrap;
+  gap: 8px;
+  flex-wrap: wrap;
+  /* Don't let the action row be compressed by the grid cell's flex
+     layout — earlier, when the "操作" column was 10%, the four icon+
+     label buttons (探测 / 编辑 / 管理模型 / 删除) added up to ~150px
+     but the cell only allocated ~120px, causing the row to overflow
+     past the column boundary and get clipped. flex-shrink:0 keeps the
+     row intact; the cell will visually extend past its percentage
+     width if needed, which is preferable to silent truncation. */
+  flex-shrink: 0;
 }
 .row-action {
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 4px;
+  justify-content: center;
+  gap: 2px;
+  min-width: 40px;
+  padding: 2px;
   border: 0;
-  border-radius: 3px;
+  border-radius: 4px;
   background: transparent;
   color: var(--cds-alias-object-interaction-color, #006e9c);
   font: inherit;
-  font-size: 12px;
   cursor: pointer;
 }
-.row-action:hover {
-  background: var(--cds-alias-object-app-background, #f4f4f4);
+.row-action span {
+  font-size: 10px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.row-action:focus-visible {
+  outline: 2px solid var(--cds-alias-status-info, #0079ad);
+  outline-offset: 1px;
+}
+.row-action:disabled,
+.row-action.disabled {
+  opacity: 0.55;
 }
 .row-action.danger {
   color: var(--cds-alias-status-danger, #c92100);
 }
-.specs-link {
-  display: inline-block;
-  margin-right: 8px;
-  padding: 4px 6px;
-  border: 0;
-  background: transparent;
-  color: var(--cds-alias-object-interaction-color, #006e9c);
+/* Outer pill — wraps an inner count badge + the icon + label as one
+   segmented button. Info-blue chrome so the whole pill reads as the
+   primary action. The inner count badge is on the far left with a small
+   right margin so it visually segments from the icon/label area. */
+.specs-link-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  appearance: none;
+  margin: 0;
+  padding: 2px 10px 2px 4px;
+  border: 1px solid var(--cds-alias-status-info, #0079ad);
+  border-radius: 999px;
+  background: var(--cds-alias-object-app-blue-50, rgba(0, 114, 163, 0.08));
+  color: var(--cds-alias-status-info, #0079ad);
   font: inherit;
   font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
   cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease,
+    transform 0.12s ease;
+  white-space: nowrap;
 }
-.specs-link:hover {
-  background: var(--cds-alias-object-app-background, #f4f4f4);
+.specs-link-pill > cds-icon {
+  color: inherit;
+  display: inline-flex;
+}
+.specs-link-pill:hover:not(:disabled) {
+  background: var(--cds-alias-status-info, #0079ad);
+  border-color: var(--cds-alias-status-info, #0079ad);
+  color: #fff;
+}
+.specs-link-pill:hover:not(:disabled) > cds-icon {
+  color: #fff;
+}
+.specs-link-pill:active:not(:disabled) {
+  transform: translateY(1px);
+}
+/* Container flexing the count badge and the action pill horizontally
+   inside the cell. No longer used — superseded by the merged
+   specs-link-pill (inner count badge + outer pill); kept in case the
+   split layout is re-introduced later. */
+.specs-viewer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.specs-link-pill {
+  /* Don't shrink — flex's default min-width:auto collapses the pill's
+     text on tight cells, making "查看" wrap and look nested inside the
+     badge. Setting flex-shrink:0 keeps the pill's chrome intact at the
+     expense of letting the cell overflow if the column is truly too
+     narrow (15% accommodates the badge + pill comfortably). */
+  flex-shrink: 0;
+}
+/* Read-only auxiliary columns (organization, timestamps) read as
+   secondary information next to the model's status badge — a softer
+   grey nudges the eye to the action column without making the cells
+   look broken. */
+.muted-cell {
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+/* Inner count chip — sits inside .specs-link-pill as a darker segment,
+   so the whole pill reads as one button with a numeric prefix. Uses
+   inline-flex + tabular-nums so single-digit ("3") and double-digit
+   ("12") widths stay predictable. */
+.specs-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 8px;
+  margin-right: 4px;
+  border-radius: 999px;
+  background: hsl(199, 80%, 28%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
 }
 .menu-option {
   display: flex;

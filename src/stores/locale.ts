@@ -822,10 +822,6 @@ export const STRINGS: Dict = {
   'gatewayModel.title': { zh: '网关路由配置', en: 'Gateway Route Configuration' },
   'gatewayModel.toast.actionFailed': { zh: '操作失败', en: 'Action failed' },
   'gatewayModel.description': { zh: '管理网关上的路由清单（关联网关、路由策略、底层供应商模型与降级链），按策略将请求分派到不同后端模型。', en: 'Manage the gateway route catalogue (linked gateway, routing strategy, underlying provider models, and fallback chains); dispatch requests to backend models by strategy.' },
-  'gatewayModel.alert.routeNameHint': {
-    zh: '提供给应用程序对接的 model 名称，即是此处的路由名称。',
-    en: 'The `model` name apps use to integrate with the gateway is the route name set here.',
-  },
   'gatewayModel.table.label': { zh: '网关路由列表', en: 'Gateway routes' },
   'gatewayModel.sort': { zh: '排序：{column}', en: 'Sort {column}' },
   'gatewayModel.filter': { zh: '过滤：{column}', en: 'Filter {column}' },
@@ -1000,11 +996,13 @@ export const STRINGS: Dict = {
   'virtualKey.action.refresh': { zh: '刷新', en: 'Refresh' },
   'virtualKey.action.copyKey': { zh: '复制令牌', en: 'Copy Key' },
   'virtualKey.action.copyAgent': { zh: '复制智能体 ID', en: 'Copy Agent ID' },
+  'virtualKey.action.copyMasked': { zh: '复制令牌掩码', en: 'Copy masked key' },
   'virtualKey.action.more': { zh: '更多操作', en: 'More Actions' },
   'virtualKey.action.edit': { zh: '编辑', en: 'Edit' },
   'virtualKey.action.enable': { zh: '启用', en: 'Enable' },
   'virtualKey.action.disable': { zh: '禁用', en: 'Disable' },
   'virtualKey.action.delete': { zh: '删除', en: 'Delete' },
+  'virtualKey.action.regenerate': { zh: '重新生成', en: 'Regenerate' },
   'virtualKey.batch.enable': { zh: '批量启用', en: 'Enable Selected' },
   'virtualKey.batch.disable': { zh: '批量禁用', en: 'Disable Selected' },
   'virtualKey.batch.delete': { zh: '批量删除', en: 'Delete Selected' },
@@ -1029,22 +1027,52 @@ export const STRINGS: Dict = {
   },
   'virtualKey.pagination.label': { zh: '令牌分页', en: 'Virtual key pagination' },
   'virtualKey.form.createTitle': { zh: '颁发密钥', en: 'New API Key' },
-  'virtualKey.form.editTitle': { zh: '编辑密钥', en: 'Edit API Key' },
   'virtualKey.form.name': { zh: '密钥名称', en: 'Key Name' },
   'virtualKey.form.namePlaceholder': {
     zh: '例如 OpenClaw_Robot_Key',
     en: 'e.g. OpenClaw_Robot_Key',
   },
-  'virtualKey.form.nameError': {
-    zh: '名称长度应为 2–64 个字符。',
-    en: 'Name must be 2–64 characters.',
-  },
   'virtualKey.form.agent': { zh: '绑定的智能体', en: 'Bound Agent' },
-  'virtualKey.form.policy': { zh: '关联策略', en: 'Policy' },
   'virtualKey.form.expiresAt': { zh: '过期日期', en: 'Expiration Date' },
-  'virtualKey.form.enabled': { zh: '创建后立即启用', en: 'Enable immediately' },
   'virtualKey.form.cancel': { zh: '取消', en: 'Cancel' },
-  'virtualKey.form.submit': { zh: '保存', en: 'Save' },  'virtualKey.confirm.deleteTitle': { zh: '确认删除密钥', en: 'Delete API Key' },
+  'virtualKey.form.submit': { zh: '保存', en: 'Save' },
+  'virtualKey.form.organization': { zh: '组织 ID', en: 'Organization ID' },
+  'virtualKey.form.organizationPlaceholder': {
+    zh: '请输入组织 ID',
+    en: 'Enter organization ID',
+  },
+  'virtualKey.form.gateway': { zh: '模型网关', en: 'Model Gateway' },
+  'virtualKey.form.gatewayPlaceholder': {
+    zh: '请选择模型网关',
+    en: 'Select a model gateway',
+  },
+  'virtualKey.form.gatewayRequired': {
+    zh: '请选择模型网关',
+    en: 'Please select a model gateway',
+  },
+  'virtualKey.form.duration': { zh: '生效时长', en: 'Duration' },
+  'virtualKey.form.durationPlaceholder': {
+    zh: '例如 30d',
+    en: 'e.g. 30d',
+  },
+  'virtualKey.form.durationHint': {
+    zh: '与 expiresAt 二选一；同时设置时以 expiresAt 为准',
+    en: 'Either duration or expiresAt; expiresAt wins when both are set',
+  },
+  'virtualKey.form.agentNone': { zh: '（暂不绑定）', en: '(no agent)' },
+  'virtualKey.form.nameRequired': {
+    zh: '名称长度应为 2–64 个字符',
+    en: 'Name must be 2–64 characters',
+  },
+  'virtualKey.form.orgRequired': {
+    zh: '请输入组织 ID',
+    en: 'Please enter an organization ID',
+  },
+  'virtualKey.form.modelsHint': {
+    zh: '选择网关后加载可用模型',
+    en: 'Models load after selecting a gateway',
+  },
+  'virtualKey.confirm.deleteTitle': { zh: '确认删除密钥', en: 'Delete API Key' },
   'virtualKey.confirm.deleteBody': {
     zh: '确定要删除密钥“{name}”吗？此操作无法撤销。',
     en: 'Delete key “{name}”? This action cannot be undone.',
@@ -1068,6 +1096,7 @@ export const STRINGS: Dict = {
     zh: '已删除 {count} 个令牌',
     en: 'Deleted {count} virtual keys',
   },
+  'virtualKey.toast.maskedCopied': { zh: '令牌掩码已复制', en: 'Masked key copied' },
   'virtualKey.toast.keyCopied': { zh: '令牌已复制到剪贴板', en: 'Key copied to clipboard' },
   'virtualKey.toast.agentCopied': { zh: '智能体 ID 已复制', en: 'Agent ID copied' },
   'virtualKey.toast.copyFailed': { zh: '复制失败', en: 'Copy failed' },
@@ -1079,13 +1108,13 @@ export const STRINGS: Dict = {
   'virtualKey.toast.regenerated': { zh: '令牌已重新生成', en: 'Key secret regenerated' },
   'virtualKey.toast.regenerateFailed': { zh: '重新生成令牌失败', en: 'Failed to regenerate key' },
   'virtualKey.status.revoked': { zh: '已吊销', en: 'Revoked' },
-  'virtualKey.action.regenerate': { zh: '重新生成', en: 'Regenerate' },
-  'virtualKey.form.owner': { zh: '归属用户', en: 'Owner' },
-  'virtualKey.form.ownerError': { zh: '请选择归属用户', en: 'Please select an owner' },
   'virtualKey.form.expiresHint': { zh: '留空表示永不过期', en: 'Leave empty for no expiry' },
   'virtualKey.form.maxBudget': { zh: '消费上限', en: 'Max Budget' },
-  'virtualKey.form.models': { zh: '可调用路由', en: 'Models' },
-  'virtualKey.form.modelsEmpty': { zh: '暂无可绑定路由', en: 'No routes available to bind' },
+  'virtualKey.form.models': { zh: '可调用模型', en: 'Models' },
+  'virtualKey.form.modelsEmpty': {
+    zh: '暂无可用模型，请先选择网关',
+    en: 'No available models yet — select a gateway first',
+  },
   'virtualKey.form.advanced': { zh: '高级风控', en: 'Advanced Risk Control' },
   'virtualKey.form.tpmLimit': { zh: 'TPM 上限', en: 'TPM Limit' },
   'virtualKey.form.rpmLimit': { zh: 'RPM 上限', en: 'RPM Limit' },
@@ -1094,7 +1123,6 @@ export const STRINGS: Dict = {
   'virtualKey.form.budgetDurationPlaceholder': { zh: '例如 30d / 1mo', en: 'e.g. 30d / 1mo' },
   'virtualKey.form.tags': { zh: 'Tags (逗号分隔)', en: 'Tags (comma-separated)' },
   'virtualKey.form.tagsPlaceholder': { zh: '例如 prod,priority-high', en: 'e.g. prod,priority-high' },
-  'virtualKey.form.organizationId': { zh: 'Organization ID', en: 'Organization ID' },
   'virtualKey.form.rotationInterval': { zh: '自动轮换周期', en: 'Rotation Interval' },
   'virtualKey.form.rotationIntervalPlaceholder': { zh: '例如 30d', en: 'e.g. 30d' },
   'virtualKey.form.blocked': { zh: '一键锁定', en: 'Lock this key' },
@@ -1124,13 +1152,12 @@ export const STRINGS: Dict = {
   'virtualKey.secret.copied': { zh: '密钥已复制到剪贴板', en: 'Key copied to clipboard' },
   'virtualKey.secret.done': { zh: '我已保存', en: 'Done' },
 
-  // Rate-limit policies
   'supplier.title': { zh: '模型管理', en: 'Model Management' },
   'supplier.description': {
     zh: '管理上游供应商提供的模型配置（鉴权、速率与计费参数），控制平台侧接入门禁与健康探测。',
     en: 'Manage upstream supplier model configurations (auth, rate, and billing parameters) that gate platform-side ingress and the health probe.',
   },
-  'supplier.table.label': { zh: '限流策略列表', en: 'Rate-limit policies' },
+  'supplier.table.label': { zh: '模型列表', en: 'Models' },
   'supplier.sort': { zh: '排序：{column}', en: 'Sort {column}' },
   'supplier.filter': { zh: '过滤：{column}', en: 'Filter {column}' },
   'supplier.filter.clear': { zh: '清除过滤', en: 'Clear filter' },
@@ -1141,17 +1168,22 @@ export const STRINGS: Dict = {
   'supplier.action.create': { zh: '新建模型', en: 'New Model' },
   'supplier.action.batch': { zh: '批量操作', en: 'Batch Actions' },
   'supplier.action.refresh': { zh: '刷新', en: 'Refresh' },
+  'supplier.action.test': { zh: '探测', en: 'Probe' },
+  'supplier.action.checkHealth': { zh: '检测健康', en: 'Check Health' },
   'supplier.action.edit': { zh: '编辑', en: 'Edit' },
   'supplier.action.apply': { zh: '应用至…', en: 'Apply To…' },
   'supplier.action.enable': { zh: '启用', en: 'Enable' },
   'supplier.action.disable': { zh: '禁用', en: 'Disable' },
   'supplier.action.delete': { zh: '删除', en: 'Delete' },
+  'supplier.action.manageSpecs': {
+    zh: '管理供应商模型',
+    en: 'Manage Provider Models',
+  },
   'supplier.batch.enable': { zh: '批量启用', en: 'Enable Selected' },
   'supplier.batch.disable': { zh: '批量禁用', en: 'Disable Selected' },
   'supplier.batch.delete': { zh: '批量删除', en: 'Delete Selected' },
-  'supplier.batch.disabled': { zh: '请先选择限流策略', en: 'Select rate-limit policies first' },
-  'supplier.col.selectAll': { zh: '选择当前页全部策略', en: 'Select all policies on this page' },
-  'supplier.col.selectPolicy': { zh: '选择策略 {name}', en: 'Select policy {name}' },
+  'supplier.batch.disabled': { zh: '请先选择模型', en: 'Select models first' },
+  'supplier.col.selectAll': { zh: '选择当前页全部模型', en: 'Select all models on this page' },
   'supplier.col.name': { zh: '模型名称', en: 'Model Name' },
   'supplier.col.provider': { zh: '供应商', en: 'Provider' },
   'supplier.col.model': { zh: '模型', en: 'Model' },
@@ -1167,9 +1199,7 @@ export const STRINGS: Dict = {
     zh: '显示 {start}-{end} 条，共 {total} 条',
     en: 'Showing {start}-{end} of {total}',
   },
-  'supplier.pagination.label': { zh: '限流策略分页', en: 'Rate-limit policy pagination' },
-  'supplier.form.createTitle': { zh: '新建限流策略', en: 'New Rate-limit Policy' },
-  'supplier.form.editTitle': { zh: '编辑限流策略', en: 'Edit Rate-limit Policy' },
+  'supplier.pagination.label': { zh: '模型分页', en: 'Model pagination' },
   'supplier.form.name': { zh: '模型名称', en: 'Model Name' },
   'supplier.form.namePlaceholder': {
     zh: '例如 agent_openclaw_limit',
@@ -1188,34 +1218,23 @@ export const STRINGS: Dict = {
   'supplier.type.TOKEN': { zh: 'Token 限制', en: 'Token Limit' },
   'supplier.type.REQUEST': { zh: '请求数限制', en: 'Request Limit' },
   'supplier.type.COMBINED': { zh: '组合限制', en: 'Combined Limit' },
-  'supplier.confirm.deleteTitle': { zh: '确认删除限流策略', en: 'Delete Rate-limit Policy' },
   'supplier.confirm.deleteBody': {
     zh: '确定要删除策略“{name}”吗？此操作无法撤销。',
     en: 'Delete policy “{name}”? This action cannot be undone.',
   },
   'supplier.confirm.batchDeleteTitle': { zh: '确认批量删除', en: 'Delete Selected Policies' },
-  'supplier.confirm.batchDeleteBody': {
-    zh: '确定要删除选中的 {count} 条限流策略吗？此操作无法撤销。',
-    en: 'Delete the selected {count} policies? This action cannot be undone.',
-  },
-  'supplier.toast.created': { zh: '限流策略已创建', en: 'Rate-limit policy created' },
-  'supplier.toast.updated': { zh: '限流策略已更新', en: 'Rate-limit policy updated' },
-  'supplier.toast.enabled': { zh: '已启用 {count} 条限流策略', en: 'Enabled {count} policies' },
-  'supplier.toast.disabled': { zh: '已禁用 {count} 条限流策略', en: 'Disabled {count} policies' },
-  'supplier.toast.deleted': { zh: '已删除 {count} 条限流策略', en: 'Deleted {count} policies' },
   'supplier.toast.apply': {
     zh: '正在配置“{name}”的应用范围',
     en: 'Configuring targets for “{name}”',
   },
-  'supplier.toast.refreshed': { zh: '限流策略列表已刷新', en: 'Rate-limit policy list refreshed' },
-  'supplier.toast.saveFailed': { zh: '保存限流策略失败', en: 'Failed to save policy' },
-  'supplier.toast.deleteFailed': { zh: '删除限流策略失败', en: 'Failed to delete policy' },
   'supplier.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
   // ProviderModel-specific (供应商模型) — reuses the supplier.* prefix but
   // everything below the model.* separator is the new form/column copy
-  // introduced by the LiteLLM design doc §2.2 refactor. Old supplier.*
-  // keys (限流策略 era) are kept for backward compatibility but the
-  // SupplierModelView/form now consume only the supplier.model.* set.
+  // introduced by the LiteLLM design doc §2.2 refactor. SupplierModelView
+  // and the form modal now consume only the supplier.model.* set; the
+  // remaining supplier.* keys (e.g. supplier.title / supplier.col.name /
+  // supplier.pagination.pageSize) are general page chrome shared by the
+  // list view.
   'supplier.model.col.provider': { zh: '供应商分类', en: 'Provider' },
   'supplier.model.col.model': { zh: '上游模型原名', en: 'Upstream Model' },
   'supplier.model.col.health': { zh: '健康状态', en: 'Health' },
@@ -1234,7 +1253,7 @@ export const STRINGS: Dict = {
   'supplier.model.form.createTitle': { zh: '新建模型', en: 'New Model' },
   'supplier.model.form.editTitle': { zh: '编辑供应商模型', en: 'Edit Provider Model' },
   'supplier.model.form.name': { zh: '模型名称', en: 'Model name' },
-  'supplier.model.form.namePlaceholder': { zh: '例如 gpt-4o-mini 或 DeepSeek-V3.1', en: 'e.g. gpt-4o-mini or DeepSeek-V3.1' },
+  'supplier.model.form.namePlaceholder': { zh: '例如 DeepSeek-V3.1', en: 'e.g. DeepSeek-V3.1' },
   'supplier.model.form.nameError': {
     zh: '模型名仅允许大小写字母、数字、中划线与点',
     en: 'Model name may only contain letters, digits, hyphens, and dots',
@@ -1243,6 +1262,7 @@ export const STRINGS: Dict = {
     zh: '大小写字母、数字、中划线与点，2-64 字符',
     en: 'Letters, digits, hyphens, and dots, 2-64 chars',
   },
+  'supplier.model.form.requiredMark': { zh: '*', en: '*' },
   'supplier.model.form.nameLockedHint': {
     zh: '编辑时名称不可更改',
     en: 'Name cannot be changed when editing',
@@ -1262,19 +1282,34 @@ export const STRINGS: Dict = {
     en: 'Encrypted at rest, never displayed again',
   },
   'supplier.model.form.testConnection': { zh: '测试连接', en: 'Test Connection' },
-  'supplier.model.form.testSuccess': { zh: '连接成功', en: 'Connection succeeded' },
-  'supplier.model.form.testMelted': { zh: '连接失败', en: 'Connection failed' },
+  'supplier.model.form.testSuccess': {
+    zh: '连接成功：获取到 {count} 个模型',
+    en: 'Connected: fetched {count} models',
+  },
+  'supplier.model.form.testFailure': {
+    zh: '连接失败：{message}',
+    en: 'Connection failed: {message}',
+  },
   'supplier.model.form.testFailed': { zh: '测试连接失败', en: 'Failed to test connection' },
   'supplier.model.form.enabled': { zh: '启用此节点', en: 'Enable this node' },
-  'supplier.model.form.advanced': { zh: '高级参数', en: 'Advanced' },
+  'supplier.model.form.advanced': { zh: '模型高级参数', en: 'Advanced' },
+  'supplier.model.form.specAdvanced': { zh: '供应商模型高级参数', en: 'Model Advanced' },
   'supplier.model.form.apiBase': { zh: 'API Base', en: 'API Base' },
   'supplier.model.form.apiBasePlaceholder': { zh: 'https://api.openai.com/v1', en: 'https://api.openai.com/v1' },
   'supplier.model.form.apiBaseHint': {
     zh: '编辑时暂只读;后续支持从 litellm_params 同步',
     en: 'Read-only here for now; syncs with litellm_params',
   },
-  'supplier.model.form.organization': { zh: 'Organization', en: 'Organization' },
-  'supplier.model.form.organizationPlaceholder': { zh: '可选', en: 'Optional' },
+  'supplier.model.form.organization': { zh: '所属组织', en: 'Organization' },
+  'supplier.model.form.organizationPlaceholder': { zh: '例如 org-abc123', en: 'e.g. org-abc123' },
+  'supplier.model.form.organizationLockedHint': {
+    zh: '行级字段,在编辑模式下不可改',
+    en: 'Row-level; locked in edit mode',
+  },
+  'supplier.model.form.organizationError': {
+    zh: '组织不可为空',
+    en: 'Organization is required',
+  },
   'supplier.model.form.tags': { zh: 'Tags (逗号分隔)', en: 'Tags (comma-separated)' },
   'supplier.model.form.tagsPlaceholder': { zh: '例如 prod,priority-high', en: 'e.g. prod,priority-high' },
   'supplier.model.form.cancel': { zh: '取消', en: 'Cancel' },
@@ -1291,17 +1326,27 @@ export const STRINGS: Dict = {
   'supplier.model.form.submitCreate': { zh: '提交创建', en: 'Create' },
   'supplier.model.form.submitUpdate': { zh: '保存修改', en: 'Save changes' },
   'supplier.model.form.review.basic': { zh: '基本信息', en: 'Basic information' },
+  // Mirror the exact label keys used on the basic + specs steps so the
+  // confirmation page reads identically to the inputs above it. Earlier
+  // review.* entries diverged ("网关" vs. "模型网关", "apiBase" vs.
+  // "API 地址", etc.), forcing users to mentally translate one set of
+  // labels to another right before they hit Submit.
   'supplier.model.form.review.name': { zh: '模型名称', en: 'Model name' },
-  'supplier.model.form.review.gateway': { zh: '网关', en: 'Gateway' },
+  'supplier.model.form.review.gateway': { zh: '模型网关', en: 'Model gateway' },
+  'supplier.model.form.review.organization': { zh: '所属组织', en: 'Organization' },
   'supplier.model.form.review.specsCount': { zh: '{count} 个', en: '{count}' },
-  'supplier.model.form.review.specHeading': { zh: 'Spec #{n}', en: 'Spec #{n}' },
-  'supplier.model.form.review.model': { zh: 'model', en: 'model' },
+  'supplier.model.form.review.specHeading': { zh: '模型 #{n}', en: 'Model #{n}' },
+  'supplier.model.form.review.model': { zh: '选择模型', en: 'Model' },
   'supplier.model.form.review.customLlmProvider': {
-    zh: 'customLlmProvider',
-    en: 'customLlmProvider',
+    zh: '供应商',
+    en: 'Provider',
   },
-  'supplier.model.form.review.apiBase': { zh: 'apiBase', en: 'apiBase' },
-  'supplier.model.form.review.tags': { zh: 'tags', en: 'tags' },
+  'supplier.model.form.review.apiBase': { zh: 'API 地址', en: 'API base' },
+  'supplier.model.form.review.tags': { zh: '模型标签', en: 'Model tags' },
+  // 「限流」 / 「单价(/token)」 stay review-only: the input step surfaces
+  // them as four separate fields (TPM / RPM / maxBudget / budgetDuration,
+  // and four cost-per-token fields) with no single umbrella label, so
+  // the review summary cannot faithfully reuse a spec key.
   'supplier.model.form.review.limits': { zh: '限流', en: 'Limits' },
   'supplier.model.form.review.cost': { zh: '单价(/token)', en: 'Cost (per token)' },
   'supplier.model.form.review.unset': { zh: '(未设置)', en: '(not set)' },
@@ -1318,26 +1363,32 @@ export const STRINGS: Dict = {
   'supplier.status.unknown': { zh: '未知', en: 'Unknown' },
 
   // extra column / drawer copy
-  'supplier.col.gateway': { zh: '网关', en: 'Gateway' },
-  'supplier.col.specs': { zh: '部署', en: 'Specs' },
-  'supplier.col.lastCheckedAt': { zh: '最近检查', en: 'Last checked' },
+  'supplier.col.gateway': { zh: '所属模型网关', en: 'Model gateway' },
+  'supplier.col.specs': { zh: '供应商模型', en: 'Provider models' },
+  'supplier.col.lastCheckedAt': { zh: '最近检测时间', en: 'Last checked' },
   'supplier.col.checkedAgo': { zh: '{ago}前检查', en: 'Checked {ago} ago' },
+  'supplier.col.createdAt': { zh: '创建时间', en: 'Created at' },
+  'supplier.col.updatedAt': { zh: '更新时间', en: 'Updated at' },
+  'supplier.col.organization': { zh: '所属组织', en: 'Organization' },
 
   // Specs drawer (new component, see Task 6)
   'supplier.specs.title': {
-    zh: '管理部署 — {name}',
-    en: 'Manage specs — {name}',
+    zh: '管理供应商模型 - {name}',
+    en: 'Manage Provider Models - {name}',
   },
   'supplier.specs.empty': {
-    zh: '该 ProviderModel 暂无 spec',
-    en: 'No specs yet for this provider model',
+    zh: '该 ProviderModel 暂无模型',
+    en: 'No models yet for this provider model',
   },
-  'supplier.specs.add': { zh: '+ 添加 spec', en: '+ Add spec' },
+  'supplier.specs.add': { zh: '添加模型', en: 'Add model' },
   'supplier.specs.blockAll': { zh: '全部 block', en: 'Block all' },
   'supplier.specs.unblockAll': { zh: '全部 unblock', en: 'Unblock all' },
   'supplier.specs.refresh': { zh: '刷新', en: 'Refresh' },
+  'supplier.specs.col.status': { zh: '状态', en: 'Status' },
+  'supplier.specs.col.blocked': { zh: '禁用', en: 'Blocked' },
+  'supplier.specs.metaCount': { zh: '个供应商模型', en: ' provider models' },
 
-  'supplier.specs.addModal.title': { zh: '添加 spec', en: 'Add spec' },
+  'supplier.specs.addModal.title': { zh: '添加模型', en: 'Add model' },
   'supplier.specs.addModal.apiKeyHint': {
     zh: '留空保留原 key',
     en: 'Leave blank to keep existing key',
@@ -1350,29 +1401,100 @@ export const STRINGS: Dict = {
     zh: 'Litellm provider，如 deepseek',
     en: 'Litellm provider, e.g. deepseek',
   },
+  'supplier.specs.addModal.providerPlaceholder': {
+    zh: '请选择供应商',
+    en: 'Select a provider',
+  },
   'supplier.specs.addModal.apiKeyPlaceholder': {
     zh: '明文 key(仅写入,wire 上只回 apiKeyRef)',
     en: 'Plaintext key (write-only; apiKeyRef is the read-side ref)',
   },
   'supplier.specs.addModal.submit': { zh: '添加', en: 'Add' },
 
-  'supplier.specs.toast.added': { zh: '已添加 spec', en: 'Spec added' },
-  'supplier.specs.toast.deleted': { zh: '已删除 spec', en: 'Spec deleted' },
+  'supplier.specs.toast.added': { zh: '已添加模型', en: 'Model added' },
+  'supplier.specs.toast.deleted': { zh: '已删除模型', en: 'Model deleted' },
   'supplier.specs.toast.refreshed': { zh: '状态已刷新', en: 'Status refreshed' },
   'supplier.specs.toast.blocked': {
-    zh: '已 block {count} 个 spec',
-    en: 'Blocked {count} specs',
+    zh: '已 block {count} 个模型',
+    en: 'Blocked {count} models',
   },
   'supplier.specs.toast.unblocked': {
-    zh: '已 unblock {count} 个 spec',
-    en: 'Unblocked {count} specs',
+    zh: '已 unblock {count} 个模型',
+    en: 'Unblocked {count} models',
   },
+
+  // ProviderModel (供应商模型) toast messages — separate from supplier.* so
+  // the model view's user-facing copy (e.g. created / refreshed) doesn't
+  // collide with the general page chrome in the supplier.* keys above.
+  'supplier.model.toast.created': { zh: '供应商模型已创建', en: 'Provider model created' },
+  'supplier.model.toast.updated': { zh: '供应商模型已更新', en: 'Provider model updated' },
+  'supplier.model.toast.refreshed': { zh: '供应商模型已刷新', en: 'Provider model refreshed' },
+  'supplier.model.toast.healthChecked': { zh: '健康检测完成', en: 'Health check completed' },
+  'supplier.model.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
+  'supplier.model.toast.deleteFailed': { zh: '删除失败', en: 'Failed to delete model' },
+  'supplier.model.toast.deleted': { zh: '供应商模型已删除', en: 'Provider model deleted' },
+  'supplier.model.toast.batchEnabled': { zh: '已启用 {count} 个模型', en: 'Enabled {count} models' },
+  'supplier.model.toast.batchDisabled': { zh: '已禁用 {count} 个模型', en: 'Disabled {count} models' },
+  'supplier.model.confirm.deleteTitle': {
+    zh: '删除供应商模型',
+    en: 'Delete Provider Model',
+  },
+  'supplier.model.confirm.deleteBody': {
+    zh: '确定要删除模型 “{name}” 吗？此操作无法撤销。请输入模型名称以确认。',
+    en: 'Delete model “{name}”? This action cannot be undone. Type the model name to confirm.',
+  },
+  'supplier.model.confirm.batchDeleteTitle': {
+    zh: '批量删除供应商模型',
+    en: 'Delete Selected Provider Models',
+  },
+  'supplier.model.confirm.batchDeleteBody': {
+    zh: '确定要删除选中的 {count} 个供应商模型吗？此操作无法撤销。请输入 “{token}” 以确认。',
+    en: 'Delete the selected {count} provider models? This action cannot be undone. Type “{token}” to confirm.',
+  },
+  'supplier.model.confirm.tokenPlaceholder': {
+    zh: '输入确认文本',
+    en: 'Type the confirmation text',
+  },
+  // Per-spec delete (inside the manage-supplier-model modal). Asking the
+  // user to type the spec's model name (e.g. "MiniMax-M3") is the same
+  // type-to-confirm pattern used for the row-level delete — small
+  // friction that prevents clicking past the dialog by accident.
+  'supplier.model.confirm.specDeleteTitle': {
+    zh: '删除供应商模型规格',
+    en: 'Delete Provider Model Spec',
+  },
+  'supplier.model.confirm.specDeleteBody': {
+    zh: '确定要删除该模型 “{name}” 吗？此操作无法撤销。请输入规格名称以确认。',
+    en: 'Delete model “{name}”? This action cannot be undone. Type the spec name to confirm.',
+  },
+
+  // Read-only "view specs" modal triggered from the model list's eye icon.
+  // Surfaces every spec's litellmParams.modelInfo field the form modal
+  // shows in its review step, plus a few the form recaps in compact
+  // composite summaries (cost, limits) — here they're broken out per
+  // column so admins can audit any single field without paging.
+  'supplier.viewModal.title': { zh: '查看 {name} 的供应商模型', en: 'Specs of {name}' },
+  'supplier.viewModal.close': { zh: '关闭', en: 'Close' },
+  'supplier.viewModal.col.model': { zh: '选择模型', en: 'Model' },
+  'supplier.viewModal.col.provider': { zh: '供应商', en: 'Provider' },
+  'supplier.viewModal.col.apiBase': { zh: 'API 地址', en: 'API Base' },
+  'supplier.viewModal.col.blocked': { zh: '是否禁用', en: 'Blocked' },
+  'supplier.viewModal.col.mode': { zh: '模型模式', en: 'Mode' },
+  'supplier.viewModal.col.tags': { zh: '模型标签', en: 'Model tags' },
+  'supplier.viewModal.col.cost': { zh: '模型定价', en: 'Cost' },
+  'supplier.viewModal.col.limits': { zh: '模型限额', en: 'Limits' },
+  'supplier.viewModal.col.passThrough': { zh: '透传模式', en: 'Pass-through' },
+  'supplier.viewModal.col.chatApi': { zh: '使用 chat completions 接口', en: 'Use chat completions API' },
+  'supplier.viewModal.col.mergeReasoning': { zh: '合并 reasoning 到 choices', en: 'Merge reasoning into choices' },
+  'supplier.viewModal.yes': { zh: '是', en: 'Yes' },
+  'supplier.viewModal.no': { zh: '否', en: 'No' },
+  'supplier.action.view': { zh: '查看', en: 'View' },
 
   // Form fields (rewritten for create / edit / specs array editor)
   'supplier.model.form.gateway': { zh: '模型网关', en: 'Model gateway' },
   'supplier.model.form.gatewayPlaceholder': {
-    zh: '请选择 LiteLLM 网关',
-    en: 'Select a LiteLLM gateway',
+    zh: '请选择模型网关',
+    en: 'Select a model gateway',
   },
   'supplier.model.form.gatewayLockedHint': {
     zh: '编辑时不可更改',
@@ -1380,59 +1502,182 @@ export const STRINGS: Dict = {
   },
   'supplier.model.form.specs': { zh: '供应商模型', en: 'Provider models' },
   'supplier.model.form.specsHint': {
-    zh: '至少 1 个；edit 时整组替换',
-    en: 'At least 1; full-replace on edit',
+    zh: '',
+    en: '',
   },
-  'supplier.model.form.spec.addSpec': { zh: '+ 添加 spec', en: '+ Add spec' },
-  'supplier.model.form.spec.removeSpec': { zh: '移除该 spec', en: 'Remove this spec' },
-  'supplier.model.form.spec.apiKey': { zh: 'API Key(spec)', en: 'API Key (spec)' },
+  'supplier.model.form.spec.addSpec': { zh: '添加模型', en: 'Add model' },
+  'supplier.model.form.spec.removeSpec': { zh: '移除该模型', en: 'Remove this model' },
+  'supplier.model.form.spec.apiKey': { zh: 'API Key', en: 'API Key' },
   'supplier.model.form.spec.apiKeyPlaceholder': {
     zh: '留空保留原 key',
     en: 'Leave blank to keep existing key',
   },
   'supplier.model.form.spec.customLlmProvider': {
-    zh: 'customLlmProvider',
-    en: 'customLlmProvider',
+    zh: '供应商',
+    en: 'Provider',
   },
   'supplier.model.form.spec.customLlmProviderHint': {
-    zh: 'Litellm provider，如 openai / anthropic / deepseek',
-    en: 'Litellm provider, e.g. openai / anthropic / deepseek',
+    zh: '选择预定义供应商后,API Base 会自动填充,仍可手动修改',
+    en: 'Pick a provider to auto-fill the API base URL (still editable).',
   },
-  'supplier.model.form.spec.mode': { zh: '模式', en: 'Mode' },
+  'supplier.model.form.spec.provider': { zh: '供应商', en: 'Provider' },
+  'supplier.model.form.spec.providerPlaceholder': {
+    zh: '请选择供应商',
+    en: 'Select a provider',
+  },
+  'supplier.model.form.spec.providerOption.custom': {
+    zh: '自定义供应商',
+    en: 'Custom',
+  },
+  'supplier.model.form.spec.providerOption.deepseek': {
+    zh: 'DeepSeek',
+    en: 'DeepSeek',
+  },
+  'supplier.model.form.spec.providerOption.minimax': {
+    zh: 'MiniMax',
+    en: 'MiniMax',
+  },
+  'supplier.model.form.spec.providerOption.moonshot': {
+    zh: 'Moonshot(月之暗面)',
+    en: 'Moonshot',
+  },
+  'supplier.model.form.spec.providerOption.openrouter': {
+    zh: 'OpenRouter(多模型聚合)',
+    en: 'OpenRouter',
+  },
+  'supplier.model.form.spec.providerOption.openai': {
+    zh: 'openai',
+    en: 'openai',
+  },
+  'supplier.model.form.spec.providerOption.anthropic': {
+    zh: 'anthropic',
+    en: 'anthropic',
+  },
+  'supplier.model.form.spec.apiBase': { zh: 'API 地址', en: 'API base' },
+  'supplier.model.form.spec.apiBaseHint': {
+    zh: '已根据供应商预填默认 URL,可按需修改',
+    en: 'Auto-filled from provider default; editable.',
+  },
+  'supplier.model.form.spec.apiBaseHintCustom': {
+    zh: '请填写 API Base URL',
+    en: 'Enter the API base URL.',
+  },
+  'supplier.model.form.spec.mode': { zh: '模型模式', en: 'Model mode' },
+  'supplier.model.form.spec.tags': { zh: '模型标签', en: 'Model tags' },
+  // 模式(下拉选项)。后端为 free-form 字符串,目前未提供枚举,前端按
+  // LiteLLM 常见取值给出常用项;保留"不指定"项(空串)以兼容历史/未列出值。
+  'supplier.model.form.spec.modePlaceholder': {
+    zh: '不指定(使用后端默认)',
+    en: 'Unset (use backend default)',
+  },
+  'supplier.model.form.spec.modeOption.chat': {
+    zh: 'Chat - /chat/completions(对话)',
+    en: 'Chat - /chat/completions',
+  },
+  'supplier.model.form.spec.modeOption.completion': {
+    zh: 'Completion - /completions(文本补全)',
+    en: 'Completion - /completions',
+  },
+  'supplier.model.form.spec.modeOption.embedding': {
+    zh: 'Embedding - /embeddings(向量化)',
+    en: 'Embedding - /embeddings',
+  },
+  'supplier.model.form.spec.modeOption.audio_speech': {
+    zh: 'Audio Speech - /audio/speech(文字转语音)',
+    en: 'Audio Speech - /audio/speech',
+  },
+  'supplier.model.form.spec.modeOption.audio_transcription': {
+    zh: 'Audio Transcription - /audio/transcriptions(语音转文字)',
+    en: 'Audio Transcription - /audio/transcriptions',
+  },
+  'supplier.model.form.spec.modeOption.image_generation': {
+    zh: 'Image Generation - /images/generations(图像生成)',
+    en: 'Image Generation - /images/generations',
+  },
+  'supplier.model.form.spec.modeOption.video_generation': {
+    zh: 'Video Generation - /videos(视频生成)',
+    en: 'Video Generation - /videos',
+  },
+  'supplier.model.form.spec.modeOption.rerank': {
+    zh: 'Rerank - /rerank(重排序)',
+    en: 'Rerank - /rerank',
+  },
+  'supplier.model.form.spec.modeOption.realtime': {
+    zh: 'Realtime - /realtime(实时接口)',
+    en: 'Realtime - /realtime',
+  },
+  'supplier.model.form.spec.modeOption.batch': {
+    zh: 'Batch - /batch(批处理)',
+    en: 'Batch - /batch',
+  },
+  'supplier.model.form.spec.modeOption.ocr': {
+    zh: 'OCR - /ocr(图文识别)',
+    en: 'OCR - /ocr',
+  },
+  'supplier.model.form.spec.modeOption.custom': {
+    zh: '自定义…',
+    en: 'Custom…',
+  },
+  'supplier.model.form.spec.model': { zh: '选择模型', en: 'Model' },
+  'supplier.model.form.spec.modelSelectPlaceholder': {
+    zh: '从上游列表选择或手动输入',
+    en: 'Pick from upstream list or type your own',
+  },
 
   'supplier.model.form.defaultApiKeyTpmLimit': {
-    zh: '默认 TPM(整 ProviderModel)',
-    en: 'Default TPM (per ProviderModel)',
+    zh: '默认 API Key TPM 限额',
+    en: 'Default API Key TPM Limit',
   },
   'supplier.model.form.defaultApiKeyRpmLimit': {
-    zh: '默认 RPM(整 ProviderModel)',
-    en: 'Default RPM (per ProviderModel)',
+    zh: '默认 API Key RPM 限额',
+    en: 'Default API Key RPM Limit',
   },
 
+  'supplier.model.form.limits.tpm': {
+    zh: '每分钟 tokens(tpm)',
+    en: 'Tokens per minute (tpm)',
+  },
+  'supplier.model.form.limits.rpm': {
+    zh: '每分钟请求(rpm)',
+    en: 'Requests per minute (rpm)',
+  },
+  'supplier.model.form.limits.maxBudget': {
+    zh: '最大预算(maxBudget)',
+    en: 'Maximum budget (maxBudget)',
+  },
+  'supplier.model.form.limits.budgetDuration': {
+    zh: '预算周期(budgetDuration)',
+    en: 'Budget duration (budgetDuration)',
+  },
+
+  'supplier.model.form.limits.custom': {
+    zh: '设置限额',
+    en: 'Set limits',
+  },
+  'supplier.model.form.cost.custom': {
+    zh: '自定义价格',
+    en: 'Custom pricing',
+  },
   'supplier.model.form.cost.input': {
-    zh: '输入单价(/token)',
-    en: 'Input cost (per token)',
+    zh: '输入单价(/1M token)',
+    en: 'Input cost (per 1M tokens)',
   },
   'supplier.model.form.cost.output': {
-    zh: '输出单价(/token)',
-    en: 'Output cost (per token)',
+    zh: '输出单价(/1M token)',
+    en: 'Output cost (per 1M tokens)',
   },
   'supplier.model.form.cost.cacheRead': {
-    zh: '缓存读取单价(/token)',
-    en: 'Cache read cost (per token)',
+    zh: '缓存读取单价(/1M token)',
+    en: 'Cache read cost (per 1M tokens)',
   },
   'supplier.model.form.cost.cacheWrite': {
-    zh: '缓存写入单价(/token)',
-    en: 'Cache creation cost (per token)',
+    zh: '缓存写入单价(/1M token)',
+    en: 'Cache creation cost (per 1M tokens)',
   },
 
   'supplier.model.form.flag.useInPassThrough': {
     zh: '透传模式',
     en: 'Pass-through',
-  },
-  'supplier.model.form.flag.useLitellmProxy': {
-    zh: '使用 LiteLLM 代理',
-    en: 'Use LiteLLM proxy',
   },
   'supplier.model.form.flag.useChatCompletionsApi': {
     zh: '使用 chat completions 接口',

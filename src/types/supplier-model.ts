@@ -30,3 +30,34 @@ export const PROVIDER_MODEL_SORT_FIELDS: ProviderModelSortField[] = ['NAME', 'ST
 // names like `gpt-4o-mini` and `DeepSeek-V3.1`.)
 export const MODEL_NAME_PATTERN = /^[A-Za-z0-9.-]+$/
 export const MODEL_NAME_PATTERN_HINT = 'supplier.model.nodeId.hint' // i18n key
+
+// Predefined LLM providers selectable in the supplier-model form.
+// `custom` is the "user-typed arbitrary string" branch — when picked, the
+// form shows a free-text input and disables the apiBase auto-fill.
+export const PROVIDER_OPTIONS = [
+  'custom',
+  'deepseek',
+  'minimax',
+  'moonshot',
+  'openrouter',
+  'openai',
+  'anthropic',
+] as const
+
+export type ProviderOption = (typeof PROVIDER_OPTIONS)[number]
+
+// Default apiBase per predefined provider. Mirrors LiteLLM's known defaults
+// at the time of writing; users can still override in the form.
+export const PROVIDER_DEFAULT_API_BASE: Record<ProviderOption, string> = {
+  custom: '',
+  deepseek: 'https://api.deepseek.com/v1',
+  minimax: 'https://api.minimaxi.com/v1',
+  moonshot: 'https://api.moonshot.cn/v1',
+  openrouter: 'https://openrouter.ai/api/v1',
+  openai: 'https://api.openai.com/v1',
+  anthropic: 'https://api.anthropic.com',
+}
+
+// Sentinel value for the "user typed a custom provider" branch. Mirrors
+// the MODE_CUSTOM pattern in SupplierModelFormModal — see that file.
+export const PROVIDER_CUSTOM = '__custom__'

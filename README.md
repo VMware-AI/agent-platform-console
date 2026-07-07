@@ -159,7 +159,7 @@ Frontend console for the **Agent Management Platform** — a unified interface f
 ### Features
 
 - 🤖 **Agent Center** — agent list, config (knowledge grounding), marketplace (subscribe / deploy)
-- 🌐 **Model Gateway** — model routing, virtual keys, rate-limiting policies
+- 🌐 **Model Gateway** — model routing, virtual keys
 - 📊 **Observability** — metering, real-time monitoring, request logs, audit logs
 - ⚙️ **Platform Management** — resource pools, model gateways, users & roles
 - 👤 **Profile** — identity, last login, connection status, created at, enabled; change password

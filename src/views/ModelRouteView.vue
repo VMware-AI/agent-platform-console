@@ -113,7 +113,6 @@ const pageSize = ref<PageSize>(10)
 const currentPage = ref(1)
 const formOpen = ref(false)
 const editingRoute = ref<ModelRouteNode | null>(null)
-const hintVisible = ref(true)
 const saving = ref(false)
 const pendingDeleteIds = ref<string[]>([])
 const strategyMenuAnchor = ref<HTMLElement | null>(null)
@@ -231,10 +230,6 @@ function closeForm() {
   if (saving.value) return
   formOpen.value = false
   editingRoute.value = null
-}
-
-function closeHint() {
-  hintVisible.value = false
 }
 
 async function submitRoute(
@@ -506,19 +501,6 @@ function goToPage(page: number) {
       <h1 cds-text="title" class="heading">{{ locale.t('gatewayModel.title') }}</h1>
       <p cds-text="body" class="desc muted">{{ locale.t('gatewayModel.description') }}</p>
     </header>
-
-    <div v-if="hintVisible" class="info-banner" role="note">
-      <cds-icon class="info-banner-icon" shape="info-standard" size="md" aria-hidden="true"></cds-icon>
-      <span class="info-banner-text">{{ locale.t('gatewayModel.alert.routeNameHint') }}</span>
-      <button
-        type="button"
-        class="info-banner-close"
-        :aria-label="locale.t('common.close')"
-        @click="closeHint"
-      >
-        <cds-icon shape="times" size="sm" aria-hidden="true"></cds-icon>
-      </button>
-    </div>
 
     <div class="toolbar">
       <cds-button v-if="auth.role === 'admin'" action="outline" status="primary" @click="openCreate">
@@ -1117,51 +1099,6 @@ function goToPage(page: number) {
 }
 .page-head {
   flex: 0 0 auto;
-}
-/* Self-rolled info banner — replaced <cds-alert> because the cds-alert
-   shadow-DOM styles do not render reliably in this app's @cds/core
-   version. Visual mirrors the CDS docs example: 1px info border, 4px
-   radius, soft info tint, icon + text + close button. */
-.info-banner {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  border: 1px solid var(--cds-alias-status-info, #0079ad);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--cds-alias-status-info, #0079ad) 12%, transparent);
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 13px;
-  line-height: 1.35;
-}
-.info-banner-icon {
-  flex: 0 0 auto;
-  color: var(--cds-alias-status-info, #0079ad);
-}
-.info-banner-text {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.info-banner-close {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px;
-  margin: 0;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-.info-banner-close:hover {
-  background: color-mix(in srgb, var(--cds-alias-status-info, #0079ad) 18%, transparent);
-}
-.info-banner-close:focus-visible {
-  outline: 2px solid var(--cds-alias-status-info, #0079ad);
-  outline-offset: 1px;
 }
 .heading {
   margin: 0;

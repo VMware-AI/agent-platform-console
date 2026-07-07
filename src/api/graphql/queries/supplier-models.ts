@@ -42,7 +42,6 @@ const PROVIDER_MODEL_FIELDS = gql`
         maxBudget
         budgetDuration
         useInPassThrough
-        useLitellmProxy
         useChatCompletionsApi
         mergeReasoningContentInChoices
         tags
@@ -125,7 +124,6 @@ export const ADD_PROVIDER_MODEL_SPEC = gql`
           maxBudget
           budgetDuration
           useInPassThrough
-          useLitellmProxy
           useChatCompletionsApi
           mergeReasoningContentInChoices
           tags
@@ -166,7 +164,6 @@ export const UPDATE_PROVIDER_MODEL_SPEC = gql`
           maxBudget
           budgetDuration
           useInPassThrough
-          useLitellmProxy
           useChatCompletionsApi
           mergeReasoningContentInChoices
           tags
@@ -247,6 +244,22 @@ export const TEST_PROVIDER_CONNECTION = gql`
   }
 `
 
+// Per-spec upstream probe. Talks to the upstream LLM provider with the
+// spec's apiBase + apiKey (both plaintext on the wire, never persisted
+// by the resolver — see deploy/result_k9nGw6.md) and returns the
+// upstream /v1/models list so the user can pick a real model name
+// instead of typing blindly.
+export const TEST_PRIVATE_MODEL_SPEC_CONNECTION = gql`
+  mutation TestPrivateModelSpecConnection($input: TestPrivateModelSpecConnectionInput!) {
+    testPrivateModelSpecConnection(input: $input) {
+      success
+      message
+      modelList
+      testedAt
+    }
+  }
+`
+
 export const REFRESH_PROVIDER_MODEL_STATUS = gql`
   mutation RefreshProviderModelStatus($id: ID!) {
     refreshProviderModelStatus(id: $id) {
@@ -322,7 +335,6 @@ export interface LitellmParams {
   maxBudget: number | null
   budgetDuration: string | null
   useInPassThrough: boolean
-  useLitellmProxy: boolean
   useChatCompletionsApi: boolean
   mergeReasoningContentInChoices: boolean
   tags: string[]
@@ -380,7 +392,6 @@ export interface LitellmParamsInput {
   maxBudget?: number | null
   budgetDuration?: string | null
   useInPassThrough?: boolean | null
-  useLitellmProxy?: boolean | null
   useChatCompletionsApi?: boolean | null
   mergeReasoningContentInChoices?: boolean | null
   tags?: string[] | null
@@ -388,6 +399,12 @@ export interface LitellmParamsInput {
   outputCostPerToken?: number | null
   cacheReadInputTokenCost?: number | null
   cacheCreationInputTokenCost?: number | null
+  // Per-spec API key default limits. Backend dropped the row-level
+  // CreateProviderModelInput.defaultApiKey{Tpm,Rpm}Limit fields and now
+  // expects both limits to be carried on every spec's litellmParams so
+  // each deployment can declare its own defaults.
+  defaultApiKeyTpmLimit?: number | null
+  defaultApiKeyRpmLimit?: number | null
 }
 
 export interface ModelInfoInput {
@@ -405,8 +422,6 @@ export interface CreateProviderModelInput {
   name: string
   modelGateway: string
   modelSpecs: ModelSpecInput[]
-  defaultApiKeyTpmLimit?: number | null
-  defaultApiKeyRpmLimit?: number | null
 }
 
 export interface UpdateProviderModelInput {
@@ -483,6 +498,22 @@ export interface TestProviderConnectionVars {
 }
 export interface TestProviderConnectionResult {
   testProviderConnection: ProviderModelStatus
+}
+export interface PrivateModelSpecTestResult {
+  success: boolean
+  message: string
+  modelList: string[]
+  testedAt: string
+}
+export interface TestPrivateModelSpecConnectionInput {
+  apiBase: string
+  apiKey: string
+}
+export interface TestPrivateModelSpecConnectionVars {
+  input: TestPrivateModelSpecConnectionInput
+}
+export interface TestPrivateModelSpecConnectionResult {
+  testPrivateModelSpecConnection: PrivateModelSpecTestResult
 }
 export interface RefreshProviderModelStatusVars {
   id: string
