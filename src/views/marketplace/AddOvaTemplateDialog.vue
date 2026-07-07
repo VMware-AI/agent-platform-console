@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /* eslint-disable */
- 
 import { computed, ref, watch } from 'vue'
+import { useLocaleStore } from '@/stores/locale'
 import { useQuery } from '@vue/apollo-composable'
 import { VM_TEMPLATES_QUERY } from '@/api/graphql/queries/vsphere'
 import type { AgentType } from '@/types/agents'
@@ -30,6 +30,7 @@ const scenariosText = ref('')
 const skillsText = ref('')
 const attempted = ref(false)
 const customMode = ref(false)
+const locale = useLocaleStore()
 
 watch(
   () => props.open,
