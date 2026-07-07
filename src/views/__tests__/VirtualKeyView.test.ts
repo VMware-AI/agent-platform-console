@@ -12,7 +12,7 @@
  *   - revoke  → REVOKE_VIRTUAL_KEY     (delete confirm via ConfirmDialog, teleported
  *               → `.confirm-backdrop`); skips already-revoked keys.
  *
- * Mocking strategy (mirrors RateLimitPolicyView.test.ts):
+ * Mocking strategy (mirrors SupplierModelView.test.ts):
  *   - `@vue/apollo-composable`'s `useQuery` is mocked. The view fires FOUR queries
  *     (keys / users / agents / policies); we route each to its own controllable
  *     slot by the gql operation name so every list/selector state is deterministic.
@@ -56,7 +56,7 @@ function makeSlot(): QuerySlot {
 let keysSlot: QuerySlot
 let usersSlot: QuerySlot
 let agentsSlot: QuerySlot
-let policiesSlot: QuerySlot
+let agentsSlot: QuerySlot
 
 // Resolve the gql OperationDefinition name. Some documents interpolate their
 // fragment BEFORE the operation (e.g. USERS_QUERY), so definitions[0] may be a
@@ -77,9 +77,7 @@ vi.mock('@vue/apollo-composable', () => ({
         ? usersSlot
         : name === 'Agents'
           ? agentsSlot
-          : name === 'RateLimitPolicies'
-            ? policiesSlot
-            : keysSlot
+          : keysSlot
     return {
       result: slot.result,
       loading: slot.loading,
@@ -117,7 +115,6 @@ function makeNode(over: Partial<VirtualKeyNode> = {}): VirtualKeyNode {
     alias: 'Primary Key',
     userId: 'u-1',
     agentId: 'a-1',
-    rateLimitPolicyId: 'p-1',
     status: 'active',
     expiresAt: null,
     createdAt: '2026-01-01T08:30:00Z',
@@ -137,7 +134,6 @@ const KEY_REVOKED = makeNode({
   alias: 'Gamma Key',
   status: 'revoked',
   agentId: null,
-  rateLimitPolicyId: null,
 })
 
 const mountConfig = {
@@ -197,8 +193,7 @@ beforeEach(() => {
   keysSlot = makeSlot()
   usersSlot = makeSlot()
   agentsSlot = makeSlot()
-  policiesSlot = makeSlot()
-  // Selector + policy-name resolution data the view reads on render.
+  // Selector + agent-name resolution data the view reads on render.
   usersSlot.result.value = {
     users: { nodes: [{ id: 'u-1', username: 'alice', displayName: 'Alice', email: 'a@x.io' }] },
   }
@@ -209,9 +204,6 @@ beforeEach(() => {
         { id: 'a-2', name: 'Agent Two' },
       ],
     },
-  }
-  policiesSlot.result.value = {
-    rateLimitPolicies: [{ id: 'p-1', name: 'Standard Policy' }],
   }
   mutateMock.mockReset()
   // Default: route each mutation to a success shape by operation name.
@@ -278,8 +270,6 @@ describe('VirtualKeyView — list states', () => {
     expect(first.textContent).toContain(locale.t('virtualKey.status.enabled'))
     // agentId resolved to the agent's display name via the agents query.
     expect(first.textContent).toContain('Agent One')
-    // rateLimitPolicyId resolved to the policy's name.
-    expect(first.textContent).toContain('Standard Policy')
 
     const second = rows()[1]
     expect(second.textContent).toContain('Beta Key')

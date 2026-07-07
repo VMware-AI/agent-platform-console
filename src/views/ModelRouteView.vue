@@ -9,12 +9,7 @@ import { useLocaleStore } from '@/stores/locale'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
-import type {
-  ModelRoute,
-  ModelRouteDraft,
-  ModelRouteGatewayOption,
-  ModelRouteStrategy,
-} from '@/types/model-route'
+import type { ModelRouteGatewayOption, ModelRouteStrategy } from '@/types/model-route'
 import { MODEL_ROUTE_STRATEGIES } from '@/types/model-route'
 import {
   MODEL_ROUTES_QUERY,
@@ -22,6 +17,7 @@ import {
   UPDATE_MODEL_ROUTE,
   SET_MODEL_ROUTE_ENABLED,
   DELETE_MODEL_ROUTE,
+  SYNC_ROUTER_SETTINGS,
   type ModelRoutesResult,
   type ModelRouteNode,
   type CreateModelRouteResult,
@@ -32,41 +28,25 @@ import {
   type SetModelRouteEnabledVars,
   type DeleteModelRouteResult,
   type DeleteModelRouteVars,
+  type SyncRouterSettingsResult,
 } from '@/api/graphql/queries/model-routes'
 import { MODEL_GATEWAYS_QUERY } from '@/api/graphql/queries/model-gateways'
+import {
+  PROVIDER_MODELS_QUERY,
+  type ProviderModelInfoResult,
+  type ProviderModelNode,
+} from '@/api/graphql/queries/supplier-models'
 import '@/components/icons'
 
 const locale = useLocaleStore()
 const auth = useAuthStore()
 const toast = useToast()
 
-// The backend denormalizes the gateway onto each route as `backendGatewayId` +
-// `gatewayName`; the UI models them as `gatewayId` + `gatewayName`, and treats
-// `uiStrategy` as the row's `strategy`.
-function toUiRoute(node: ModelRouteNode): ModelRoute {
-  return {
-    id: node.id,
-    name: node.name,
-    gatewayId: node.backendGatewayId ?? '',
-    gatewayName: node.gatewayName,
-    strategy: node.uiStrategy,
-    supportedModels: node.supportedModels,
-    enabled: node.enabled,
-    createdAt: node.createdAt,
-    updatedAt: node.updatedAt,
-  }
-}
-
-// The form draft maps back to the backend's create/update input shape.
-function toRouteInput(draft: ModelRouteDraft) {
-  return {
-    name: draft.name,
-    backendGatewayId: draft.gatewayId,
-    gatewayName: draft.gatewayName,
-    supportedModels: draft.supportedModels,
-    uiStrategy: draft.strategy,
-    enabled: draft.enabled,
-  }
+// We use ModelRouteNode directly (no toUiRoute adapter) — the GraphQL
+// shape now matches what the table + form need. The form still consumes
+// a `ModelRouteGatewayOption[]` for the picker; the rest is the raw node.
+function toRoute(node: ModelRouteNode): ModelRouteNode {
+  return node
 }
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const
@@ -78,7 +58,20 @@ type SortDirection = 'ASC' | 'DESC'
 type RouteFilterKey = RouteSortField
 
 const { result, loading, refetch } = useQuery<ModelRoutesResult>(MODEL_ROUTES_QUERY)
-const routes = computed<ModelRoute[]>(() => (result.value?.modelRoutes ?? []).map(toUiRoute))
+const routes = computed<ModelRouteNode[]>(() => (result.value?.modelRoutes ?? []).map(toRoute))
+
+// Provider models (供应商模型) — feed the M2 form's shuttle candidate list.
+// New API: ProviderModelInfo (paged). The shuttle needs `id / name /
+// provider / status` shape; provider now derives from the first spec's
+// customLlmProvider (top-level `provider` is gone), and we no longer
+// filter by `enabled` (top-level `enabled` is also gone).
+const { result: providerResult } = useQuery<ProviderModelInfoResult>(
+  PROVIDER_MODELS_QUERY,
+  { page: { limit: 1000, offset: 0 } },
+)
+const providerModels = computed<ProviderModelNode[]>(
+  () => providerResult.value?.providerModelInfo?.data ?? [],
+)
 
 // Gateway picker options come from the real model-gateway list (so a route can be
 // created even before any route references a gateway).
@@ -93,15 +86,37 @@ const GATEWAYS = computed<ModelRouteGatewayOption[]>(() =>
   })),
 )
 
+// Shuttle candidates: the form's left column. We pass the full ProviderModel
+// shape (ModelRouteFormModal's SlotItem is structural; the form only reads
+// id / name / provider / status). The form filters further by
+// !selectedIds internally.
+const shuttleCandidates = computed(() =>
+  providerModels.value.map((m) => ({
+    id: m.id,
+    name: m.name,
+    provider: m.modelSpecs[0]?.litellmParams.customLlmProvider ?? '—',
+    status: m.status,
+    gatewayName: m.modelGateway?.name,
+    specCount: m.modelSpecs.length,
+  })),
+)
+
+// allRoutesForFallback — every route in the system is a candidate to be
+// a fallback for any other route. The form filters out the current route
+// itself (a route can't fall back to its own name).
+const allRoutesForFallback = computed(() =>
+  routes.value.map((r) => ({ id: r.id, name: r.name })),
+)
+
 const selectedIds = ref<Set<string>>(new Set())
 const pageSize = ref<PageSize>(10)
 const currentPage = ref(1)
 const formOpen = ref(false)
-const editingRoute = ref<ModelRoute | null>(null)
+const editingRoute = ref<ModelRouteNode | null>(null)
 const saving = ref(false)
 const pendingDeleteIds = ref<string[]>([])
 const strategyMenuAnchor = ref<HTMLElement | null>(null)
-const strategyMenuTarget = ref<ModelRoute | null>(null)
+const strategyMenuTarget = ref<ModelRouteNode | null>(null)
 const sortField = ref<RouteSortField | null>(null)
 const sortDirection = ref<SortDirection>('ASC')
 const nameFilter = ref('')
@@ -117,8 +132,8 @@ const filteredRoutes = computed(() => {
   const modelsKeyword = modelsFilter.value.trim().toLocaleLowerCase()
   const filtered = routes.value.filter((route) => {
     if (nameKeyword && !route.name.toLocaleLowerCase().includes(nameKeyword)) return false
-    if (gatewayFilter.value !== 'ALL' && route.gatewayId !== gatewayFilter.value) return false
-    if (strategyFilter.value !== 'ALL' && route.strategy !== strategyFilter.value) return false
+    if (gatewayFilter.value !== 'ALL' && route.backendGatewayId !== gatewayFilter.value) return false
+    if (strategyFilter.value !== 'ALL' && route.uiStrategy !== strategyFilter.value) return false
     if (
       modelsKeyword &&
       !route.supportedModels.some((model) => model.toLocaleLowerCase().includes(modelsKeyword))
@@ -133,7 +148,7 @@ const filteredRoutes = computed(() => {
   if (!sortField.value) return filtered
   const direction = sortDirection.value === 'ASC' ? 1 : -1
   return [...filtered].sort((left, right) => {
-    const valueFor = (route: ModelRoute): string | number => {
+    const valueFor = (route: ModelRouteNode): string | number => {
       if (sortField.value === 'NAME') return route.name
       if (sortField.value === 'GATEWAY') return route.gatewayName
       if (sortField.value === 'STRATEGY') return route.strategy
@@ -165,24 +180,24 @@ const summaryText = computed(() => {
   const start = totalCount.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1
   const end = Math.min(currentPage.value * pageSize.value, totalCount.value)
   return locale
-    .t('modelRoute.pagination.summary')
+    .t('gatewayModel.pagination.summary')
     .replace('{start}', String(start))
     .replace('{end}', String(end))
     .replace('{total}', String(totalCount.value))
 })
 const deleteDialogTitle = computed(() =>
   pendingDeleteIds.value.length > 1
-    ? locale.t('modelRoute.confirm.batchDeleteTitle')
-    : locale.t('modelRoute.confirm.deleteTitle'),
+    ? locale.t('gatewayModel.confirm.batchDeleteTitle')
+    : locale.t('gatewayModel.confirm.deleteTitle'),
 )
 const deleteDialogBody = computed(() => {
   if (pendingDeleteIds.value.length > 1) {
     return locale
-      .t('modelRoute.confirm.batchDeleteBody')
+      .t('gatewayModel.confirm.batchDeleteBody')
       .replace('{count}', String(pendingDeleteIds.value.length))
   }
   const target = routes.value.find((route) => route.id === pendingDeleteIds.value[0])
-  return locale.t('modelRoute.confirm.deleteBody').replace('{name}', target?.name ?? '')
+  return locale.t('gatewayModel.confirm.deleteBody').replace('{name}', target?.name ?? '')
 })
 
 function toggleSelect(id: string, checked: boolean) {
@@ -206,7 +221,7 @@ function openCreate() {
   formOpen.value = true
 }
 
-function openEdit(route: ModelRoute) {
+function openEdit(route: ModelRouteNode) {
   editingRoute.value = route
   formOpen.value = true
 }
@@ -217,7 +232,9 @@ function closeForm() {
   editingRoute.value = null
 }
 
-async function submitRoute(draft: ModelRouteDraft) {
+async function submitRoute(
+  draft: import('@/components/ModelRouteFormModal.vue').ModelRouteFormDraft,
+) {
   if (saving.value) return
   const editing = editingRoute.value
   saving.value = true
@@ -225,44 +242,44 @@ async function submitRoute(draft: ModelRouteDraft) {
     if (editing) {
       await apolloClient.mutate<UpdateModelRouteResult, UpdateModelRouteVars>({
         mutation: UPDATE_MODEL_ROUTE,
-        variables: { id: editing.id, input: toRouteInput(draft) },
+        variables: { id: editing.id, input: draft },
       })
-      toast.success(locale.t('modelRoute.toast.updated'))
+      toast.success(locale.t('gatewayModel.toast.updated'))
     } else {
       await apolloClient.mutate<CreateModelRouteResult, CreateModelRouteVars>({
         mutation: CREATE_MODEL_ROUTE,
-        variables: { input: toRouteInput(draft) },
+        variables: { input: draft },
       })
       currentPage.value = 1
-      toast.success(locale.t('modelRoute.toast.created'))
+      toast.success(locale.t('gatewayModel.toast.created'))
     }
     formOpen.value = false
     editingRoute.value = null
     await refetch()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, locale.t('modelRoute.toast.actionFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('gatewayModel.toast.actionFailed')))
   } finally {
     saving.value = false
   }
 }
 
-async function changeStrategy(route: ModelRoute, value: string) {
+async function changeStrategy(route: ModelRouteNode, value: string) {
   const strategy = value as ModelRouteStrategy
   if (!MODEL_ROUTE_STRATEGIES.includes(strategy)) return
-  if (strategy === route.strategy) return
+  if (strategy === route.uiStrategy) return
   try {
     await apolloClient.mutate<UpdateModelRouteResult, UpdateModelRouteVars>({
       mutation: UPDATE_MODEL_ROUTE,
       variables: { id: route.id, input: { uiStrategy: strategy } },
     })
-    toast.success(locale.t('modelRoute.toast.strategyUpdated').replace('{name}', route.name))
+    toast.success(locale.t('gatewayModel.toast.strategyUpdated').replace('{name}', route.name))
     await refetch()
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, locale.t('modelRoute.toast.actionFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('gatewayModel.toast.actionFailed')))
   }
 }
 
-function openStrategyMenu(route: ModelRoute, event: MouseEvent) {
+function openStrategyMenu(route: ModelRouteNode, event: MouseEvent) {
   closeFilterMenu()
   strategyMenuTarget.value = route
   strategyMenuAnchor.value = event.currentTarget as HTMLElement
@@ -369,17 +386,17 @@ async function setEnabled(ids: string[], enabled: boolean) {
   if (ok > 0) {
     toast.success(
       locale
-        .t(enabled ? 'modelRoute.toast.enabled' : 'modelRoute.toast.disabled')
+        .t(enabled ? 'gatewayModel.toast.enabled' : 'gatewayModel.toast.disabled')
         .replace('{count}', String(ok)),
     )
   }
   if (failure) {
-    toast.error(graphqlErrorMessage(failure.reason, locale.t('modelRoute.toast.actionFailed')))
+    toast.error(graphqlErrorMessage(failure.reason, locale.t('gatewayModel.toast.actionFailed')))
   }
   await refetch()
 }
 
-function toggleEnabled(route: ModelRoute) {
+function toggleEnabled(route: ModelRouteNode) {
   void setEnabled([route.id], !route.enabled)
 }
 
@@ -396,7 +413,7 @@ function performBatch(action: BatchAction, close: () => void) {
   })
 }
 
-function requestDelete(route: ModelRoute) {
+function requestDelete(route: ModelRouteNode) {
   pendingDeleteIds.value = [route.id]
 }
 
@@ -421,27 +438,47 @@ async function confirmDelete() {
     (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected',
   )
   if (deletedIds.length > 0) {
-    toast.success(locale.t('modelRoute.toast.deleted').replace('{count}', String(deletedIds.length)))
+    toast.success(locale.t('gatewayModel.toast.deleted').replace('{count}', String(deletedIds.length)))
   }
   if (failures.length > 0) {
-    toast.error(graphqlErrorMessage(failures[0].reason, locale.t('modelRoute.toast.actionFailed')))
+    toast.error(graphqlErrorMessage(failures[0].reason, locale.t('gatewayModel.toast.actionFailed')))
   }
   selectedIds.value = new Set([...selectedIds.value].filter((id) => !deletedIds.includes(id)))
   await refetch()
   if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
 }
 
-function manageGateway(route: ModelRoute) {
-  toast.info(locale.t('modelRoute.toast.manageGateway').replace('{name}', route.gatewayName))
+function manageGateway(route: ModelRouteNode) {
+  toast.info(locale.t('gatewayModel.toast.manageGateway').replace('{name}', route.gatewayName))
 }
 
 async function refreshRoutes() {
   if (loading.value) return
   try {
     await refetch()
-    toast.success(locale.t('modelRoute.toast.refreshed'))
+    toast.success(locale.t('gatewayModel.toast.refreshed'))
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, locale.t('modelRoute.toast.actionFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('gatewayModel.toast.actionFailed')))
+  }
+}
+
+// syncRouterSettings — atomic 全量聚合覆盖刷新 (design doc §3.2). Re-aggregates
+// every active route + tier and POSTs /config/update. Per-route save already
+// triggers this server-side; this manual button is for impatient operators
+// or transient /config/update failure recovery.
+async function syncRouterSettings() {
+  if (loading.value) return
+  try {
+    const result = await apolloClient.mutate<SyncRouterSettingsResult>({
+      mutation: SYNC_ROUTER_SETTINGS,
+    })
+    if (result.data?.syncRouterSettings) {
+      toast.success(locale.t('gatewayModel.toast.syncSuccess'))
+    } else {
+      toast.error(locale.t('gatewayModel.toast.syncFailed'))
+    }
+  } catch (error) {
+    toast.error(graphqlErrorMessage(error, locale.t('gatewayModel.toast.syncFailed')))
   }
 }
 
@@ -461,14 +498,14 @@ function goToPage(page: number) {
 <template>
   <section class="route-page">
     <header class="page-head">
-      <h1 cds-text="title" class="heading">{{ locale.t('modelRoute.title') }}</h1>
-      <p cds-text="body" class="desc muted">{{ locale.t('modelRoute.description') }}</p>
+      <h1 cds-text="title" class="heading">{{ locale.t('gatewayModel.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('gatewayModel.description') }}</p>
     </header>
 
     <div class="toolbar">
       <cds-button v-if="auth.role === 'admin'" action="outline" status="primary" @click="openCreate">
         <cds-icon shape="plus-circle" size="sm" aria-hidden="true"></cds-icon>
-        {{ locale.t('modelRoute.action.create') }}
+        {{ locale.t('gatewayModel.action.create') }}
       </cds-button>
 
       <AppDropdown v-if="auth.role === 'admin'" align="start" :disabled="selectedCount === 0">
@@ -476,35 +513,46 @@ function goToPage(page: number) {
           <cds-button
             action="outline"
             :disabled="selectedCount === 0"
-            :title="selectedCount === 0 ? locale.t('modelRoute.batch.disabled') : undefined"
+            :title="selectedCount === 0 ? locale.t('gatewayModel.batch.disabled') : undefined"
           >
             <cds-icon shape="cog" size="sm" aria-hidden="true"></cds-icon>
-            {{ locale.t('modelRoute.action.batch') }}
+            {{ locale.t('gatewayModel.action.batch') }}
             <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
           </cds-button>
         </template>
         <template #default="{ close }">
           <button class="menu-option" type="button" @click="performBatch('enable', close)">
             <cds-icon shape="check-circle" size="sm" aria-hidden="true"></cds-icon>
-            {{ locale.t('modelRoute.batch.enable') }}
+            {{ locale.t('gatewayModel.batch.enable') }}
           </button>
           <button class="menu-option" type="button" @click="performBatch('disable', close)">
             <cds-icon shape="ban" size="sm" aria-hidden="true"></cds-icon>
-            {{ locale.t('modelRoute.batch.disable') }}
+            {{ locale.t('gatewayModel.batch.disable') }}
           </button>
           <button class="menu-option danger" type="button" @click="performBatch('delete', close)">
             <cds-icon shape="trash" size="sm" aria-hidden="true"></cds-icon>
-            {{ locale.t('modelRoute.batch.delete') }}
+            {{ locale.t('gatewayModel.batch.delete') }}
           </button>
         </template>
       </AppDropdown>
+
+      <cds-button
+        v-if="auth.role === 'admin'"
+        action="outline"
+        :disabled="loading"
+        :title="locale.t('gatewayModel.action.sync')"
+        @click="syncRouterSettings"
+      >
+        <cds-icon shape="sync" size="sm" aria-hidden="true"></cds-icon>
+        {{ locale.t('gatewayModel.action.sync') }}
+      </cds-button>
 
       <button
         type="button"
         class="refresh-button"
         :disabled="loading"
-        :aria-label="locale.t('modelRoute.action.refresh')"
-        :title="locale.t('modelRoute.action.refresh')"
+        :aria-label="locale.t('gatewayModel.action.refresh')"
+        :title="locale.t('gatewayModel.action.refresh')"
         @click="refreshRoutes"
       >
         <cds-icon
@@ -521,24 +569,24 @@ function goToPage(page: number) {
       column-layout="flex"
       role="grid"
       scroll-lock
-      :aria-label="locale.t('modelRoute.table.label')"
+      :aria-label="locale.t('gatewayModel.table.label')"
     >
       <cds-grid-column type="action" :resizable="false">
         <input
           type="checkbox"
           class="app-checkbox"
           :checked="allVisibleSelected"
-          :aria-label="locale.t('modelRoute.col.selectAll')"
+          :aria-label="locale.t('gatewayModel.col.selectAll')"
           @change="toggleSelectAll(($event.target as HTMLInputElement).checked)"
         />
       </cds-grid-column>
       <cds-grid-column width="18%">
         <div class="column-head">
-          <span>{{ locale.t('modelRoute.col.name') }}</span>
+          <span>{{ locale.t('gatewayModel.col.name') }}</span>
           <span class="column-head-actions">
             <cds-button-action
               :aria-label="
-                locale.t('modelRoute.sort').replace('{column}', locale.t('modelRoute.col.name'))
+                locale.t('gatewayModel.sort').replace('{column}', locale.t('gatewayModel.col.name'))
               "
               @click="toggleSort('NAME')"
             >
@@ -560,7 +608,7 @@ function goToPage(page: number) {
               shape="filter"
               :expanded="hasFilter('NAME')"
               :aria-label="
-                locale.t('modelRoute.filter').replace('{column}', locale.t('modelRoute.col.name'))
+                locale.t('gatewayModel.filter').replace('{column}', locale.t('gatewayModel.col.name'))
               "
               @click="(event: MouseEvent) => openFilterMenu('NAME', event)"
             ></cds-button-action>
@@ -569,13 +617,13 @@ function goToPage(page: number) {
       </cds-grid-column>
       <cds-grid-column width="18%">
         <div class="column-head">
-          <span>{{ locale.t('modelRoute.col.gateway') }}</span>
+          <span>{{ locale.t('gatewayModel.col.gateway') }}</span>
           <span class="column-head-actions">
             <cds-button-action
               :aria-label="
                 locale
-                  .t('modelRoute.sort')
-                  .replace('{column}', locale.t('modelRoute.col.gateway'))
+                  .t('gatewayModel.sort')
+                  .replace('{column}', locale.t('gatewayModel.col.gateway'))
               "
               @click="toggleSort('GATEWAY')"
             >
@@ -598,8 +646,8 @@ function goToPage(page: number) {
               :expanded="hasFilter('GATEWAY')"
               :aria-label="
                 locale
-                  .t('modelRoute.filter')
-                  .replace('{column}', locale.t('modelRoute.col.gateway'))
+                  .t('gatewayModel.filter')
+                  .replace('{column}', locale.t('gatewayModel.col.gateway'))
               "
               @click="(event: MouseEvent) => openFilterMenu('GATEWAY', event)"
             ></cds-button-action>
@@ -608,13 +656,13 @@ function goToPage(page: number) {
       </cds-grid-column>
       <cds-grid-column width="17%">
         <div class="column-head">
-          <span>{{ locale.t('modelRoute.col.strategy') }}</span>
+          <span>{{ locale.t('gatewayModel.col.strategy') }}</span>
           <span class="column-head-actions">
             <cds-button-action
               :aria-label="
                 locale
-                  .t('modelRoute.sort')
-                  .replace('{column}', locale.t('modelRoute.col.strategy'))
+                  .t('gatewayModel.sort')
+                  .replace('{column}', locale.t('gatewayModel.col.strategy'))
               "
               @click="toggleSort('STRATEGY')"
             >
@@ -637,8 +685,8 @@ function goToPage(page: number) {
               :expanded="hasFilter('STRATEGY')"
               :aria-label="
                 locale
-                  .t('modelRoute.filter')
-                  .replace('{column}', locale.t('modelRoute.col.strategy'))
+                  .t('gatewayModel.filter')
+                  .replace('{column}', locale.t('gatewayModel.col.strategy'))
               "
               @click="(event: MouseEvent) => openFilterMenu('STRATEGY', event)"
             ></cds-button-action>
@@ -647,11 +695,11 @@ function goToPage(page: number) {
       </cds-grid-column>
       <cds-grid-column width="20%">
         <div class="column-head">
-          <span>{{ locale.t('modelRoute.col.models') }}</span>
+          <span>{{ locale.t('gatewayModel.col.models') }}</span>
           <span class="column-head-actions">
             <cds-button-action
               :aria-label="
-                locale.t('modelRoute.sort').replace('{column}', locale.t('modelRoute.col.models'))
+                locale.t('gatewayModel.sort').replace('{column}', locale.t('gatewayModel.col.models'))
               "
               @click="toggleSort('MODELS')"
             >
@@ -674,8 +722,8 @@ function goToPage(page: number) {
               :expanded="hasFilter('MODELS')"
               :aria-label="
                 locale
-                  .t('modelRoute.filter')
-                  .replace('{column}', locale.t('modelRoute.col.models'))
+                  .t('gatewayModel.filter')
+                  .replace('{column}', locale.t('gatewayModel.col.models'))
               "
               @click="(event: MouseEvent) => openFilterMenu('MODELS', event)"
             ></cds-button-action>
@@ -684,11 +732,11 @@ function goToPage(page: number) {
       </cds-grid-column>
       <cds-grid-column width="9%">
         <div class="column-head">
-          <span>{{ locale.t('modelRoute.col.status') }}</span>
+          <span>{{ locale.t('gatewayModel.col.status') }}</span>
           <span class="column-head-actions">
             <cds-button-action
               :aria-label="
-                locale.t('modelRoute.sort').replace('{column}', locale.t('modelRoute.col.status'))
+                locale.t('gatewayModel.sort').replace('{column}', locale.t('gatewayModel.col.status'))
               "
               @click="toggleSort('STATUS')"
             >
@@ -711,15 +759,15 @@ function goToPage(page: number) {
               :expanded="hasFilter('STATUS')"
               :aria-label="
                 locale
-                  .t('modelRoute.filter')
-                  .replace('{column}', locale.t('modelRoute.col.status'))
+                  .t('gatewayModel.filter')
+                  .replace('{column}', locale.t('gatewayModel.col.status'))
               "
               @click="(event: MouseEvent) => openFilterMenu('STATUS', event)"
             ></cds-button-action>
           </span>
         </div>
       </cds-grid-column>
-      <cds-grid-column width="18%">{{ locale.t('modelRoute.col.actions') }}</cds-grid-column>
+      <cds-grid-column width="18%">{{ locale.t('gatewayModel.col.actions') }}</cds-grid-column>
 
       <cds-grid-row v-for="route in visibleRoutes" :key="route.id">
         <cds-grid-cell>
@@ -727,7 +775,7 @@ function goToPage(page: number) {
             type="checkbox"
             class="app-checkbox"
             :checked="selectedIds.has(route.id)"
-            :aria-label="locale.t('modelRoute.col.selectRoute').replace('{name}', route.name)"
+            :aria-label="locale.t('gatewayModel.col.selectRoute').replace('{name}', route.name)"
             @change="toggleSelect(route.id, ($event.target as HTMLInputElement).checked)"
           />
         </cds-grid-cell>
@@ -747,11 +795,11 @@ function goToPage(page: number) {
             aria-haspopup="menu"
             :aria-expanded="strategyMenuTarget?.id === route.id"
             :aria-label="
-              locale.t('modelRoute.action.changeStrategy').replace('{name}', route.name)
+              locale.t('gatewayModel.action.changeStrategy').replace('{name}', route.name)
             "
             @click="(event: MouseEvent) => openStrategyMenu(route, event)"
           >
-            <span>{{ locale.t(`modelRoute.strategy.${route.strategy}`) }}</span>
+            <span>{{ locale.t(`gatewayModel.strategy.${route.strategy}`) }}</span>
             <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
           </button>
         </cds-grid-cell>
@@ -773,7 +821,7 @@ function goToPage(page: number) {
               aria-hidden="true"
             ></cds-icon>
             {{
-              locale.t(route.enabled ? 'modelRoute.status.enabled' : 'modelRoute.status.disabled')
+              locale.t(route.enabled ? 'gatewayModel.status.enabled' : 'gatewayModel.status.disabled')
             }}
           </cds-badge>
         </cds-grid-cell>
@@ -784,43 +832,43 @@ function goToPage(page: number) {
               type="button"
               class="row-action"
               :title="
-                locale.t(route.enabled ? 'modelRoute.action.disable' : 'modelRoute.action.enable')
+                locale.t(route.enabled ? 'gatewayModel.action.disable' : 'gatewayModel.action.enable')
               "
               @click="toggleEnabled(route)"
             >
               <cds-icon :shape="route.enabled ? 'ban' : 'check-circle'" size="sm"></cds-icon>
               <span>{{
-                locale.t(route.enabled ? 'modelRoute.action.disable' : 'modelRoute.action.enable')
+                locale.t(route.enabled ? 'gatewayModel.action.disable' : 'gatewayModel.action.enable')
               }}</span>
             </button>
             <button
               v-if="auth.role === 'admin'"
               type="button"
               class="row-action"
-              :title="locale.t('modelRoute.action.edit')"
+              :title="locale.t('gatewayModel.action.edit')"
               @click="openEdit(route)"
             >
               <cds-icon shape="pencil" size="sm"></cds-icon>
-              <span>{{ locale.t('modelRoute.action.edit') }}</span>
+              <span>{{ locale.t('gatewayModel.action.edit') }}</span>
             </button>
             <button
               type="button"
               class="row-action"
-              :title="locale.t('modelRoute.action.manage')"
+              :title="locale.t('gatewayModel.action.manage')"
               @click="manageGateway(route)"
             >
               <cds-icon shape="cog" size="sm"></cds-icon>
-              <span>{{ locale.t('modelRoute.action.manage') }}</span>
+              <span>{{ locale.t('gatewayModel.action.manage') }}</span>
             </button>
             <button
               v-if="auth.role === 'admin'"
               type="button"
               class="row-action danger"
-              :title="locale.t('modelRoute.action.delete')"
+              :title="locale.t('gatewayModel.action.delete')"
               @click="requestDelete(route)"
             >
               <cds-icon shape="trash" size="sm"></cds-icon>
-              <span>{{ locale.t('modelRoute.action.delete') }}</span>
+              <span>{{ locale.t('gatewayModel.action.delete') }}</span>
             </button>
           </div>
         </cds-grid-cell>
@@ -828,22 +876,22 @@ function goToPage(page: number) {
 
       <cds-grid-placeholder v-if="visibleRoutes.length === 0">
         <cds-icon shape="forking" size="xl"></cds-icon>
-        <p cds-text="subsection">{{ locale.t('modelRoute.empty') }}</p>
+        <p cds-text="subsection">{{ locale.t('gatewayModel.empty') }}</p>
       </cds-grid-placeholder>
 
       <cds-grid-footer v-if="totalCount > 0">
         <span v-if="selectedCount > 0" class="selected-summary">
-          {{ locale.t('modelRoute.selected').replace('{count}', String(selectedCount)) }}
+          {{ locale.t('gatewayModel.selected').replace('{count}', String(selectedCount)) }}
         </span>
         <div class="pager">
           <label for="model-route-page-size">{{
-            locale.t('modelRoute.pagination.pageSize')
+            locale.t('gatewayModel.pagination.pageSize')
           }}</label>
           <cds-select control-width="shrink">
             <select
               id="model-route-page-size"
               :value="pageSize"
-              :aria-label="locale.t('modelRoute.pagination.pageSize')"
+              :aria-label="locale.t('gatewayModel.pagination.pageSize')"
               @change="onPageSizeChange"
             >
               <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
@@ -852,7 +900,7 @@ function goToPage(page: number) {
             </select>
           </cds-select>
           <span class="pager-summary">{{ summaryText }}</span>
-          <cds-pagination :aria-label="locale.t('modelRoute.pagination.label')">
+          <cds-pagination :aria-label="locale.t('gatewayModel.pagination.label')">
             <cds-pagination-button
               action="first"
               :disabled="currentPage <= 1"
@@ -905,14 +953,14 @@ function goToPage(page: number) {
           :key="strategy"
           type="button"
           class="strategy-menu-option"
-          :class="{ active: strategyMenuTarget.strategy === strategy }"
+          :class="{ active: strategyMenuTarget.uiStrategy === strategy }"
           role="menuitemradio"
-          :aria-checked="strategyMenuTarget.strategy === strategy"
+          :aria-checked="strategyMenuTarget.uiStrategy === strategy"
           @click="chooseStrategy(strategy)"
         >
-          <span>{{ locale.t(`modelRoute.strategy.${strategy}`) }}</span>
+          <span>{{ locale.t(`gatewayModel.strategy.${strategy}`) }}</span>
           <cds-icon
-            v-if="strategyMenuTarget.strategy === strategy"
+            v-if="strategyMenuTarget.uiStrategy === strategy"
             shape="check"
             size="sm"
             aria-hidden="true"
@@ -933,8 +981,8 @@ function goToPage(page: number) {
           <input
             type="text"
             :value="nameFilter"
-            :placeholder="locale.t('modelRoute.filter.namePlaceholder')"
-            :aria-label="locale.t('modelRoute.filter.namePlaceholder')"
+            :placeholder="locale.t('gatewayModel.filter.namePlaceholder')"
+            :aria-label="locale.t('gatewayModel.filter.namePlaceholder')"
             @input="setTextFilter('NAME', ($event.target as HTMLInputElement).value)"
           />
         </cds-input>
@@ -943,8 +991,8 @@ function goToPage(page: number) {
           <input
             type="text"
             :value="modelsFilter"
-            :placeholder="locale.t('modelRoute.filter.modelsPlaceholder')"
-            :aria-label="locale.t('modelRoute.filter.modelsPlaceholder')"
+            :placeholder="locale.t('gatewayModel.filter.modelsPlaceholder')"
+            :aria-label="locale.t('gatewayModel.filter.modelsPlaceholder')"
             @input="setTextFilter('MODELS', ($event.target as HTMLInputElement).value)"
           />
         </cds-input>
@@ -956,7 +1004,7 @@ function goToPage(page: number) {
             :class="{ active: gatewayFilter === 'ALL' }"
             @click="setGatewayFilter('ALL')"
           >
-            <span>{{ locale.t('modelRoute.filter.all') }}</span>
+            <span>{{ locale.t('gatewayModel.filter.all') }}</span>
             <cds-icon v-if="gatewayFilter === 'ALL'" shape="check" size="sm"></cds-icon>
           </button>
           <button
@@ -979,7 +1027,7 @@ function goToPage(page: number) {
             :class="{ active: strategyFilter === 'ALL' }"
             @click="setStrategyFilter('ALL')"
           >
-            <span>{{ locale.t('modelRoute.filter.all') }}</span>
+            <span>{{ locale.t('gatewayModel.filter.all') }}</span>
             <cds-icon v-if="strategyFilter === 'ALL'" shape="check" size="sm"></cds-icon>
           </button>
           <button
@@ -990,7 +1038,7 @@ function goToPage(page: number) {
             :class="{ active: strategyFilter === strategy }"
             @click="setStrategyFilter(strategy)"
           >
-            <span>{{ locale.t(`modelRoute.strategy.${strategy}`) }}</span>
+            <span>{{ locale.t(`gatewayModel.strategy.${strategy}`) }}</span>
             <cds-icon v-if="strategyFilter === strategy" shape="check" size="sm"></cds-icon>
           </button>
         </div>
@@ -1004,14 +1052,14 @@ function goToPage(page: number) {
             :class="{ active: statusFilter === status }"
             @click="setStatusFilter(status)"
           >
-            <span>{{ locale.t(`modelRoute.filter.status.${status}`) }}</span>
+            <span>{{ locale.t(`gatewayModel.filter.status.${status}`) }}</span>
             <cds-icon v-if="statusFilter === status" shape="check" size="sm"></cds-icon>
           </button>
         </div>
 
         <div v-if="hasFilter(filterMenuKey)" class="filter-footer">
           <cds-button action="outline" size="sm" @click="clearActiveFilter">
-            {{ locale.t('modelRoute.filter.clear') }}
+            {{ locale.t('gatewayModel.filter.clear') }}
           </cds-button>
         </div>
       </div>
@@ -1022,6 +1070,8 @@ function goToPage(page: number) {
       :open="formOpen"
       :route="editingRoute"
       :gateways="GATEWAYS"
+      :candidates="shuttleCandidates"
+      :all-routes="allRoutesForFallback"
       :saving="saving"
       @close="closeForm"
       @submit="submitRoute"

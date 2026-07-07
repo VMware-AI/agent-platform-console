@@ -58,11 +58,11 @@ const router = createRouter({
           component: () => import('@/views/VirtualKeyView.vue'),
           meta: { roles: ['admin'] },
         },
-        // 网关策略: rate-limit mutations are @hasPermission("route:manage") — admin only (tenant_admin removed).
+        // 供应商模型: mutations are @hasPermission("route:manage") — admin only (tenant_admin removed).
         {
-          path: 'model-gateway/policy',
-          name: 'mg.policy',
-          component: () => import('@/views/RateLimitPolicyView.vue'),
+          path: 'model-gateway/supplier',
+          name: 'mg.supplier',
+          component: () => import('@/views/SupplierModelView.vue'),
           meta: { roles: ['admin'] },
         },
 

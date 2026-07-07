@@ -59,6 +59,30 @@ export default defineConfig({
       '/query': {
         target: backendBaseUrl,
         changeOrigin: true,
+        // The backend's CSRF guard compares the Origin header's host against
+        // the request Host. `changeOrigin` rewrites the Host header (to the
+        // backend's host, e.g. 127.0.0.1:8080) but does NOT rewrite the Origin
+        // header — by default Origin passes through unchanged, so a browser
+        // loading the console from `http://127.0.0.1:5173` reaches the
+        // backend with Origin `http://127.0.0.1:5173` against Host
+        // `127.0.0.1:8080`, which fails both the allowlist check (default
+        // ALLOWED_ORIGINS is `http://localhost:5173`) and the sameOrigin
+        // string compare. Result: every POST returns 403 and the UI looks
+        // "dead" — mutations, logins, queries all silently fail.
+        //
+        // Rewrite Origin to the target so the CSRF guard sees a same-origin
+        // POST regardless of which hostname the dev opens the console on.
+        // Done via http-proxy's `configure` hook (runs on every proxied
+        // request, before the request hits the wire).
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            const target = new URL(backendBaseUrl)
+            proxyReq.setHeader(
+              'origin',
+              `${target.protocol}//${target.host}`,
+            )
+          })
+        },
       },
     },
   },

@@ -141,7 +141,13 @@ function onBackdropClick(e: MouseEvent) {
   -webkit-backdrop-filter: blur(2px);
   display: grid;
   place-items: center;
-  z-index: 1100;
+  /* Must sit above Clarity cds-modal's overlay (z-index: 1000000 per
+     @cds/core/internal-components/overlay) so the dialog can be triggered
+     from inside a cds-modal (e.g. destructive actions on the supplier
+     model editor) and still appear on top. Earlier 1100 worked when
+     confirm was only triggered from top-level list views, but is
+     layered under cds-modal when nested. */
+  z-index: 1100000;
   padding: 24px;
 }
 

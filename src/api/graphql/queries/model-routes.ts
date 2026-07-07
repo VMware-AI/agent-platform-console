@@ -16,8 +16,12 @@ const MODEL_ROUTE_FIELDS = gql`
     backendGatewayId
     gatewayName
     supportedModels
+    strategy
     uiStrategy
     enabled
+    fallbacks
+    contextWindowFallbacks
+    contentPolicyFallbacks
     createdAt
     updatedAt
   }
@@ -65,6 +69,38 @@ export const DELETE_MODEL_ROUTE = gql`
   }
 `
 
+// syncRouterSettings — atomic 全量聚合覆盖刷新 (design doc §3.2).
+// Re-aggregates every active ModelRoute + RouterTier and POSTs the full
+// router_settings payload to /config/update. The route-save resolver hooks
+// fire this automatically; this mutation is exposed so the console can
+// call it explicitly (e.g. "Sync Now" button after manual edits or a
+// transient /config/update failure recovery).
+export const SYNC_ROUTER_SETTINGS = gql`
+  mutation SyncRouterSettings {
+    syncRouterSettings
+  }
+`
+
+// LoadBalancingStrategy — LiteLLM's wire-level routing strategy (kebab-case
+// on the wire; rendered UPPER_SNAKE on this side by the GraphQL enum).
+// Distinct from `uiStrategy` (the friendly, gateway-agnostic console
+// strategy). Mapped to kebab-case in internal/gateway.ToLitellmRoutingStrategy
+// when the resolver POSTs /config/update.
+export type LoadBalancingStrategy =
+  | 'SIMPLE_SHUFFLE'
+  | 'LEAST_BUSY'
+  | 'LATENCY_BASED_ROUTING'
+  | 'USAGE_BASED_ROUTING_V2'
+  | 'COST_BASED_ROUTING'
+
+export const LOAD_BALANCING_STRATEGIES: LoadBalancingStrategy[] = [
+  'SIMPLE_SHUFFLE',
+  'LEAST_BUSY',
+  'LATENCY_BASED_ROUTING',
+  'USAGE_BASED_ROUTING_V2',
+  'COST_BASED_ROUTING',
+]
+
 export type ModelRouteStrategy = 'ROUND_ROBIN' | 'WEIGHTED_ROUND_ROBIN' | 'RANDOM'
 
 export interface ModelRouteNode {
@@ -73,8 +109,14 @@ export interface ModelRouteNode {
   backendGatewayId: string | null
   gatewayName: string
   supportedModels: string[]
+  strategy: LoadBalancingStrategy
   uiStrategy: ModelRouteStrategy
   enabled: boolean
+  // Fallback chains surfaced to litellm via /config/update (design doc §3.2).
+  // Each list is an ordered set of model_aliases (other routes' names).
+  fallbacks: string[]
+  contextWindowFallbacks: string[]
+  contentPolicyFallbacks: string[]
   createdAt: string
   updatedAt: string
 }
@@ -90,6 +132,9 @@ export interface CreateModelRouteInputVars {
   supportedModels?: string[] | null
   uiStrategy?: ModelRouteStrategy | null
   enabled?: boolean | null
+  fallbacks?: string[] | null
+  contextWindowFallbacks?: string[] | null
+  contentPolicyFallbacks?: string[] | null
 }
 
 export interface CreateModelRouteVars {
@@ -107,6 +152,9 @@ export interface UpdateModelRouteInputVars {
   supportedModels?: string[] | null
   uiStrategy?: ModelRouteStrategy | null
   enabled?: boolean | null
+  fallbacks?: string[] | null
+  contextWindowFallbacks?: string[] | null
+  contentPolicyFallbacks?: string[] | null
 }
 
 export interface UpdateModelRouteVars {
@@ -133,4 +181,8 @@ export interface DeleteModelRouteVars {
 
 export interface DeleteModelRouteResult {
   deleteModelRoute: boolean
+}
+
+export interface SyncRouterSettingsResult {
+  syncRouterSettings: boolean
 }

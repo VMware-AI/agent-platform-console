@@ -69,6 +69,8 @@ import {
   vmIcon,
   hostIcon,
   folderIcon,
+  connectIcon,
+  networkGlobeIcon,
 } from '@cds/core/icon'
 
 // Register once at module load. Idempotent — safe to import multiple times.
@@ -141,4 +143,6 @@ ClarityIcons.addIcons(
   vmIcon,
   hostIcon,
   folderIcon,
+  connectIcon,
+  networkGlobeIcon,
 )

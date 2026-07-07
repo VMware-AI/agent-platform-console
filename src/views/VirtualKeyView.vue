@@ -10,19 +10,16 @@ import { useLocaleStore } from '@/stores/locale'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
-import type {
-  VirtualKey,
-  VirtualKeyDraft,
-  VirtualKeyOption,
-  VirtualKeyStatus,
-} from '@/types/virtual-key'
+import type { VirtualKeyOption, VirtualKeyStatus } from '@/types/virtual-key'
 import {
   VIRTUAL_KEYS_QUERY,
+  GATEWAY_AVAILABLE_MODELS,
   ISSUE_VIRTUAL_KEY,
   REGENERATE_VIRTUAL_KEY,
   SET_VIRTUAL_KEY_ENABLED,
   REVOKE_VIRTUAL_KEY,
   type VirtualKeysResult,
+  type VirtualKeyNode,
   type IssueVirtualKeyResult,
   type IssueVirtualKeyVars,
   type RegenerateVirtualKeyResult,
@@ -31,13 +28,11 @@ import {
   type SetVirtualKeyEnabledVars,
   type RevokeVirtualKeyResult,
   type RevokeVirtualKeyVars,
+  type GatewayAvailableModelsResult,
+  type GatewayAvailableModelsVars,
 } from '@/api/graphql/queries/virtual-keys'
+import { MODEL_GATEWAYS_QUERY } from '@/api/graphql/queries/model-gateways'
 import { AGENTS_QUERY } from '@/api/graphql/queries/agents'
-import { USERS_QUERY } from '@/api/graphql/queries/users'
-import {
-  RATE_LIMIT_POLICIES_QUERY,
-  type RateLimitPoliciesResult,
-} from '@/api/graphql/queries/rate-limit-policies'
 import '@/components/icons'
 
 const locale = useLocaleStore()
@@ -49,30 +44,24 @@ const STATUS_FILTER_OPTIONS = ['ALL', 'ENABLED', 'DISABLED'] as const
 type PageSize = (typeof PAGE_SIZE_OPTIONS)[number]
 type BatchAction = 'enable' | 'disable' | 'delete'
 type SortDirection = 'ASC' | 'DESC'
-type KeyColumn = 'NAME' | 'AGENT' | 'STATUS' | 'CREATED_AT' | 'EXPIRES_AT' | 'POLICY'
+type KeyColumn = 'NAME' | 'AGENT' | 'PROGRESS' | 'STATUS' | 'CREATED_AT' | 'EXPIRES_AT'
 
 const COLUMNS: Array<{ key: KeyColumn; label: string; width: string }> = [
   { key: 'NAME', label: 'virtualKey.col.name', width: '17%' },
-  { key: 'AGENT', label: 'virtualKey.col.agent', width: '15%' },
+  { key: 'AGENT', label: 'virtualKey.col.agent', width: '13%' },
+  // 消费进度 — design doc §4.1 "消费控制进度条". Reads key.spend /
+  // key.maxBudget; the worker refreshes spend on a tick. Width matches
+  // the rest of the columns.
+  { key: 'PROGRESS', label: 'virtualKey.col.progress', width: '15%' },
   { key: 'STATUS', label: 'virtualKey.col.status', width: '9%' },
   { key: 'CREATED_AT', label: 'virtualKey.col.createdAt', width: '13%' },
   { key: 'EXPIRES_AT', label: 'virtualKey.col.expiresAt', width: '13%' },
-  { key: 'POLICY', label: 'virtualKey.col.policy', width: '13%' },
 ]
 
-// Selector data sources. Agents/users are paged on the backend; pull a large page
-// so the issue form's dropdowns hold the full set.
+// Selector data sources. Agents/gateways are paged on the backend; pull a
+// large page so the issue form's dropdowns hold the full set.
 const SELECTOR_PAGE = { page: 1, pageSize: 1000 }
 
-interface UserNode {
-  id: string
-  username: string
-  displayName: string
-  email: string
-}
-interface UsersQueryResult {
-  users: { nodes: UserNode[] }
-}
 interface AgentNode {
   id: string
   name: string
@@ -80,62 +69,17 @@ interface AgentNode {
 interface AgentsQueryResult {
   agents: { nodes: AgentNode[] }
 }
+interface ModelGatewayFieldsLite {
+  id: string
+  name: string
+}
+interface ModelGatewaysResult {
+  modelGateways: { nodes: ModelGatewayFieldsLite[]; totalCount: number }
+}
 
-const {
-  result: keysData,
-  loading,
-  refetch: refetchKeys,
-} = useQuery<VirtualKeysResult>(VIRTUAL_KEYS_QUERY, { userId: null })
-const { result: usersData } = useQuery<UsersQueryResult>(USERS_QUERY, { pagination: SELECTOR_PAGE })
-const { result: agentsData } = useQuery<AgentsQueryResult>(AGENTS_QUERY, {
-  pagination: SELECTOR_PAGE,
-})
-const { result: policiesData } = useQuery<RateLimitPoliciesResult>(RATE_LIMIT_POLICIES_QUERY)
-
-const userOptions = computed<VirtualKeyOption[]>(() =>
-  (usersData.value?.users?.nodes ?? []).map((user) => ({
-    id: user.id,
-    name: user.displayName || user.username || user.email,
-  })),
-)
-const agentOptions = computed<VirtualKeyOption[]>(() =>
-  (agentsData.value?.agents?.nodes ?? []).map((agent) => ({ id: agent.id, name: agent.name })),
-)
-const policyOptions = computed<VirtualKeyOption[]>(() =>
-  (policiesData.value?.rateLimitPolicies ?? []).map((policy) => ({
-    id: policy.id,
-    name: policy.name,
-  })),
-)
-const agentNameById = computed(() => {
-  const map = new Map<string, string>()
-  for (const option of agentOptions.value) map.set(option.id, option.name)
-  return map
-})
-const policyNameById = computed(() => {
-  const map = new Map<string, string>()
-  for (const option of policyOptions.value) map.set(option.id, option.name)
-  return map
-})
-
-const virtualKeys = computed<VirtualKey[]>(() =>
-  (keysData.value?.virtualKeys ?? []).map((node) => ({
-    id: node.id,
-    name: node.alias ?? '',
-    userId: node.userId,
-    agentId: node.agentId,
-    status: node.status,
-    createdAt: node.createdAt,
-    expiresAt: node.expiresAt,
-    policyId: node.rateLimitPolicyId,
-    policyName: node.rateLimitPolicyId
-      ? (policyNameById.value.get(node.rateLimitPolicyId) ?? '—')
-      : '—',
-  })),
-)
-
-const selectedIds = ref<Set<string>>(new Set())
-const pageSize = ref<PageSize>(10)
+// selectedIds — Set for O(1) membership checks during select-all toggles.
+const selectedIds = ref(new Set<string>())
+const pageSize = ref<PageSize>(20)
 const currentPage = ref(1)
 const formOpen = ref(false)
 const saving = ref(false)
@@ -149,23 +93,108 @@ const agentFilter = ref('')
 const statusFilter = ref<'ALL' | 'ENABLED' | 'DISABLED'>('ALL')
 const createdAtFilter = ref('')
 const expiresAtFilter = ref('')
-const policyFilter = ref('')
+// Backed by the same inputs that drive the VIRTUAL_KEYS_QUERY vars: when they
+// change, the query re-fires with the new value. We keep per-column client
+// filters for status / dates / name on top.
+const orgFilter = ref('')
+const gatewayFilter = ref('')
 const filterMenuAnchor = ref<HTMLElement | null>(null)
 const filterMenuKey = ref<KeyColumn | null>(null)
 
-function displayName(key: VirtualKey): string {
+// formGateway holds the currently selected modelGateway in the Issue form.
+// The available-models sub-query is skipped until the user picks one.
+const formGateway = ref('')
+
+const {
+  result: keysData,
+  loading,
+  refetch: refetchKeys,
+} = useQuery<VirtualKeysResult, { organizationId: string | null; agentId: string | null; modelGateway: string | null }>(
+  VIRTUAL_KEYS_QUERY,
+  () => ({
+    organizationId: orgFilter.value.trim() || null,
+    agentId: agentFilter.value.trim() || null,
+    modelGateway: gatewayFilter.value || null,
+  }),
+)
+const { result: gatewaysData } = useQuery<ModelGatewaysResult>(MODEL_GATEWAYS_QUERY, {
+  filter: null,
+  page: { limit: 1000, offset: 0 },
+  sort: null,
+})
+const { result: agentsData } = useQuery<AgentsQueryResult>(AGENTS_QUERY, {
+  pagination: SELECTOR_PAGE,
+})
+const { result: formAvailableModelsData } = useQuery<
+  GatewayAvailableModelsResult,
+  GatewayAvailableModelsVars
+>(GATEWAY_AVAILABLE_MODELS, () => ({ gatewayConnectionId: formGateway.value }), () => ({
+  enabled: Boolean(formGateway.value),
+}))
+
+const gatewayOptions = computed<VirtualKeyOption[]>(() =>
+  (gatewaysData.value?.modelGateways?.nodes ?? []).map((gateway) => ({
+    id: gateway.id,
+    name: gateway.name,
+  })),
+)
+const agentOptions = computed<VirtualKeyOption[]>(() =>
+  (agentsData.value?.agents?.nodes ?? []).map((agent) => ({ id: agent.id, name: agent.name })),
+)
+const formAvailableModels = computed<string[]>(
+  () => formAvailableModelsData.value?.gatewayAvailableModels ?? [],
+)
+const agentNameById = computed(() => {
+  const map = new Map<string, string>()
+  for (const option of agentOptions.value) map.set(option.id, option.name)
+  return map
+})
+
+const virtualKeys = computed<VirtualKeyNode[]>(
+  () => keysData.value?.virtualKeys ?? [],
+)
+
+function displayName(key: VirtualKeyNode): string {
   return key.name || '—'
 }
-function agentName(key: VirtualKey): string {
+
+function agentName(key: VirtualKeyNode): string {
   if (!key.agentId) return '—'
   return agentNameById.value.get(key.agentId) ?? key.agentId
 }
 
-const filteredKeys = computed(() => {
+function consumptionProgress(key: VirtualKeyNode): { ratio: number; color: string } | null {
+  if (key.maxBudget == null || key.maxBudget <= 0) return null
+  const ratio = Math.min(1, Math.max(0, key.spend / key.maxBudget))
+  let color = '#48960c'
+  if (ratio >= 0.95) color = '#c92100'
+  else if (ratio >= 0.7) color = '#e8a32a'
+  return { ratio, color }
+}
+
+function progressStyle(key: VirtualKeyNode) {
+  const progress = consumptionProgress(key)
+  if (!progress) return { width: '0%', background: 'transparent' }
+  return {
+    width: `${(progress.ratio * 100).toFixed(1)}%`,
+    background: progress.color,
+  }
+}
+
+function progressText(key: VirtualKeyNode): string {
+  if (key.maxBudget == null || key.maxBudget <= 0) return '—'
+  return `${key.spend} / ${key.maxBudget}`
+}
+
+function progressTooltip(key: VirtualKeyNode): string {
+  if (key.maxBudget == null || key.maxBudget <= 0) return locale.t('virtualKey.col.progress') as string
+  return `${((key.spend / key.maxBudget) * 100).toFixed(1)}%`
+}
+
+const filteredKeys = computed<VirtualKeyNode[]>(() => {
   const nameKeyword = nameFilter.value.trim().toLocaleLowerCase()
   const agentKeyword = agentFilter.value.trim().toLocaleLowerCase()
-  const policyKeyword = policyFilter.value.trim().toLocaleLowerCase()
-  const filtered = virtualKeys.value.filter((key) => {
+  const result = virtualKeys.value.filter((key) => {
     if (nameKeyword && !displayName(key).toLocaleLowerCase().includes(nameKeyword)) return false
     if (agentKeyword && !agentName(key).toLocaleLowerCase().includes(agentKeyword)) return false
     if (statusFilter.value === 'ENABLED' && key.status !== 'active') return false
@@ -173,45 +202,38 @@ const filteredKeys = computed(() => {
     if (createdAtFilter.value && key.createdAt.slice(0, 10) !== createdAtFilter.value) return false
     if (expiresAtFilter.value && (key.expiresAt ?? '').slice(0, 10) !== expiresAtFilter.value)
       return false
-    if (policyKeyword && !key.policyName.toLocaleLowerCase().includes(policyKeyword)) return false
     return true
   })
-
-  if (!sortField.value) return filtered
-  const direction = sortDirection.value === 'ASC' ? 1 : -1
+  if (!sortField.value) return result
   const statusRank = (status: VirtualKeyStatus) =>
     status === 'active' ? 2 : status === 'disabled' ? 1 : 0
-  return [...filtered].sort((left, right) => {
-    const valueFor = (key: VirtualKey): string | number => {
-      if (sortField.value === 'NAME') return displayName(key)
-      if (sortField.value === 'AGENT') return agentName(key)
-      if (sortField.value === 'STATUS') return statusRank(key.status)
-      if (sortField.value === 'CREATED_AT') return key.createdAt
-      if (sortField.value === 'EXPIRES_AT') return key.expiresAt ?? ''
-      return key.policyName
-    }
-    const leftValue = valueFor(left)
-    const rightValue = valueFor(right)
-    if (typeof leftValue === 'number' && typeof rightValue === 'number') {
-      return (leftValue - rightValue) * direction
-    }
-    return String(leftValue).localeCompare(String(rightValue), locale.locale) * direction
+  const dir = sortDirection.value === 'ASC' ? 1 : -1
+  return [...result].sort((a, b) => {
+    if (sortField.value === 'STATUS') return (statusRank(a.status) - statusRank(b.status)) * dir
+    if (sortField.value === 'CREATED_AT') return (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0) * dir
+    if (sortField.value === 'EXPIRES_AT')
+      return ((a.expiresAt ?? '') < (b.expiresAt ?? '') ? -1 : (a.expiresAt ?? '') > (b.expiresAt ?? '') ? 1 : 0) * dir
+    if (sortField.value === 'NAME') return displayName(a).localeCompare(displayName(b), locale.locale) * dir
+    if (sortField.value === 'AGENT') return agentName(a).localeCompare(agentName(b), locale.locale) * dir
+    return 0
   })
 })
 
 const totalCount = computed(() => filteredKeys.value.length)
 const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)))
-const visibleKeys = computed(() => {
-  const offset = (currentPage.value - 1) * pageSize.value
-  return filteredKeys.value.slice(offset, offset + pageSize.value)
-})
+const visibleKeys = computed<VirtualKeyNode[]>(() =>
+  filteredKeys.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value),
+)
 const selectedCount = computed(() => selectedIds.value.size)
 const allVisibleSelected = computed(() => {
   const selectable = visibleKeys.value.filter((key) => key.status !== 'revoked')
-  return selectable.length > 0 && selectable.every((key) => selectedIds.value.has(key.id))
+  if (selectable.length === 0) return false
+  return selectable.every((key) => selectedIds.value.has(key.id))
 })
+
 const summaryText = computed(() => {
-  const start = totalCount.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1
+  if (totalCount.value === 0) return locale.t('virtualKey.pagination.summary.empty') as string
+  const start = (currentPage.value - 1) * pageSize.value + 1
   const end = Math.min(currentPage.value * pageSize.value, totalCount.value)
   return locale
     .t('virtualKey.pagination.summary')
@@ -219,17 +241,18 @@ const summaryText = computed(() => {
     .replace('{end}', String(end))
     .replace('{total}', String(totalCount.value))
 })
-const deleteDialogTitle = computed(() =>
-  pendingDeleteIds.value.length > 1
-    ? locale.t('virtualKey.confirm.batchDeleteTitle')
-    : locale.t('virtualKey.confirm.deleteTitle'),
-)
+
+const deleteDialogTitle = computed(() => {
+  if (pendingDeleteIds.value.length > 1) return locale.t('virtualKey.confirm.batchDeleteTitle') as string
+  const target = virtualKeys.value.find((key) => key.id === pendingDeleteIds.value[0])
+  return locale.t('virtualKey.confirm.deleteTitle').replace('{name}', target ? displayName(target) : '')
+})
+
 const deleteDialogBody = computed(() => {
-  if (pendingDeleteIds.value.length > 1) {
+  if (pendingDeleteIds.value.length > 1)
     return locale
       .t('virtualKey.confirm.batchDeleteBody')
       .replace('{count}', String(pendingDeleteIds.value.length))
-  }
   const target = virtualKeys.value.find((key) => key.id === pendingDeleteIds.value[0])
   return locale.t('virtualKey.confirm.deleteBody').replace('{name}', target ? displayName(target) : '')
 })
@@ -237,21 +260,23 @@ const deleteDialogBody = computed(() => {
 function statusVariant(status: VirtualKeyStatus): 'success' | 'neutral' | 'danger' {
   return status === 'active' ? 'success' : status === 'disabled' ? 'neutral' : 'danger'
 }
+
 function statusIcon(status: VirtualKeyStatus): string {
   return status === 'active' ? 'check-circle' : status === 'disabled' ? 'ban' : 'times-circle'
 }
+
 function statusLabel(status: VirtualKeyStatus): string {
-  if (status === 'active') return locale.t('virtualKey.status.enabled')
-  if (status === 'disabled') return locale.t('virtualKey.status.disabled')
-  return locale.t('virtualKey.status.revoked')
+  if (status === 'active') return locale.t('virtualKey.status.enabled') as string
+  if (status === 'disabled') return locale.t('virtualKey.status.disabled') as string
+  return locale.t('virtualKey.status.revoked') as string
 }
 
-function formatDateTime(value: string | null): string {
+function formatDateTime(value: string | null | undefined): string {
   if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
-  const pad = (number: number) => String(number).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return value
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function toggleSelect(id: string, checked: boolean) {
@@ -264,24 +289,23 @@ function toggleSelect(id: string, checked: boolean) {
 function toggleSelectAll(checked: boolean) {
   const next = new Set(selectedIds.value)
   for (const key of visibleKeys.value) {
-    if (key.status === 'revoked') continue // terminal — not actionable
+    if (key.status === 'revoked') continue
     if (checked) next.add(key.id)
     else next.delete(key.id)
   }
   selectedIds.value = next
 }
 
-function sortStateFor(field: KeyColumn): 'none' | 'ascending' | 'descending' {
-  if (sortField.value !== field) return 'none'
+function sortStateFor(field: KeyColumn): 'idle' | 'ascending' | 'descending' {
+  if (sortField.value !== field) return 'idle'
   return sortDirection.value === 'ASC' ? 'ascending' : 'descending'
 }
 
 function toggleSort(field: KeyColumn) {
-  const state = sortStateFor(field)
-  if (state === 'none') {
+  if (sortField.value !== field) {
     sortField.value = field
     sortDirection.value = 'ASC'
-  } else if (state === 'ascending') {
+  } else if (sortDirection.value === 'ASC') {
     sortDirection.value = 'DESC'
   } else {
     sortField.value = null
@@ -300,33 +324,31 @@ function closeFilterMenu() {
   filterMenuAnchor.value = null
 }
 
-function hasFilter(key: KeyColumn): boolean {
+function hasFilter(key: KeyColumn | null): boolean {
   if (key === 'NAME') return Boolean(nameFilter.value.trim())
   if (key === 'AGENT') return Boolean(agentFilter.value.trim())
   if (key === 'STATUS') return statusFilter.value !== 'ALL'
   if (key === 'CREATED_AT') return Boolean(createdAtFilter.value)
   if (key === 'EXPIRES_AT') return Boolean(expiresAtFilter.value)
-  return Boolean(policyFilter.value.trim())
+  return false
 }
 
-function textFilterValue(key: Exclude<KeyColumn, 'STATUS'>): string {
+function textFilterValue(key: KeyColumn): string {
   if (key === 'NAME') return nameFilter.value
   if (key === 'AGENT') return agentFilter.value
   if (key === 'CREATED_AT') return createdAtFilter.value
-  if (key === 'EXPIRES_AT') return expiresAtFilter.value
-  return policyFilter.value
+  return expiresAtFilter.value
 }
 
-function setTextFilter(key: Exclude<KeyColumn, 'STATUS'>, value: string) {
+function setTextFilter(key: KeyColumn, value: string) {
   if (key === 'NAME') nameFilter.value = value
   else if (key === 'AGENT') agentFilter.value = value
   else if (key === 'CREATED_AT') createdAtFilter.value = value
-  else if (key === 'EXPIRES_AT') expiresAtFilter.value = value
-  else policyFilter.value = value
+  else expiresAtFilter.value = value
   currentPage.value = 1
 }
 
-function setStatusFilter(value: 'ALL' | 'ENABLED' | 'DISABLED') {
+function setStatusFilter(value: (typeof STATUS_FILTER_OPTIONS)[number]) {
   statusFilter.value = value
   currentPage.value = 1
   closeFilterMenu()
@@ -334,8 +356,11 @@ function setStatusFilter(value: 'ALL' | 'ENABLED' | 'DISABLED') {
 
 function clearActiveFilter() {
   if (!filterMenuKey.value) return
-  if (filterMenuKey.value === 'STATUS') statusFilter.value = 'ALL'
-  else setTextFilter(filterMenuKey.value, '')
+  if (filterMenuKey.value === 'NAME') nameFilter.value = ''
+  else if (filterMenuKey.value === 'AGENT') agentFilter.value = ''
+  else if (filterMenuKey.value === 'STATUS') statusFilter.value = 'ALL'
+  else if (filterMenuKey.value === 'CREATED_AT') createdAtFilter.value = ''
+  else if (filterMenuKey.value === 'EXPIRES_AT') expiresAtFilter.value = ''
   currentPage.value = 1
   closeFilterMenu()
 }
@@ -355,11 +380,36 @@ function revealSecret(secret: string) {
 }
 
 function closeSecret() {
-  secretOpen.value = false
   secretValue.value = ''
+  secretOpen.value = false
 }
 
-async function submitKey(draft: VirtualKeyDraft) {
+function onFormGatewayChanged(gatewayId: string) {
+  formGateway.value = gatewayId
+}
+
+async function submitKey(draft: {
+  name: string
+  organizationId: string
+  modelGateway: string
+  agentId?: string | null
+  duration?: string
+  expiresAt?: string | null
+  models?: string[]
+  maxBudget?: number
+  budgetDuration?: string
+  maxParallelRequests?: number
+  tpmLimit?: number
+  rpmLimit?: number
+  rpmLimitType?: string
+  tpmLimitType?: string
+  allowedRoutes?: string[]
+  tags?: string[]
+  blocked?: boolean
+  keyType?: string
+  autoRotate?: boolean
+  rotationInterval?: string
+}) {
   if (saving.value) return
   saving.value = true
   try {
@@ -367,23 +417,37 @@ async function submitKey(draft: VirtualKeyDraft) {
       mutation: ISSUE_VIRTUAL_KEY,
       variables: {
         input: {
-          userId: draft.userId,
-          agentId: draft.agentId || null,
-          rateLimitPolicyId: draft.policyId || null,
-          alias: draft.name || null,
-          expiresAt: draft.expiresAt || null,
+          organizationId: draft.organizationId.trim(),
+          name: draft.name.trim(),
+          modelGateway: draft.modelGateway,
+          agentId: draft.agentId?.trim() || null,
+          duration: draft.duration?.trim() || null,
+          expiresAt: draft.expiresAt ?? null,
+          models: draft.models?.length ? draft.models : null,
+          maxBudget: draft.maxBudget ?? null,
+          budgetDuration: draft.budgetDuration?.trim() || null,
+          maxParallelRequests: draft.maxParallelRequests ?? null,
+          rpmLimit: draft.rpmLimit ?? null,
+          tpmLimit: draft.tpmLimit ?? null,
+          rpmLimitType: draft.rpmLimitType?.trim() || null,
+          tpmLimitType: draft.tpmLimitType?.trim() || null,
+          allowedRoutes: draft.allowedRoutes,
+          tags: draft.tags?.length ? draft.tags : null,
+          blocked: draft.blocked ?? null,
+          keyType: draft.keyType?.trim() || null,
+          autoRotate: draft.autoRotate ?? null,
+          rotationInterval: draft.rotationInterval?.trim() || null,
         },
       },
     })
     formOpen.value = false
-    // Reveal the one-time secret BEFORE refetching — the secret is unrecoverable,
-    // so a failure of the (independent) list query must never suppress it.
+    // Reveal secret BEFORE refetch — the secret is shown exactly once.
     const secret = data?.issueVirtualKey?.secret
     if (secret) revealSecret(secret)
-    toast.success(locale.t('virtualKey.toast.created'))
+    toast.success(locale.t('virtualKey.toast.created') as string)
     currentPage.value = 1
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, locale.t('virtualKey.toast.issueFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('virtualKey.toast.issueFailed') as string))
     return
   } finally {
     saving.value = false
@@ -392,61 +456,50 @@ async function submitKey(draft: VirtualKeyDraft) {
 }
 
 async function setEnabled(ids: string[], enabled: boolean) {
-  // Revoked keys are terminal — the backend rejects enable/disable on them, so
-  // drop them rather than surface a spurious partial-failure toast.
-  const actionable = ids.filter(
+  const targets = ids.filter(
     (id) => virtualKeys.value.find((key) => key.id === id)?.status !== 'revoked',
   )
-  if (actionable.length === 0) return
+  if (targets.length === 0) return
   const outcomes = await Promise.allSettled(
-    actionable.map((id) =>
+    targets.map((id) =>
       apolloClient.mutate<SetVirtualKeyEnabledResult, SetVirtualKeyEnabledVars>({
         mutation: SET_VIRTUAL_KEY_ENABLED,
         variables: { id, enabled },
       }),
     ),
   )
-  const ok = outcomes.filter((outcome) => outcome.status === 'fulfilled').length
-  const failure = outcomes.find(
+  const fulfilled = outcomes.filter((outcome) => outcome.status === 'fulfilled').length
+  const rejected = outcomes.find(
     (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected',
-  )
-  if (ok > 0) {
-    toast.success(
-      locale
-        .t(enabled ? 'virtualKey.toast.enabled' : 'virtualKey.toast.disabled')
-        .replace('{count}', String(ok)),
-    )
-  }
-  if (failure) {
-    toast.error(graphqlErrorMessage(failure.reason, locale.t('virtualKey.toast.saveFailed')))
+  ) as PromiseRejectedResult | undefined
+  const key = enabled ? 'virtualKey.toast.enabled' : 'virtualKey.toast.disabled'
+  toast.success((locale.t(key) as string).replace('{count}', String(fulfilled)))
+  if (rejected) {
+    toast.error(graphqlErrorMessage(rejected.reason, locale.t('virtualKey.toast.saveFailed') as string))
   }
   await refetchKeys()
 }
 
-function toggleEnabled(key: VirtualKey, close?: () => void) {
-  close?.()
-  void setEnabled([key.id], key.status !== 'active')
+function toggleEnabled(keyNode: VirtualKeyNode, close: () => void) {
+  close()
+  void setEnabled([keyNode.id], keyNode.status !== 'active')
 }
 
-async function regenerate(key: VirtualKey, close?: () => void) {
-  close?.()
+async function regenerate(keyNode: VirtualKeyNode, close: () => void) {
   if (saving.value) return
+  close()
   saving.value = true
   try {
-    const { data } = await apolloClient.mutate<
-      RegenerateVirtualKeyResult,
-      RegenerateVirtualKeyVars
-    >({
+    const { data } = await apolloClient.mutate<RegenerateVirtualKeyResult, RegenerateVirtualKeyVars>({
       mutation: REGENERATE_VIRTUAL_KEY,
-      variables: { id: key.id },
+      variables: { id: keyNode.id },
     })
-    // Reveal before refetch — the rotated secret is returned once and unrecoverable.
+    // Reveal secret BEFORE refetch.
     const secret = data?.regenerateVirtualKey?.secret
     if (secret) revealSecret(secret)
-    toast.success(locale.t('virtualKey.toast.regenerated'))
+    toast.success(locale.t('virtualKey.toast.regenerated') as string)
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, locale.t('virtualKey.toast.regenerateFailed')))
-    return
+    toast.error(graphqlErrorMessage(error, locale.t('virtualKey.toast.regenerateFailed') as string))
   } finally {
     saving.value = false
   }
@@ -454,21 +507,17 @@ async function regenerate(key: VirtualKey, close?: () => void) {
 }
 
 function performBatch(action: BatchAction, close: () => void) {
-  const ids = [...selectedIds.value]
   close()
+  const ids = Array.from(selectedIds.value)
   if (ids.length === 0) return
-  if (action === 'delete') {
-    pendingDeleteIds.value = ids
-    return
-  }
-  void setEnabled(ids, action === 'enable').then(() => {
-    selectedIds.value = new Set()
-  })
+  if (action === 'enable') void setEnabled(ids, true)
+  else if (action === 'disable') void setEnabled(ids, false)
+  else if (action === 'delete') pendingDeleteIds.value = ids
 }
 
-function requestDelete(key: VirtualKey, close?: () => void) {
-  close?.()
-  pendingDeleteIds.value = [key.id]
+function requestDelete(keyNode: VirtualKeyNode, close: () => void) {
+  close()
+  pendingDeleteIds.value = [keyNode.id]
 }
 
 function closeDelete() {
@@ -476,31 +525,32 @@ function closeDelete() {
 }
 
 async function confirmDelete() {
-  // Skip already-revoked keys — revoke is terminal and errors on them.
-  const ids = pendingDeleteIds.value.filter(
+  const ids = pendingDeleteIds.value
+  if (ids.length === 0) return
+  const targets = ids.filter(
     (id) => virtualKeys.value.find((key) => key.id === id)?.status !== 'revoked',
   )
-  pendingDeleteIds.value = []
-  if (ids.length === 0) return
   const outcomes = await Promise.allSettled(
-    ids.map((id) =>
+    targets.map((id) =>
       apolloClient.mutate<RevokeVirtualKeyResult, RevokeVirtualKeyVars>({
         mutation: REVOKE_VIRTUAL_KEY,
         variables: { id },
       }),
     ),
   )
-  const revokedIds = ids.filter((_, index) => outcomes[index].status === 'fulfilled')
-  const failure = outcomes.find(
+  const revokedIds = targets.filter((_, index) => outcomes[index].status === 'fulfilled')
+  toast.success((locale.t('virtualKey.toast.deleted') as string).replace('{count}', String(revokedIds.length)))
+  const firstRejection = outcomes.find(
     (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected',
-  )
-  if (revokedIds.length > 0) {
-    toast.success(locale.t('virtualKey.toast.deleted').replace('{count}', String(revokedIds.length)))
+  ) as PromiseRejectedResult | undefined
+  if (firstRejection) {
+    toast.error(graphqlErrorMessage(firstRejection.reason, locale.t('virtualKey.toast.saveFailed') as string))
   }
-  if (failure) {
-    toast.error(graphqlErrorMessage(failure.reason, locale.t('virtualKey.toast.revokeFailed')))
-  }
-  selectedIds.value = new Set([...selectedIds.value].filter((id) => !revokedIds.includes(id)))
+  // Selection cleanup — revoked keys are no longer actionable.
+  const next = new Set(selectedIds.value)
+  for (const id of revokedIds) next.delete(id)
+  selectedIds.value = next
+  pendingDeleteIds.value = []
   await refetchKeys()
   if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
 }
@@ -511,27 +561,35 @@ function copyWithFallback(value: string) {
   textarea.style.position = 'fixed'
   textarea.style.opacity = '0'
   document.body.appendChild(textarea)
+  textarea.focus()
   textarea.select()
-  const copied = document.execCommand('copy')
+  let ok = false
+  try {
+    ok = document.execCommand('copy')
+  } catch {
+    ok = false
+  }
   document.body.removeChild(textarea)
-  if (!copied) throw new Error('Copy command rejected')
+  return ok
 }
 
 async function copyValue(value: string | null, successKey: string) {
-  if (!value) return
+  if (value == null) return
+  let ok = false
   try {
     if (navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(value)
-      } catch {
-        copyWithFallback(value)
-      }
+      await navigator.clipboard.writeText(value)
+      ok = true
     } else {
-      copyWithFallback(value)
+      ok = copyWithFallback(value)
     }
-    toast.success(locale.t(successKey))
-  } catch (err) {
-    toast.error(graphqlErrorMessage(err, locale.t('virtualKey.toast.copyFailed')))
+  } catch {
+    ok = copyWithFallback(value)
+  }
+  if (ok) {
+    toast.success(locale.t(successKey) as string)
+  } else {
+    toast.error(locale.t('virtualKey.toast.copyFailed') as string)
   }
 }
 
@@ -539,22 +597,24 @@ async function refreshKeys() {
   if (loading.value) return
   try {
     await refetchKeys()
-    toast.success(locale.t('virtualKey.toast.refreshed'))
+    toast.success(locale.t('virtualKey.toast.refreshed') as string)
   } catch (error) {
-    toast.error(graphqlErrorMessage(error, locale.t('virtualKey.toast.refreshFailed')))
+    toast.error(graphqlErrorMessage(error, locale.t('virtualKey.toast.refreshFailed') as string))
   }
 }
 
 function onPageSizeChange(event: Event) {
-  const next = Number((event.target as HTMLSelectElement).value)
-  if (!PAGE_SIZE_OPTIONS.includes(next as PageSize)) return
-  pageSize.value = next as PageSize
-  currentPage.value = 1
+  const value = Number((event.target as HTMLSelectElement).value)
+  if (PAGE_SIZE_OPTIONS.includes(value as PageSize)) {
+    pageSize.value = value as PageSize
+    currentPage.value = 1
+  }
 }
 
 function goToPage(page: number) {
-  if (page < 1 || page > totalPages.value) return
-  currentPage.value = page
+  if (Number.isNaN(page)) return
+  const clamped = Math.min(Math.max(1, page), totalPages.value)
+  currentPage.value = clamped
 }
 </script>
 
@@ -576,7 +636,7 @@ function goToPage(page: number) {
           <cds-button
             action="outline"
             :disabled="selectedCount === 0"
-            :title="selectedCount === 0 ? locale.t('virtualKey.batch.disabled') : undefined"
+            :title="selectedCount === 0 ? (locale.t('virtualKey.batch.disabled') as string) : undefined"
           >
             <cds-icon shape="cog" size="sm" aria-hidden="true"></cds-icon>
             {{ locale.t('virtualKey.action.batch') }}
@@ -674,9 +734,21 @@ function goToPage(page: number) {
         </cds-grid-cell>
 
         <cds-grid-cell v-for="column in COLUMNS" :key="column.key">
-          <strong v-if="column.key === 'NAME'" class="key-name" :title="displayName(keyItem)">
-            {{ displayName(keyItem) }}
-          </strong>
+          <div v-if="column.key === 'NAME'" class="name-cell">
+            <strong class="key-name" :title="displayName(keyItem)">
+              {{ displayName(keyItem) }}
+            </strong>
+            <button
+              v-if="keyItem.maskedKey"
+              type="button"
+              class="icon-action"
+              :title="keyItem.maskedKey"
+              :aria-label="locale.t('virtualKey.action.copyMasked')"
+              @click="copyValue(keyItem.maskedKey, 'virtualKey.toast.maskedCopied')"
+            >
+              <cds-icon shape="copy" size="sm"></cds-icon>
+            </button>
+          </div>
           <div v-else-if="column.key === 'AGENT'" class="agent-cell">
             <span :title="agentName(keyItem)">{{ agentName(keyItem) }}</span>
             <button
@@ -703,7 +775,19 @@ function goToPage(page: number) {
           <span v-else-if="column.key === 'EXPIRES_AT'" class="date-cell">
             {{ formatDateTime(keyItem.expiresAt) }}
           </span>
-          <span v-else class="policy-cell" :title="keyItem.policyName">{{ keyItem.policyName }}</span>
+          <span
+            v-else-if="column.key === 'PROGRESS'"
+            class="progress-cell"
+            :title="progressTooltip(keyItem)"
+          >
+            <div class="progress-track">
+              <div
+                class="progress-fill"
+                :style="progressStyle(keyItem)"
+              ></div>
+            </div>
+            <span class="progress-text">{{ progressText(keyItem) }}</span>
+          </span>
         </cds-grid-cell>
 
         <cds-grid-cell>
@@ -858,15 +942,6 @@ function goToPage(page: number) {
           :aria-label="locale.t('virtualKey.filter.datePlaceholder')"
           @input="setTextFilter('EXPIRES_AT', ($event.target as HTMLInputElement).value)"
         />
-        <input
-          v-else
-          class="filter-input"
-          type="text"
-          :value="textFilterValue('POLICY')"
-          :placeholder="locale.t('virtualKey.filter.policyPlaceholder')"
-          :aria-label="locale.t('virtualKey.filter.policyPlaceholder')"
-          @input="setTextFilter('POLICY', ($event.target as HTMLInputElement).value)"
-        />
 
         <div v-if="hasFilter(filterMenuKey)" class="filter-footer">
           <cds-button action="outline" size="sm" @click="clearActiveFilter">
@@ -879,10 +954,11 @@ function goToPage(page: number) {
     <VirtualKeyFormModal
       v-if="formOpen"
       :open="formOpen"
-      :users="userOptions"
+      :gateways="gatewayOptions"
       :agents="agentOptions"
-      :policies="policyOptions"
+      :available-models="formAvailableModels"
       :saving="saving"
+      @gateway-changed="onFormGatewayChanged"
       @close="closeForm"
       @submit="submitKey"
     />
@@ -1011,7 +1087,6 @@ function goToPage(page: number) {
   accent-color: var(--cds-alias-object-interaction-color, #0072a3);
 }
 .key-name,
-.policy-cell,
 .date-cell {
   display: block;
   overflow: hidden;
@@ -1024,6 +1099,30 @@ function goToPage(page: number) {
 .date-cell {
   font-variant-numeric: tabular-nums;
 }
+.progress-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.progress-track {
+  flex: 1 1 auto;
+  height: 8px;
+  background: var(--cds-alias-object-app-background, #f4f4f4);
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 0;
+}
+.progress-fill {
+  height: 100%;
+  transition: width 200ms ease-out;
+}
+.progress-text {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 12px;
+}
 .agent-cell {
   display: flex;
   align-items: center;
@@ -1034,6 +1133,16 @@ function goToPage(page: number) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.name-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.name-cell .key-name {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .icon-action {
   display: inline-flex;
