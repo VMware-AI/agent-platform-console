@@ -39,6 +39,7 @@ export const STRINGS: Dict = {
   'nav.system.resources': { zh: '资源池接入', en: 'Resource Pools' },
   'nav.system.gateway': { zh: '模型网关接入', en: 'Gateway Connections' },
   'nav.system.users': { zh: '用户与权限', en: 'Users & Roles' },
+  'nav.system.settings': { zh: '平台设置', en: 'Platform Settings' },
   'user.profile': { zh: '个人资料', en: 'Profile' },
   'user.logout': { zh: '退出登录', en: 'Log out' },
   'theme.light': { zh: '浅色', en: 'Light' },
@@ -181,6 +182,35 @@ export const STRINGS: Dict = {
   'agents.batch.delete': { zh: '批量删除', en: 'Delete Selected' },
   'agents.batch.disabled': { zh: '请先选择智能体', en: 'Select agents first' },
   'agents.batch.done': { zh: '批量操作完成：成功 {ok} 个，失败 {fail} 个', en: 'Batch finished: {ok} succeeded, {fail} failed' },
+  'agents.upgrade.title': { zh: '升级智能体版本', en: 'Upgrade agent version' },
+  'agents.upgrade.single': {
+    zh: '将为「{name}」下发升级命令，VM 内 agent-manager 会在下次心跳时拉取安装。',
+    en: 'Enqueues an upgrade for "{name}"; the in-VM agent-manager installs it on its next heartbeat.',
+  },
+  'agents.upgrade.batch': {
+    zh: '将为选中的 {n} 个智能体下发同一升级命令（各自下次心跳时执行）。',
+    en: 'Enqueues the same upgrade for the {n} selected agents (each runs on its next heartbeat).',
+  },
+  'agents.upgrade.version': { zh: '目标版本', en: 'Target version' },
+  'agents.upgrade.versionPlaceholder': { zh: '如 1.37.0', en: 'e.g. 1.37.0' },
+  'agents.upgrade.versionHint': {
+    zh: '从内网镜像安装该版本包；版本号仅允许字母数字与 . _ -（不含路径/空格）。',
+    en: 'Installs this version from the internal mirror; only letters, digits and . _ - are allowed (no path/space).',
+  },
+  'agents.upgrade.versionError': {
+    zh: '请输入合法版本号（字母数字开头，仅含字母数字与 . _ -，≤128 位）',
+    en: 'Enter a valid version (alphanumeric start; only letters, digits and . _ -; ≤128 chars)',
+  },
+  'agents.upgrade.submit': { zh: '下发升级', en: 'Enqueue upgrade' },
+  'agents.upgrade.cancel': { zh: '取消', en: 'Cancel' },
+  'agents.upgrade.enqueuedOk': {
+    zh: '已为「{name}」下发升级命令',
+    en: 'Upgrade enqueued for "{name}"',
+  },
+  'agents.upgrade.batchEnqueuedOk': {
+    zh: '已下发升级命令：{n} 台',
+    en: 'Upgrade enqueued for {n} agent(s)',
+  },
   'agents.toolbar.selected': { zh: '已选 {count} 项', en: '{count} selected' },
   'agents.col.name.search': { zh: '搜索名称', en: 'Search name' },
   'agents.col.key.search': { zh: '搜索密钥名称', en: 'Search key' },
@@ -2175,6 +2205,62 @@ export const STRINGS: Dict = {
   'resources.form.testConnectionFail': { zh: '请求失败，请重试', en: 'Request failed, please retry' },
   'resources.form.testDetail': { zh: 'vSphere {version} · {count} 个内容库', en: 'vSphere {version} · {count} content libraries' },
   'resources.form.endpointPlaceholder': { zh: 'https://vc.example.local/sdk', en: 'https://vc.example.local/sdk' },
+
+  // Platform Settings (PlatformSettingsView) — agent OS user + agent-package mirror (LLD-16).
+  'platformSettings.title': { zh: '平台设置', en: 'Platform Settings' },
+  'platformSettings.description': {
+    zh: '运维可编辑的平台级配置：智能体运行账户与智能体安装包镜像源。',
+    en: 'Operator-editable platform config: the agent OS account and the agent-package mirror.',
+  },
+  'platformSettings.loadError': { zh: '加载平台设置失败', en: 'Failed to load platform settings' },
+  'platformSettings.save': { zh: '保存', en: 'Save' },
+  'platformSettings.saved': { zh: '平台设置已保存', en: 'Platform settings saved' },
+  'platformSettings.saveFailed': { zh: '保存失败', en: 'Save failed' },
+  'platformSettings.noChanges': { zh: '没有需要保存的改动', en: 'No changes to save' },
+
+  'platformSettings.agent.title': { zh: '智能体运行账户', en: 'Agent OS User' },
+  'platformSettings.agent.desc': {
+    zh: '安装到虚拟机后，智能体以该操作系统账户运行（装机命令 su {{AGENT_USER}}）。未设置时默认为 agent。',
+    en: 'Installed agents run on the VM as this OS account (install runs su {{AGENT_USER}}). Defaults to "agent" when unset.',
+  },
+  'platformSettings.agent.userLabel': { zh: '运行账户', en: 'OS user' },
+  'platformSettings.agent.userPlaceholder': { zh: 'agent', en: 'agent' },
+  'platformSettings.agent.userHint': {
+    zh: '虚拟机上已存在的操作系统账户名，通常为 agent。',
+    en: 'An OS account that already exists on the VM — usually "agent".',
+  },
+  'platformSettings.agent.userRequired': { zh: '请填写运行账户', en: 'OS user is required' },
+
+  'platformSettings.pkg.title': { zh: '安装包镜像源', en: 'Package Mirror' },
+  'platformSettings.pkg.desc': {
+    zh: 'daemon 从该可信内部镜像拉取智能体安装包，用于首次开机安装与后续升级。密码写入后不回显。',
+    en: 'The trusted internal mirror the daemon pulls agent packages from — for first-boot install and pull upgrades. The password is write-only and never shown.',
+  },
+  'platformSettings.pkg.urlLabel': { zh: '镜像地址', en: 'Mirror URL' },
+  'platformSettings.pkg.urlPlaceholder': {
+    zh: 'ftp://mirror.internal/agents',
+    en: 'ftp://mirror.internal/agents',
+  },
+  'platformSettings.pkg.urlHint': {
+    zh: '支持 ftp / http / https，需包含主机名；请勿在地址中内嵌账号密码，用下方字段填写。',
+    en: 'ftp / http / https with a host. Do not embed credentials in the URL — use the fields below.',
+  },
+  'platformSettings.pkg.urlError': {
+    zh: '地址无效：需为 ftp / http / https 且包含主机名',
+    en: 'Invalid URL: must be ftp / http / https with a host',
+  },
+  'platformSettings.pkg.urlCredError': {
+    zh: '请勿在地址中内嵌账号密码，请使用下方的用户名 / 密码字段',
+    en: 'Do not embed credentials in the URL — use the username / password fields below',
+  },
+  'platformSettings.pkg.userLabel': { zh: '用户名', en: 'Username' },
+  'platformSettings.pkg.userPlaceholder': { zh: '只读账户，可留空', en: 'Read-only account, optional' },
+  'platformSettings.pkg.passwordLabel': { zh: '密码', en: 'Password' },
+  'platformSettings.pkg.passwordPlaceholder': { zh: '●●●● 留空则不修改', en: '●●●● Leave blank to keep unchanged' },
+  'platformSettings.pkg.passwordHint': {
+    zh: '写入后不回显；留空表示沿用已保存的密码。',
+    en: 'Write-only, never displayed. Leave blank to keep the stored password.',
+  },
 }
 
 export const useLocaleStore = defineStore('locale', () => {

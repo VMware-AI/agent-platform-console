@@ -7,8 +7,16 @@ import { useMutation, useQuery } from '@vue/apollo-composable'
 import { useRouter } from 'vue-router'
 import { useLocaleStore } from '@/stores/locale'
 import AppDropdown from '@/components/AppDropdown.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import UpgradeAgentDialog from '@/components/UpgradeAgentDialog.vue'
 
-import { AGENTS_QUERY, RECYCLE_AGENT_MUTATION, SET_AGENT_STATUS_MUTATION } from '@/api/graphql/queries/agents'
+import {
+  AGENTS_QUERY,
+  RECYCLE_AGENT_MUTATION,
+  REQUEST_AGENT_UPGRADE_MUTATION,
+  SET_AGENT_STATUS_MUTATION,
+  UPGRADE_AGENTS_MUTATION,
+} from '@/api/graphql/queries/agents'
 import type {
   Agent,
   AgentSortField,
@@ -301,6 +309,14 @@ const { mutate: setStatusMutate } = useMutation<SetAgentStatusResult, SetAgentSt
 const { mutate: recycleMutate } = useMutation<RecycleAgentResult, RecycleAgentVars>(
   RECYCLE_AGENT_MUTATION,
 )
+const { mutate: requestUpgradeMutate } = useMutation<
+  { requestAgentUpgrade: boolean },
+  { agentId: string; targetVersion: string }
+>(REQUEST_AGENT_UPGRADE_MUTATION)
+const { mutate: upgradeAgentsMutate } = useMutation<
+  { upgradeAgents: number },
+  { agentIds: string[]; targetVersion: string }
+>(UPGRADE_AGENTS_MUTATION)
 
 function notReady() {
   toast.info(locale.t('agents.action.notReady'))
@@ -347,6 +363,43 @@ async function doDelete() {
   await refetch()
 }
 
+/* ---------- Upgrade (LLD-16 §4 platform pull upgrade) ---------- */
+const upgradeSingle = ref<Agent | null>(null)
+const upgradeBatchIds = ref<string[]>([])
+const upgradeOpen = ref(false)
+const upgradeSubmitting = ref(false)
+
+function closeUpgrade() {
+  upgradeOpen.value = false
+  upgradeSingle.value = null
+  upgradeBatchIds.value = []
+}
+
+async function onSubmitUpgrade(version: string) {
+  upgradeSubmitting.value = true
+  try {
+    if (upgradeSingle.value) {
+      await requestUpgradeMutate({ agentId: upgradeSingle.value.id, targetVersion: version })
+      toast.success(
+        locale.t('agents.upgrade.enqueuedOk').replace('{name}', upgradeSingle.value.name),
+      )
+    } else {
+      const r = await upgradeAgentsMutate({
+        agentIds: upgradeBatchIds.value,
+        targetVersion: version,
+      })
+      const n = r?.data?.upgradeAgents ?? 0
+      toast.success(locale.t('agents.upgrade.batchEnqueuedOk').replace('{n}', String(n)))
+      selectedIds.value = new Set()
+    }
+    closeUpgrade()
+  } catch (e) {
+    toast.error(graphqlErrorMessage(e, locale.t('agents.action.failed')))
+  } finally {
+    upgradeSubmitting.value = false
+  }
+}
+
 function onRowAction(key: RowActionKey) {
   const target = rowActionsTarget.value
   closeRowActions()
@@ -361,8 +414,13 @@ function onRowAction(key: RowActionKey) {
     case 'delete':
       deleteTarget.value = target
       break
+    case 'update':
+      upgradeSingle.value = target
+      upgradeBatchIds.value = []
+      upgradeOpen.value = true
+      break
     default:
-      // rotateKey / update — no backend op yet.
+      // rotateKey — no backend op yet.
       notReady()
   }
 }
@@ -467,8 +525,12 @@ function onBatch(key: (typeof BATCH_KEYS)[number], close: () => void) {
     case 'delete':
       batchDeleteOpen.value = true
       break
+    case 'update':
+      upgradeSingle.value = null
+      upgradeBatchIds.value = ids
+      upgradeOpen.value = true
+      break
     default:
-      // update — no backend op yet.
       notReady()
   }
 }
@@ -1175,6 +1237,15 @@ const summaryText = computed(() => {
       danger
       @close="batchDeleteOpen = false"
       @confirm="doBatchDelete"
+    />
+
+    <UpgradeAgentDialog
+      :open="upgradeOpen"
+      :agent-name="upgradeSingle?.name ?? null"
+      :count="upgradeBatchIds.length"
+      :submitting="upgradeSubmitting"
+      @close="closeUpgrade"
+      @submit="onSubmitUpgrade"
     />
   </section>
 </template>

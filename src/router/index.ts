@@ -113,6 +113,13 @@ const router = createRouter({
         },
         // 用户与权限: createUser/assignUserRole are @hasPermission("user:manage") — admin only (tenant_admin removed).
         { path: 'platform/users',   name: 'platform.users',   component: () => import('@/views/UserRoleView.vue'), meta: { roles: ['admin'] } },
+        // 平台设置: platformSettings query + updatePlatformSettings are @hasRole(any: [admin]) — admin-only.
+        {
+          path: 'platform/settings',
+          name: 'platform.settings',
+          component: () => import('@/views/PlatformSettingsView.vue'),
+          meta: { admin: true },
+        },
 
         // 个人资料: any authenticated user; reads `me` (which all roles have).
         // Rendered as a modal overlay (see ProfileView / AppShell) rather than
