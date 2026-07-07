@@ -949,7 +949,7 @@ function formatCost(d: SpecDraft): string {
 
                     <details
                       class="advanced-section"
-                      @toggle="specAdvancedOpen[i] = $event.target.open"
+                      @toggle="specAdvancedOpen[i] = ($event.target as HTMLDetailsElement).open"
                     >
                       <summary class="advanced-toggle">
                         <cds-icon
@@ -1178,7 +1178,7 @@ function formatCost(d: SpecDraft): string {
               <details
                 class="advanced-section"
                 :open="false"
-                @toggle="providerAdvancedOpen = $event.target.open"
+                @toggle="providerAdvancedOpen = ($event.target as HTMLDetailsElement).open"
               >
                 <summary class="advanced-toggle">
                   <cds-icon

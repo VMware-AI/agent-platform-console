@@ -342,6 +342,8 @@ export interface LitellmParams {
   outputCostPerToken: number | null
   cacheReadInputTokenCost: number | null
   cacheCreationInputTokenCost: number | null
+  defaultApiKeyTpmLimit: number | null
+  defaultApiKeyRpmLimit: number | null
 }
 
 export interface ModelInfo {
