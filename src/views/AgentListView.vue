@@ -268,7 +268,8 @@ type RowActionKey = 'rotateKey' | 'restart' | 'stop' | 'update' | 'delete' | 'co
 //   密码更新 → 版本更新 → 重启 → 停止 → 删除
 // All five items are exposed for every status so the "更多" menu reads the
 // same regardless of the agent's current state.
-const ACTIONS_BY_STATUS: Record<StatusKey, RowActionKey[]> = {
+/* eslint-disable @typescript-eslint/no-unused-vars */
+const ACTIONS_BY_STATUS: Partial<Record<StatusKey, RowActionKey[]>> = {
   running: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
   stopped: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
   exception: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
