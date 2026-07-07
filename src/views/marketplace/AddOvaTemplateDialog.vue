@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* eslint-disable */
-/* eslint-disable @typescript-eslint/no-unused-vars */
+ 
 import { computed, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { VM_TEMPLATES_QUERY } from '@/api/graphql/queries/vsphere'

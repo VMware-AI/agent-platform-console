@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* eslint-disable */
-/* eslint-disable @typescript-eslint/no-unused-vars */
+ 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { computed, reactive, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
