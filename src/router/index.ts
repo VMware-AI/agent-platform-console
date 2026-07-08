@@ -51,50 +51,50 @@ const router = createRouter({
           component: () => import('@/views/ModelRouteView.vue'),
           meta: { admin: true },
         },
-        // 虚拟密钥: issueVirtualKey is @hasPermission("key:manage") — admin + tenant_admin.
+        // 虚拟密钥: issueVirtualKey is @hasPermission("key:manage") — admin only (tenant_admin removed).
         {
           path: 'model-gateway/key',
           name: 'mg.key',
           component: () => import('@/views/VirtualKeyView.vue'),
-          meta: { roles: ['admin', 'tenant_admin'] },
+          meta: { roles: ['admin'] },
         },
-        // 网关策略: rate-limit mutations are @hasPermission("route:manage") — admin + tenant_admin.
+        // 供应商模型: mutations are @hasPermission("route:manage") — admin only (tenant_admin removed).
         {
-          path: 'model-gateway/policy',
-          name: 'mg.policy',
-          component: () => import('@/views/RateLimitPolicyView.vue'),
-          meta: { roles: ['admin', 'tenant_admin'] },
+          path: 'model-gateway/supplier',
+          name: 'mg.supplier',
+          component: () => import('@/views/SupplierModelView.vue'),
+          meta: { roles: ['admin'] },
         },
 
         // 可观测性
-        // 计量中心: meteringOverview is @hasPermission("metering:view") — admin/observability/tenant_admin.
+        // 计量中心: meteringOverview is @hasPermission("metering:view") — admin + read_only (观测岗).
         {
           path: 'observability/metering',
           name: 'obs.metering',
           component: () => import('@/views/MeteringCenterView.vue'),
-          meta: { roles: ['admin', 'observability', 'tenant_admin'] },
+          meta: { roles: ['admin', 'read_only'] },
         },
         {
           path: 'observability/monitor',
           name: 'obs.monitor',
           component: () => import('@/views/RealtimeMonitorView.vue'),
-          meta: { roles: ['admin', 'observability', 'tenant_admin'] },
+          meta: { roles: ['admin', 'read_only'] },
         },
         // 请求日志 / 审计日志 are gated by @hasPermission("audit:view"), which the
-        // backend grants to admin, observability AND tenant_admin (rbac.go) — NOT
-        // admin alone. Guard on the role allowlist (meta.roles), not meta.admin,
-        // so the observability role (whose whole job is these pages) isn't bounced.
+        // backend grants to admin + read_only (the observability seat, rbac.go) —
+        // NOT admin alone. Guard on the role allowlist (meta.roles), not meta.admin,
+        // so the read_only observability seat isn't bounced.
         {
           path: 'observability/requests',
           name: 'obs.requests',
           component: () => import('@/views/RequestLogView.vue'),
-          meta: { roles: ['admin', 'observability', 'tenant_admin'] },
+          meta: { roles: ['admin', 'read_only'] },
         },
         {
           path: 'observability/audit',
           name: 'obs.audit',
           component: () => import('@/views/AuditLogView.vue'),
-          meta: { roles: ['admin', 'observability', 'tenant_admin'] },
+          meta: { roles: ['admin', 'read_only'] },
         },
 
         // 平台管理
@@ -111,13 +111,21 @@ const router = createRouter({
           component: () => import('@/views/ModelGatewayView.vue'),
           meta: { admin: true },
         },
-        // 用户与权限: createUser/assignUserRole are @hasPermission("user:manage") — admin + tenant_admin.
+        // 用户与权限: createUser/assignUserRole are @hasPermission("user:manage") — admin only (tenant_admin removed).
+        { path: 'platform/users',   name: 'platform.users',   component: () => import('@/views/UserRoleView.vue'), meta: { roles: ['admin'] } },
+        // 平台设置: platformSettings query + updatePlatformSettings are @hasRole(any: [admin]) — admin-only.
         {
-          path: 'platform/users',
-          name: 'platform.users',
-          component: () => import('@/views/UserRoleView.vue'),
-          meta: { roles: ['admin', 'tenant_admin'] },
+          path: 'platform/settings',
+          name: 'platform.settings',
+          component: () => import('@/views/PlatformSettingsView.vue'),
+          meta: { admin: true },
         },
+
+        // 个人资料: any authenticated user; reads `me` (which all roles have).
+        // Rendered as a modal overlay (see ProfileView / AppShell) rather than
+        // a content page — the route name is the on/off switch, the URL lives
+        // in the history so back/close restores the previous page.
+        { path: 'profile', name: 'profile', component: () => import('@/views/ProfileView.vue') },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: { name: 'overview' } },
@@ -192,6 +200,11 @@ export function resolveGuard(
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
+  // The first navigation races the boot-time `me` round-trip (Vue Router fires
+  // it inside app.use(router)); wait for the server-confirmed session so a
+  // stale localStorage copy can't let an expired session through (issue #31).
+  // After boot this resolves instantly.
+  await auth.whenReady()
   return resolveGuard(to.meta as GuardRouteMeta, typeof to.name === 'string' ? to.name : null, {
     isAuthenticated: auth.isAuthenticated,
     role: auth.role,

@@ -95,7 +95,6 @@ const nameValid = computed(() => {
   return length >= 2 && length <= 64
 })
 const ownerValid = computed(() => props.users.some((user) => user.id === userId.value))
-const agentValid = computed(() => true) // agent binding is optional
 const formValid = computed(() => nameValid.value && ownerValid.value)
 const minimumDate = computed(() => new Date().toISOString().slice(0, 10))
 

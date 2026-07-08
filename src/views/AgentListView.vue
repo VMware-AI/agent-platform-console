@@ -18,7 +18,6 @@ import type {
   AgentQueryResult,
   AgentQueryVars,
   AgentSortField,
-  AgentStatus,
   AgentsQueryResult,
   AgentsQueryVars,
   RecycleAgentResult,
