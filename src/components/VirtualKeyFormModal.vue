@@ -94,23 +94,16 @@ const nameValid = computed(() => {
   const length = name.value.trim().length
   return length >= 2 && length <= 64
 })
-const orgValid = computed(() => organizationId.value.trim().length > 0)
-const gatewayValid = computed(() =>
-  props.gateways.some((gateway) => gateway.id === modelGateway.value),
-)
-const allowedRoutesValid = computed(
-  () => allowAllRoutes.value || allowedRoutePermissions.value.length > 0,
-)
-const formValid = computed(
-  () => nameValid.value && orgValid.value && gatewayValid.value && allowedRoutesValid.value,
-)
+const ownerValid = computed(() => props.users.some((user) => user.id === userId.value))
+const agentValid = computed(() => true) // agent binding is optional
+const formValid = computed(() => nameValid.value && ownerValid.value)
+const minimumDate = computed(() => new Date().toISOString().slice(0, 10))
 
 function reset() {
   name.value = ''
-  organizationId.value = ''
-  modelGateway.value = props.gateways[0]?.id ?? ''
-  selectedModels.value = []
-  duration.value = ''
+  userId.value = props.users[0]?.id ?? ''
+  agentId.value = ''
+  policyId.value = ''
   expiresAt.value = ''
   agentId.value = ''
   maxBudget.value = null
@@ -296,9 +289,9 @@ function submit() {
             :aria-label="locale.t('virtualKey.form.agent')"
             @change="agentId = ($event.target as HTMLSelectElement).value"
           >
-            <option value="">{{ locale.t('virtualKey.form.agentNone') }}</option>
+            <option value="">不绑定（独立密钥）</option>
             <option v-for="agent in agents" :key="agent.id" :value="agent.id">
-              {{ agent.id }} · {{ agent.name }}
+              {{ agent.id.slice(0, 12) }}... · {{ agent.name }}
             </option>
           </select>
         </cds-select>

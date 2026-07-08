@@ -136,6 +136,8 @@ export const STRINGS: Dict = {
   'agents.col.actions': { zh: '操作', en: 'Actions' },
   'agents.status.running': { zh: '运行中', en: 'Running' },
   'agents.status.stopped': { zh: '已停止', en: 'Stopped' },
+  'agents.status.provisioning': { zh: '部署中', en: 'Provisioning' },
+  'agents.status.exception': { zh: '异常', en: 'Exception' },
   'agents.status.error': { zh: '异常', en: 'Error' },
   'agents.status.filter.all': { zh: '全部状态', en: 'All statuses' },
   'agents.type.filter.all': { zh: '全部类型', en: 'All types' },
@@ -156,7 +158,8 @@ export const STRINGS: Dict = {
   'agents.action.stop': { zh: '停止', en: 'Stop' },
   'agents.action.update': { zh: '版本更新', en: 'Version Update' },
   'agents.action.delete': { zh: '删除', en: 'Delete' },
-  'agents.action.copyKey': { zh: '复制密码', en: 'Copy key' },
+  'agents.action.copyAccess': { zh: '访问信息', en: 'Access info' },
+  'agents.action.copyKey': { zh: '复制密钥', en: 'Copy key' },
   'agents.action.copyKeyOk': { zh: '已复制 "{name}"', en: 'Copied "{name}"' },
   'agents.action.copyKeyFail': { zh: '复制失败', en: 'Copy failed' },
   'agents.action.notReady': { zh: '该操作暂未开放（后端接口开发中）', en: 'This action is not available yet (backend API in progress)' },
@@ -806,27 +809,8 @@ export const STRINGS: Dict = {
   },
   'marketplace.deploy.hostname': { zh: '主机名（可选）', en: 'Hostname (optional)' },
   'marketplace.deploy.hostnamePlaceholder': { zh: '如 agent-vm-01', en: 'e.g. agent-vm-01' },
-  'marketplace.deploy.initialPassword': {
-    zh: '初始登录密码（可选）',
-    en: 'Initial login password (optional)',
-  },
-  'marketplace.deploy.initialPasswordHint': {
-    zh: '用于智能体管理页与系统登录；留空则首启不设置密码，需另行配置。首登后可自助修改。',
-    en: 'For the agent management page + OS login. Empty = no credential is seeded (configure later). Changeable after first login.',
-  },
-  'marketplace.deploy.confirmPassword': { zh: '确认密码', en: 'Confirm password' },
-  'marketplace.deploy.error.passwordWeak': {
-    zh: '密码至少 12 个字符、最多 72 字节',
-    en: 'Password must be at least 12 characters and at most 72 bytes',
-  },
-  'marketplace.deploy.error.passwordChars': {
-    zh: '密码首尾不能有空白,且不能包含冒号或控制字符',
-    en: 'Password may not have leading/trailing whitespace or contain a colon or control characters',
-  },
-  'marketplace.deploy.error.passwordMismatch': {
-    zh: '两次输入的密码不一致',
-    en: 'The two passwords do not match',
-  },
+  'marketplace.deploy.notes': { zh: '部署说明（可选）', en: 'Deploy notes (optional)' },
+  'marketplace.deploy.notesPlaceholder': { zh: '如 用于生产环境 Web 服务', en: 'e.g. production web service' },
   'marketplace.deploy.targetPool': { zh: 'vSphere 放置资源池', en: 'vSphere placement pool' },
   'marketplace.deploy.targetPoolPlaceholder': {
     zh: '请选择放置资源池',

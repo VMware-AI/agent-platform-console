@@ -17,6 +17,7 @@ import {
   OVA_TEMPLATE_FAMILIES_QUERY,
   CREATE_OVA_TEMPLATE_FAMILY_MUTATION,
   DEPLOY_AGENT_MUTATION,
+  DELETE_OVA_TEMPLATE_FAMILY_MUTATION,
 } from '@/api/graphql/queries/ovaTemplates'
 import { RESOURCE_POOLS_QUERY } from '@/api/graphql/queries/resourcePools'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
@@ -207,6 +208,9 @@ const deployedAgentId = ref<string | null>(null)
 
 /* ---- Template detail modal ---- */
 const detailOpen = ref(false)
+const deleteConfirmOpen = ref(false)
+const deleteTarget = ref<OvaTemplateFamily | null>(null)
+const deleting = ref(false)
 const detailTemplate = ref<OvaTemplateFamily | null>(null)
 
 function onViewDetails(t: OvaTemplateFamily) {
@@ -216,6 +220,31 @@ function onViewDetails(t: OvaTemplateFamily) {
 function closeDetail() {
   detailOpen.value = false
   detailTemplate.value = null
+}
+
+/* ---- Delete template ---- */
+const { mutate: deleteMutate } = useMutation(DELETE_OVA_TEMPLATE_FAMILY_MUTATION)
+function onDeleteClick(t: OvaTemplateFamily) {
+  deleteTarget.value = t
+  deleteConfirmOpen.value = true
+}
+function closeDeleteConfirm() {
+  deleteConfirmOpen.value = false
+  deleteTarget.value = null
+}
+async function onConfirmDelete() {
+  if (!deleteTarget.value) return
+  deleting.value = true
+  try {
+    await deleteMutate({ id: deleteTarget.value.id })
+    toast.success(locale.t('marketplace.toast.deleteFamilyOk').replace('{name}', deleteTarget.value.name))
+    closeDeleteConfirm()
+    await refetch()
+  } catch (err: unknown) {
+    toast.error(graphqlErrorMessage(err, locale.t('marketplace.toast.deleteFamilyFail')))
+  } finally {
+    deleting.value = false
+  }
 }
 function onCreateAgent(t: OvaTemplateFamily) {
   if (pools.value.length === 0) {
@@ -229,8 +258,54 @@ function closeDeployDialog() {
   deployDialogOpen.value = false
   deployingTemplate.value = null
 }
-async function onSubmitDeploy(payload: DeployAgentInput) {
+async function onSubmitDeploy(payload: DeployAgentInput & { _createParents?: Array<{ name: string; ip: string }> | null }) {
   try {
+    // Two-phase: deploy parent VMs then instant-clone from them
+    if (payload._createParents?.length) {
+      const net = payload.targetNetwork || 'vlan805'
+      const rp = payload.targetResourcePool || '/Datacenter/host/Cluster/Resources/Namespaces (1)/vlan805'
+      for (const p of payload._createParents) {
+        // Use netmask/gateway/dns from dialog's ovfProperties if available
+        const parentOvf = payload.ovfProperties?.length ? [...payload.ovfProperties] : []
+        // Override static_ip with this parent's IP
+        const hasStatic = parentOvf.some(x => x.key === 'guestinfo.ip_mode' && x.value === 'static')
+        if (hasStatic) {
+          const idx = parentOvf.findIndex(x => x.key === 'guestinfo.static_ip')
+          if (idx >= 0) parentOvf[idx] = { key: 'guestinfo.static_ip', value: p.ip }
+          else parentOvf.push({ key: 'guestinfo.static_ip', value: p.ip })
+        }
+        const parentInput: DeployAgentInput = {
+          name: p.name,
+          templateFamilyId: payload.templateFamilyId,
+          templateVersionId: payload.templateVersionId,
+          resourcePoolId: payload.resourcePoolId,
+          targetResourcePool: rp,
+          targetNetwork: net,
+          cloneMode: 'full',
+          keySource: 'new',
+          ovfProperties: hasStatic ? parentOvf : [
+            { key: 'guestinfo.ip_mode', value: 'static' },
+            { key: 'guestinfo.static_ip', value: p.ip },
+          ],
+        }
+        toast.info(`正在部署父虚拟机 ${p.name} (${p.ip})...`)
+        const parentR = await deployMutate({ input: parentInput })
+        const parentAgent = parentR?.data?.deployAgent?.agent
+        if (!parentAgent || !parentAgent.endpoint) throw new Error(`父虚拟机 ${p.name} 部署失败`)
+        // Deploy instant clone from this parent
+        toast.info(`父虚拟机 ${parentAgent.endpoint} 就绪，正在即时克隆...`)
+        const childPayload = { ...payload, instantCloneParent: parentAgent.endpoint }
+        delete (childPayload as Record<string, unknown>)._createParents
+        const childR = await deployMutate({ input: childPayload })
+        const childResult = childR?.data?.deployAgent
+        if (childResult?.agent) {
+          toast.success(`即时克隆完成：${childResult.agent.name}`)
+        }
+      }
+      closeDeployDialog()
+      return
+    }
+
     const r = await deployMutate({ input: payload })
     const result = r?.data?.deployAgent
     if (result?.agent) {
@@ -485,6 +560,9 @@ const typeFilterLabel = computed(() => {
               <cds-button action="outline" status="primary" @click="onCreateAgent(tpl)">
                 {{ locale.t('marketplace.card.action.create') }}
               </cds-button>
+              <cds-button action="outline" status="danger" @click="onDeleteClick(tpl)">
+                <cds-icon shape="trash" size="sm" aria-hidden="true"></cds-icon>
+              </cds-button>
             </div>
           </div>
         </div>
@@ -665,6 +743,22 @@ const typeFilterLabel = computed(() => {
       </div>
     </cds-dropdown>
   </section>
+  <!-- Delete confirmation modal -->
+  <cds-modal :hidden="!deleteConfirmOpen" size="sm" @closeChange="closeDeleteConfirm">
+    <cds-modal-header>
+      <h2 cds-text="title" class="delete-title">确认删除模板</h2>
+    </cds-modal-header>
+    <cds-modal-content>
+      <p>确定要删除模板「<strong>{{ deleteTarget?.name }}</strong>」及其所有版本吗？</p>
+      <cds-alert status="warning">
+        <cds-alert-content>此操作不可撤销。已有智能体引用的模板无法删除。</cds-alert-content>
+      </cds-alert>
+    </cds-modal-content>
+    <cds-modal-actions>
+      <cds-button action="outline" @click="closeDeleteConfirm">取消</cds-button>
+      <cds-button status="danger" :loading-state="deleting ? 'loading' : 'default'" @click="onConfirmDelete">确认删除</cds-button>
+    </cds-modal-actions>
+  </cds-modal>
 </template>
 
 <style scoped>

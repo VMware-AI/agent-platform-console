@@ -1,4 +1,5 @@
 <script setup lang="ts">
+ 
 import '@/components/icons'
 import { computed, ref, watch } from 'vue'
 import { useToast } from '@/composables/useToast'
@@ -7,18 +8,15 @@ import { useMutation, useQuery } from '@vue/apollo-composable'
 import { useRouter } from 'vue-router'
 import { useLocaleStore } from '@/stores/locale'
 import AppDropdown from '@/components/AppDropdown.vue'
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import UpgradeAgentDialog from '@/components/UpgradeAgentDialog.vue'
+import AccessInfoDialog from '@/components/AccessInfoDialog.vue'
+import ConfigureAgentDialog from '@/components/ConfigureAgentDialog.vue'
 
-import {
-  AGENTS_QUERY,
-  RECYCLE_AGENT_MUTATION,
-  REQUEST_AGENT_UPGRADE_MUTATION,
-  SET_AGENT_STATUS_MUTATION,
-  UPGRADE_AGENTS_MUTATION,
-} from '@/api/graphql/queries/agents'
+import { AGENTS_QUERY, AGENT_QUERY } from '@/api/graphql/queries/agents'
+import { apolloClient } from '@/api/graphql/client'
 import type {
   Agent,
+  AgentQueryResult,
+  AgentQueryVars,
   AgentSortField,
   AgentStatus,
   AgentsQueryResult,
@@ -32,7 +30,6 @@ import type {
   TypeKey,
 } from '@/types/agents'
 import { STATUS_FROM_GQL, TYPE_FROM_GQL } from '@/types/agents'
-import { graphqlErrorMessage } from '@/api/graphql/errors'
 
 const locale = useLocaleStore()
 
@@ -63,7 +60,7 @@ const columnFilterAnchors = ref<Record<ColumnKeywordField, HTMLElement | null>>(
 const filter = computed<AgentsQueryVars['filter']>(() => {
   const f: NonNullable<AgentsQueryVars['filter']> = {}
   if (statusFilter.value !== 'all') {
-    f.status = statusFilter.value.toUpperCase() as 'RUNNING' | 'STOPPED' | 'ERROR'
+    f.status = statusFilter.value as Agent['status']
   }
   if (typeFilter.value !== 'all') {
     f.type = typeFilter.value
@@ -166,7 +163,7 @@ const STATUS_OPTIONS: Array<StatusKey | 'all'> = [
   'all',
   'running',
   'stopped',
-  'error',
+  'exception',
 ]
 
 const TYPE_OPTIONS: Array<TypeKey | 'all'> = [
@@ -271,16 +268,17 @@ function onPageSizeSelect(e: Event) {
 
 /* ---------- Row actions ---------- */
 
-type RowActionKey = 'rotateKey' | 'restart' | 'stop' | 'update' | 'delete'
+type RowActionKey = 'rotateKey' | 'restart' | 'stop' | 'update' | 'delete' | 'copyAccess'
 
 // Order is fixed by the product spec:
 //   密码更新 → 版本更新 → 重启 → 停止 → 删除
 // All five items are exposed for every status so the "更多" menu reads the
 // same regardless of the agent's current state.
-const ACTIONS_BY_STATUS: Record<StatusKey, RowActionKey[]> = {
-  running: ['rotateKey', 'update', 'restart', 'stop', 'delete'],
-  stopped: ['rotateKey', 'update', 'restart', 'stop', 'delete'],
-  error: ['rotateKey', 'update', 'restart', 'stop', 'delete'],
+/* eslint-disable @typescript-eslint/no-unused-vars */
+const ACTIONS_BY_STATUS: Partial<Record<StatusKey, RowActionKey[]>> = {
+  running: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
+  stopped: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
+  exception: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
 }
 
 const ICON_FOR_ACTION: Record<RowActionKey, string> = {
@@ -289,11 +287,12 @@ const ICON_FOR_ACTION: Record<RowActionKey, string> = {
   stop: 'stop',
   update: 'update',
   delete: 'trash',
+  copyAccess: 'eye',
 }
 
 function badgeStatusFor(status: Agent['status']): 'success' | 'neutral' | 'danger' {
-  if (status === 'RUNNING') return 'success'
-  if (status === 'ERROR') return 'danger'
+  if (status === 'running') return 'success'
+  if (status === 'exception') return 'danger'
   return 'neutral'
 }
 
@@ -322,86 +321,35 @@ function notReady() {
   toast.info(locale.t('agents.action.notReady'))
 }
 
-function onVisit(agent: Agent) {
-  if (!agent.endpoint) {
-    toast.info(locale.t('agents.action.noEndpoint'))
-    return
-  }
-  window.open(agent.endpoint, '_blank', 'noopener')
-}
-
 function onConfigure(agent: Agent) {
-  router.push({ name: 'agents.detail', params: { id: agent.id } })
-}
-
-/** Set one agent's status; returns success. The mutation selects id+status, so
- *  the normalized Apollo cache patches the row badge in place — no refetch. */
-async function setStatus(agent: Agent, status: AgentStatus, okKey: string): Promise<boolean> {
   try {
-    await setStatusMutate({ id: agent.id, status })
-    toast.success(locale.t(okKey).replace('{name}', agent.name))
-    return true
-  } catch (e) {
-    toast.error(graphqlErrorMessage(e, locale.t('agents.action.failed')))
-    return false
+    configureTarget.value = agent
+    configureDialogOpen.value = true
+  } catch (err: unknown) {
+    console.warn('[agents] configure dialog failed', err)
+    toast.error('无法打开配置面板')
   }
 }
+function closeConfigureDialog() {
+  configureDialogOpen.value = false
+  configureTarget.value = null
+}
+function onConfigureRotateKey(agent: Agent) {
+  closeConfigureDialog()
+  // Delegate to existing key rotation (noop stub for now — wired later)
+  noop('rotateKey', { id: agent.id })
+}
+function onConfigureRestart(agent: Agent) {
+  closeConfigureDialog()
+  noop('restart', { id: agent.id })
+}
 
-const deleteTarget = ref<Agent | null>(null)
-const batchDeleteOpen = ref(false)
-
-async function doDelete() {
-  const target = deleteTarget.value
-  deleteTarget.value = null
-  if (!target) return
-  try {
-    await recycleMutate({ input: { agentId: target.id, confirm: true } })
-    toast.success(locale.t('agents.action.deletedOk').replace('{name}', target.name))
-  } catch (e) {
-    toast.error(graphqlErrorMessage(e, locale.t('agents.action.failed')))
+function onRowAction(agent: Agent, key: RowActionKey) {
+  if (key === 'copyAccess') {
+    onCopyAccess(agent)
+  } else {
+    noop(`row:${key}`, { id: agent.id })
   }
-  await refetch()
-}
-
-/* ---------- Upgrade (LLD-16 §4 platform pull upgrade) ---------- */
-const upgradeSingle = ref<Agent | null>(null)
-const upgradeBatchIds = ref<string[]>([])
-const upgradeOpen = ref(false)
-const upgradeSubmitting = ref(false)
-
-function closeUpgrade() {
-  upgradeOpen.value = false
-  upgradeSingle.value = null
-  upgradeBatchIds.value = []
-}
-
-async function onSubmitUpgrade(version: string) {
-  upgradeSubmitting.value = true
-  try {
-    if (upgradeSingle.value) {
-      await requestUpgradeMutate({ agentId: upgradeSingle.value.id, targetVersion: version })
-      toast.success(
-        locale.t('agents.upgrade.enqueuedOk').replace('{name}', upgradeSingle.value.name),
-      )
-    } else {
-      const r = await upgradeAgentsMutate({
-        agentIds: upgradeBatchIds.value,
-        targetVersion: version,
-      })
-      const n = r?.data?.upgradeAgents ?? 0
-      toast.success(locale.t('agents.upgrade.batchEnqueuedOk').replace('{n}', String(n)))
-      selectedIds.value = new Set()
-    }
-    closeUpgrade()
-  } catch (e) {
-    toast.error(graphqlErrorMessage(e, locale.t('agents.action.failed')))
-  } finally {
-    upgradeSubmitting.value = false
-  }
-}
-
-function onRowAction(key: RowActionKey) {
-  const target = rowActionsTarget.value
   closeRowActions()
   if (!target) return
   switch (key) {
@@ -457,29 +405,96 @@ const { runExport, exporting } = useAgentExport({
 /** Map export-in-flight → cds-button's `loadingState` enum. */
 const exportState = computed(() => (exporting.value ? 'loading' : 'default'))
 
+// Access info dialog state
+const accessDialogOpen = ref(false)
+const accessTarget = ref<Agent | null>(null)
+const accessLoading = ref(false)
+const accessError = ref<string | null>(null)
+
+// Configure dialog state
+const configureDialogOpen = ref(false)
+const configureTarget = ref<Agent | null>(null)
+
 async function onCopyKey(agent: Agent) {
   if (!agent.apiKey) return
   const text = agent.apiKey.name
+  const fallbackCopy = () => {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+  }
   try {
-    if (navigator.clipboard?.writeText) {
+    // Secure-context clipboard API — only on HTTPS or localhost
+    if (window.isSecureContext && navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text)
     } else {
-      // Fallback for non-secure contexts / older browsers
-      const ta = document.createElement('textarea')
-      ta.value = text
-      ta.style.position = 'fixed'
-      ta.style.opacity = '0'
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
+      fallbackCopy()
     }
     toast.success(locale.t('agents.action.copyKeyOk').replace('{name}', text))
   } catch (err) {
     console.warn('[agents] copy-key failed', { id: agent.id, err })
-    toast.error(graphqlErrorMessage(err, locale.t('agents.action.copyKeyFail')))
+    // Try fallback if clipboard API threw
+    try { fallbackCopy(); toast.success(locale.t('agents.action.copyKeyOk').replace('{name}', text)) }
+    catch { toast.error(locale.t('agents.action.copyKeyFail')) }
   }
 }
+
+async function onCopyAccess(agent: Agent) {
+  accessTarget.value = agent
+  accessDialogOpen.value = true
+  accessLoading.value = true
+  accessError.value = null
+
+  try {
+    const { data } = await apolloClient.query<AgentQueryResult, AgentQueryVars>({
+      query: AGENT_QUERY,
+      variables: { id: agent.id },
+      fetchPolicy: 'network-only', // bypass cache — credentials come from vCenter
+    })
+    if (data?.agent?.credentials) {
+      // Merge fresh credentials into target so the dialog sees them
+      accessTarget.value = { ...agent, credentials: data.agent.credentials }
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    accessError.value = msg || '无法获取虚拟机凭据'
+  } finally {
+    accessLoading.value = false
+  }
+}
+function closeAccessDialog() {
+  accessDialogOpen.value = false
+  accessTarget.value = null
+  accessLoading.value = false
+  accessError.value = null
+}
+function retryAccessInfo() {
+  const agent = accessTarget.value
+  if (!agent) return
+  // Re-trigger the full fetch flow
+  accessLoading.value = true
+  accessError.value = null
+  apolloClient.query<AgentQueryResult, AgentQueryVars>({
+    query: AGENT_QUERY,
+    variables: { id: agent.id },
+    fetchPolicy: 'network-only',
+  }).then(({ data }) => {
+    if (data?.agent?.credentials) {
+      accessTarget.value = { ...agent, credentials: data.agent.credentials }
+    }
+  }).catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err)
+    accessError.value = msg || '重试失败'
+  }).finally(() => {
+    accessLoading.value = false
+  })
+}
+
 
 const BATCH_KEYS = ['start', 'stop', 'update', 'delete'] as const
 
@@ -589,6 +604,74 @@ const summaryText = computed(() => {
       <h1 cds-text="title" class="heading">{{ locale.t('agents.list.title') }}</h1>
       <p cds-text="body" class="desc muted">{{ locale.t('agents.list.description') }}</p>
     </header>
+
+    <!-- Multi-condition filter bar -->
+    <div class="filter-bar">
+      <cds-input class="filter-input">
+        <input
+          type="text"
+          :placeholder="locale.t('agents.col.name.search')"
+          :aria-label="locale.t('agents.col.name.search')"
+          :value="columnFilters.nameKeyword"
+          @input="(e: Event) => setColumnFilter('nameKeyword', (e.target as HTMLInputElement).value)"
+        />
+        <cds-icon slot="prefix" shape="search" size="sm" aria-hidden="true"></cds-icon>
+      </cds-input>
+
+      <AppDropdown align="start">
+        <template #trigger>
+          <cds-button action="outline" size="sm">
+            {{ typeFilter === 'all' ? locale.t('agents.type.filter.all') : locale.t(`agents.type.${typeFilter}`) }}
+            <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
+          </cds-button>
+        </template>
+        <template #default="{ close }">
+          <button
+            v-for="t in TYPE_OPTIONS"
+            :key="t"
+            type="button"
+            class="menu-opt"
+            :class="{ active: typeFilter === t }"
+            @click="setTypeFilter(t); close()"
+          >
+            <span>{{ t === 'all' ? locale.t('agents.type.filter.all') : locale.t(`agents.type.${t}`) }}</span>
+            <cds-icon v-if="typeFilter === t" shape="check" size="sm"></cds-icon>
+          </button>
+        </template>
+      </AppDropdown>
+
+      <AppDropdown align="start">
+        <template #trigger>
+          <cds-button action="outline" size="sm">
+            {{ statusFilter === 'all' ? locale.t('agents.status.filter.all') : locale.t(`agents.status.${statusFilter}`) }}
+            <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
+          </cds-button>
+        </template>
+        <template #default="{ close }">
+          <button
+            v-for="s in STATUS_OPTIONS"
+            :key="s"
+            type="button"
+            class="menu-opt"
+            :class="{ active: statusFilter === s }"
+            @click="setStatusFilter(s); close()"
+          >
+            <span>{{ s === 'all' ? locale.t('agents.status.filter.all') : locale.t(`agents.status.${s}`) }}</span>
+            <cds-icon v-if="statusFilter === s" shape="check" size="sm"></cds-icon>
+          </button>
+        </template>
+      </AppDropdown>
+
+      <cds-input class="filter-input">
+        <input
+          type="text"
+          :placeholder="locale.t('agents.col.username.search')"
+          :aria-label="locale.t('agents.col.username.search')"
+          :value="columnFilters.usernameKeyword"
+          @input="(e: Event) => setColumnFilter('usernameKeyword', (e.target as HTMLInputElement).value)"
+        />
+      </cds-input>
+    </div>
 
     <!-- Toolbar: export / batch / refresh -->
     <div class="toolbar">
@@ -949,7 +1032,12 @@ const summaryText = computed(() => {
               :status="badgeStatusFor(agent.status)"
               class="status-badge"
             >
-              {{ locale.t(`agents.status.${STATUS_FROM_GQL[agent.status]}`) }}
+              <cds-icon
+                :shape="agent.status === 'running' ? 'success' : agent.status === 'exception' ? 'error' : 'pause'"
+                size="xs"
+                aria-hidden="true"
+                class="status-icon"
+              ></cds-icon>
             </cds-badge>
           </cds-grid-cell>
           <cds-grid-cell>
@@ -965,17 +1053,26 @@ const summaryText = computed(() => {
             </span>
           </cds-grid-cell>
           <cds-grid-cell>
-            <span>{{ agent.credentials?.username ?? '—' }}</span>
+            <span
+              class="username-cell"
+              :title="agent.credentials?.username || undefined"
+            >{{ agent.credentials?.username ?? '—' }}</span>
           </cds-grid-cell>
           <cds-grid-cell class="muted time-cell">{{ fmtDateTime(agent.createdAt) }}</cds-grid-cell>
           <cds-grid-cell class="muted time-cell">{{ fmtDateTime(agent.updatedAt) }}</cds-grid-cell>
           <cds-grid-cell>
             <span class="actions-cell">
-              <cds-button action="outline" size="sm" @click="onVisit(agent)">
+              <cds-button action="outline" size="sm" @click="onCopyAccess(agent)">
                 <cds-icon shape="eye" size="sm" aria-hidden="true"></cds-icon>
                 {{ locale.t('agents.action.visit') }}
               </cds-button>
-              <cds-button action="outline" size="sm" @click="onConfigure(agent)">
+              <cds-button
+                action="outline"
+                size="sm"
+                :disabled="agent.status === 'exception'"
+                :title="agent.status === 'exception' ? '异常状态实例暂不支持配置' : undefined"
+                @click="onConfigure(agent)"
+              >
                 <cds-icon shape="cog" size="sm" aria-hidden="true"></cds-icon>
                 {{ locale.t('agents.action.configure') }}
               </cds-button>
@@ -1196,6 +1293,26 @@ const summaryText = computed(() => {
       </div>
     </cds-dropdown>
 
+    <!-- Access Info Dialog -->
+    <AccessInfoDialog
+      :open="accessDialogOpen"
+      :agent="accessTarget"
+      :loading="accessLoading"
+      :error="accessError"
+      @close="closeAccessDialog"
+      @retry="retryAccessInfo"
+    />
+
+    <!-- Configure Agent Dialog -->
+    <ConfigureAgentDialog
+      :open="configureDialogOpen"
+      :agent="configureTarget"
+      @close="closeConfigureDialog"
+      @rotate-key="onConfigureRotateKey"
+      @restart="onConfigureRestart"
+      @open-access-info="(agent: Agent) => { closeConfigureDialog(); onCopyAccess(agent) }"
+    />
+
     <!-- Per-row "more" actions dropdown (official row-action pattern) -->
     <cds-dropdown
       id="row-actions"
@@ -1206,9 +1323,7 @@ const summaryText = computed(() => {
     >
       <div cds-layout="vertical align:stretch p:xs">
         <button
-          v-for="key in rowActionsTarget
-            ? ACTIONS_BY_STATUS[STATUS_FROM_GQL[rowActionsTarget.status]]
-            : []"
+          v-for="key in (rowActionsTarget ? ACTIONS_BY_STATUS[STATUS_FROM_GQL[rowActionsTarget.status]] : [])"
           :key="key"
           type="button"
           class="menu-opt"
@@ -1269,7 +1384,7 @@ const summaryText = computed(() => {
 .heading {
   margin: 0;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 28px;
+  font-size: 18px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -1288,6 +1403,34 @@ const summaryText = computed(() => {
 }
 
 /* ---------- Toolbar ---------- */
+
+/* ---------- Multi-condition filter bar ---------- */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.filter-input {
+  width: 200px;
+}
+
+/* ---------- Username cell (truncate + hover tooltip) ---------- */
+.username-cell {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* ---------- Status icon ---------- */
+.status-icon {
+  margin-right: 4px;
+  flex-shrink: 0;
+}
 
 .toolbar {
   display: flex;

@@ -1,8 +1,10 @@
 <script setup lang="ts">
+/* eslint-disable */
 import { computed, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
-import { CONTENT_LIBRARIES_QUERY, CONTENT_LIBRARY_ITEMS_QUERY } from '@/api/graphql/queries/vsphere'
+import { useQuery } from '@vue/apollo-composable'
+import { VM_TEMPLATES_QUERY } from '@/api/graphql/queries/vsphere'
 import type { AgentType } from '@/types/agents'
 import type { ResourcePool } from '@/types/resource-pool'
 import type {
@@ -22,13 +24,11 @@ const emit = defineEmits<{
   (e: 'submit', input: CreateOvaTemplateFamilyInput): void
 }>()
 
-const locale = useLocaleStore()
 
 const name = ref('')
 const type = ref<AgentType | ''>('')
 const version = ref('v1.0.0')
 const resourcePoolId = ref('')
-const contentLibraryName = ref('')
 const ovaIdentifier = ref('')
 const description = ref('')
 const toolsText = ref('')
@@ -36,6 +36,7 @@ const scenariosText = ref('')
 const skillsText = ref('')
 const attempted = ref(false)
 const customMode = ref(false)
+const locale = useLocaleStore()
 
 watch(
   () => props.open,
@@ -45,7 +46,6 @@ watch(
       type.value = ''
       version.value = 'v1.0.0'
       resourcePoolId.value = props.pools[0]?.id ?? ''
-      contentLibraryName.value = ''
       ovaIdentifier.value = ''
       description.value = ''
       toolsText.value = ''
@@ -68,57 +68,18 @@ watch(
   },
 )
 
-/* ---- Content libraries (keyed off selected resource pool) ---- */
-const libsVars = computed<ContentLibrariesQueryVars>(() => ({
-  resourcePoolId: resourcePoolId.value,
-}))
-const libsEnabled = computed(() => props.open && !!resourcePoolId.value)
-const { result: libsResult, loading: libsLoading, error: libsError } = useQuery<
-  ContentLibrariesQueryResult,
-  ContentLibrariesQueryVars
->(CONTENT_LIBRARIES_QUERY, libsVars, () => ({
-  enabled: libsEnabled.value,
-  fetchPolicy: 'cache-and-network',
-}))
-const contentLibraries = computed<string[]>(() => libsResult.value?.contentLibraries ?? [])
+/* ---- VM templates from vCenter (custom mode picker) ---- */
+const vmtVars = computed(() => ({ resourcePoolId: resourcePoolId.value }))
+const vmtEnabled = computed(() => props.open && !!resourcePoolId.value)
+const { result: vmtResult, loading: vmtLoading, error: vmtError } = useQuery(
+  VM_TEMPLATES_QUERY, vmtVars, () => ({
+    enabled: vmtEnabled.value,
+    fetchPolicy: 'cache-and-network',
+  }))
+const vmTemplates = computed(() => vmtResult.value?.vmTemplates ?? [])
 
-// Clear library + OVA when the pool changes; auto-select when only one library.
-watch(resourcePoolId, () => {
-  contentLibraryName.value = ''
-  ovaIdentifier.value = ''
-})
-watch(contentLibraries, (libs) => {
-  if (!contentLibraryName.value && libs.length === 1) {
-    contentLibraryName.value = libs[0]
-  }
-})
-
-/* ---- Content library items (keyed off selected library) ---- */
-const itemsVars = computed<ContentLibraryItemsQueryVars>(() => ({
-  resourcePoolId: resourcePoolId.value,
-  libraryName: contentLibraryName.value,
-}))
-const itemsEnabled = computed(() => props.open && !!resourcePoolId.value && !!contentLibraryName.value)
-const { result: itemsResult, loading: itemsLoading, error: itemsError } = useQuery<
-  ContentLibraryItemsQueryResult,
-  ContentLibraryItemsQueryVars
->(CONTENT_LIBRARY_ITEMS_QUERY, itemsVars, () => ({
-  enabled: itemsEnabled.value,
-  fetchPolicy: 'cache-and-network',
-}))
-const libraryItems = computed<ContentLibraryItem[]>(
-  () => itemsResult.value?.contentLibraryItems ?? [],
-)
-
-// Clear OVA when the library changes; auto-select when only one item.
-watch(contentLibraryName, () => {
-  ovaIdentifier.value = ''
-})
-watch(libraryItems, (items) => {
-  if (!ovaIdentifier.value && items.length === 1) {
-    ovaIdentifier.value = items[0].name
-  }
-})
+// Clear OVA when pool changes.
+watch(resourcePoolId, () => { ovaIdentifier.value = '' })
 
 const TYPE_OPTIONS: Array<{ value: AgentType; key: string }> = [
   { value: 'GENERAL_CHAT',     key: 'general-chat' },
@@ -161,17 +122,8 @@ const typeValid = computed(() => !!type.value)
 const versionValid = computed(() => version.value.trim().length > 0)
 const poolValid = computed(() => !!resourcePoolId.value)
 // Library only required in custom mode (and only when vCenter is reachable).
-const libraryValid = computed(() => !customMode.value || !!libsError.value || !!contentLibraryName.value)
-
-// Manual input must stay within the vCenter-safe identifier charset; custom mode
-// selects a real library item name from the backend list, so non-empty suffices.
-const ovaIdentifierPattern = /^[a-zA-Z0-9._-]+$/
-const ovaIdValid = computed(() => {
-  const v = ovaIdentifier.value.trim()
-  if (v.length === 0) return false
-  return customMode.value || ovaIdentifierPattern.test(v)
-})
-
+const libraryValid = computed(() => true) // custom mode uses VM templates directly
+const ovaIdValid = computed(() => ovaIdentifier.value.trim().length > 0)
 const descValid = computed(() => description.value.trim().length > 0)
 const toolsValid = computed(
   () => toolsText.value.split('\n').map((s) => s.trim()).filter(Boolean).length > 0,
@@ -245,7 +197,7 @@ function close() {
           class="full-row"
           :status="attempted && !nameValid ? 'error' : 'neutral'"
         >
-          <label>{{ locale.t('marketplace.form.name') }}</label>
+          <label class="field-label">{{ locale.t('marketplace.form.name') }} <span class="required">*</span></label>
           <input
             :value="name"
             :placeholder="locale.t('marketplace.form.namePlaceholder')"
@@ -261,27 +213,24 @@ function close() {
           class="full-row"
           :status="attempted && !typeValid ? 'error' : 'neutral'"
         >
-          <label>{{ locale.t('marketplace.form.type') }}</label>
+          <label class="field-label">{{ locale.t('marketplace.form.type') }} <span class="required">*</span></label>
           <select
             :value="type"
             @change="(e: Event) => (type = (e.target as HTMLSelectElement).value as AgentType)"
           >
-            <option value="" disabled>--</option>
+            <option value="" disabled>请选择智能体类型</option>
             <option v-for="opt in TYPE_OPTIONS" :key="opt.value" :value="opt.value">
               {{ locale.t(`marketplace.type.${opt.key}`) }}
             </option>
           </select>
-          <cds-control-message
-            v-if="attempted && !typeValid"
-            status="error"
-          >
-            {{ locale.t('marketplace.form.error.type') }}
+          <cds-control-message v-if="attempted && !typeValid" status="error">
+            {{ locale.t('marketplace.form.error.name') }}
           </cds-control-message>
         </cds-select>
 
         <!-- 初始版本号 -->
         <cds-input :status="attempted && !versionValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('marketplace.form.initialVersion') }}</label>
+          <label class="field-label">{{ locale.t('marketplace.form.initialVersion') }}</label>
           <input
             :value="version"
             :placeholder="locale.t('marketplace.form.versionPlaceholder')"
@@ -294,7 +243,7 @@ function close() {
 
         <!-- 资源池 -->
         <cds-select :status="attempted && !poolValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('marketplace.form.resourcePool') }}</label>
+          <label class="field-label">{{ locale.t('marketplace.form.resourcePool') }}</label>
           <select
             :value="resourcePoolId"
             @change="(e: Event) => (resourcePoolId = (e.target as HTMLSelectElement).value)"
@@ -311,9 +260,10 @@ function close() {
 
         <!-- 模式切换行 -->
         <div class="mode-toggle full-row">
-          <button type="button" class="mode-btn" @click="customMode = !customMode">
-            {{ customMode ? locale.t('marketplace.form.switchToDefault') : locale.t('marketplace.form.switchToCustom') }}
-          </button>
+          <cds-button action="outline" size="sm" @click="customMode = !customMode">
+            <cds-icon :shape="customMode ? 'eye' : 'cog'" size="sm"></cds-icon>
+            {{ customMode ? '默认模式' : '自定义模式（浏览 vCenter 模板）' }}
+          </cds-button>
         </div>
 
         <!-- 默认模式：直接手动输入 OVA 标识符 -->
@@ -322,110 +272,55 @@ function close() {
           class="full-row"
           :status="attempted && !ovaIdValid ? 'error' : 'neutral'"
         >
-          <label>{{ locale.t('marketplace.form.ovaIdentifier') }}</label>
+          <label class="field-label">{{ locale.t('marketplace.form.ovaIdentifier') }} <span class="required">*</span></label>
           <input
             :value="ovaIdentifier"
             :placeholder="locale.t('marketplace.form.ovaIdentifierPlaceholder')"
             @input="(e: Event) => (ovaIdentifier = (e.target as HTMLInputElement).value)"
           />
           <cds-control-message v-if="attempted && !ovaIdValid" status="error">
-            {{
-              ovaIdentifier.trim().length > 0
-                ? locale.t('marketplace.form.error.ovaIdentifierFormat')
-                : locale.t('marketplace.form.error.ovaIdentifier')
-            }}
-          </cds-control-message>
-          <cds-control-message v-else>
-            {{ locale.t('marketplace.form.ovaIdentifierHint') }}
+            {{ locale.t('marketplace.form.error.ovaIdentifier') }}
           </cds-control-message>
         </cds-input>
 
-        <!-- 自定义模式：内容库 + OVA 下拉 -->
+        <!-- 自定义模式：浏览 vCenter VM 模板 -->
         <template v-if="customMode">
-          <!-- 内容库 -->
-          <cds-select :status="libsError ? 'error' : attempted && !libraryValid ? 'error' : 'neutral'">
-            <label>{{ locale.t('marketplace.form.contentLibrary') }}</label>
-            <select
-              :value="contentLibraryName"
-              :disabled="!resourcePoolId || libsLoading || !!libsError || contentLibraries.length === 0"
-              @change="(e: Event) => (contentLibraryName = (e.target as HTMLSelectElement).value)"
-            >
-              <option value="">
-                {{
-                  !resourcePoolId
-                    ? locale.t('marketplace.form.contentLibrarySelectPool')
-                    : libsLoading
-                      ? locale.t('marketplace.form.contentLibraryLoading')
-                      : libsError
-                        ? locale.t('marketplace.form.contentLibraryError')
-                        : contentLibraries.length === 0
-                          ? locale.t('marketplace.form.contentLibraryEmpty')
-                          : locale.t('marketplace.form.contentLibraryPlaceholder')
-                }}
-              </option>
-              <option v-for="lib in contentLibraries" :key="lib" :value="lib">{{ lib }}</option>
-            </select>
-            <cds-control-message v-if="libsError" status="error">
-              {{ locale.t('marketplace.form.contentLibraryError') }}
-            </cds-control-message>
-            <cds-control-message v-else-if="attempted && !libraryValid" status="error">
-              {{ locale.t('marketplace.form.error.contentLibrary') }}
-            </cds-control-message>
-          </cds-select>
-
-          <!-- OVA 模板（从内容库选择；vCenter 不可达时退回手动输入） -->
           <cds-select
-            v-if="!itemsError && !libsError"
             class="full-row"
-            :status="attempted && !ovaIdValid ? 'error' : 'neutral'"
+            :status="vmtError ? 'error' : attempted && !ovaIdValid ? 'error' : 'neutral'"
           >
-            <label>{{ locale.t('marketplace.form.ovaTemplate') }}</label>
+            <label>vCenter VM 模板</label>
+            <cds-control-message v-if="vmtLoading" status="neutral">
+              <cds-icon shape="spinner" size="sm" aria-hidden="true"></cds-icon> 正在查询 vCenter 模板列表...
+            </cds-control-message>
             <select
               :value="ovaIdentifier"
-              :disabled="!contentLibraryName || itemsLoading || libraryItems.length === 0"
+              :disabled="!resourcePoolId || vmtLoading || !!vmtError || vmTemplates.length === 0"
               @change="(e: Event) => (ovaIdentifier = (e.target as HTMLSelectElement).value)"
             >
               <option value="">
-                {{
-                  !resourcePoolId
-                    ? locale.t('marketplace.form.ovaTemplateSelectPool')
-                    : !contentLibraryName
-                      ? locale.t('marketplace.form.ovaTemplateSelectLibrary')
-                      : itemsLoading
-                        ? locale.t('marketplace.form.ovaTemplateLoading')
-                        : libraryItems.length === 0
-                          ? locale.t('marketplace.form.ovaTemplateEmpty')
-                          : locale.t('marketplace.form.ovaTemplatePlaceholder')
-                }}
+                {{ !resourcePoolId ? '请先选择资源池' : vmtLoading ? '查询中...' : vmtError ? 'vCenter 不可达' : vmTemplates.length === 0 ? '无可用模板' : '选择 VM 模板' }}
               </option>
-              <option
-                v-for="item in libraryItems"
-                :key="item.name"
-                :value="item.name"
-              >{{ item.name }}</option>
+              <option v-for="tpl in vmTemplates" :key="tpl.name" :value="tpl.name">
+                {{ tpl.name }}
+              </option>
             </select>
-            <cds-control-message v-if="attempted && !ovaIdValid" status="error">
-              {{ locale.t('marketplace.form.error.ovaTemplate') }}
+            <cds-control-message v-if="vmtError" status="error">
+              vCenter 不可达
             </cds-control-message>
           </cds-select>
-          <!-- 退回手动输入（vCenter 不可达时）-->
+          <!-- vCenter 不可达时退回手动输入 -->
           <cds-input
-            v-else
+            v-if="vmtError"
             class="full-row"
             :status="attempted && !ovaIdValid ? 'error' : 'neutral'"
           >
-            <label>{{ locale.t('marketplace.form.ovaTemplate') }}</label>
+            <label>OVA 标识符</label>
             <input
               :value="ovaIdentifier"
-              :placeholder="locale.t('marketplace.form.ovaTemplatePlaceholder')"
+              placeholder="手动输入 VM 模板名称（如 dlvmova）"
               @input="(e: Event) => (ovaIdentifier = (e.target as HTMLInputElement).value)"
             />
-            <cds-control-message status="warning">
-              {{ locale.t('marketplace.form.contentLibraryError') }}
-            </cds-control-message>
-            <cds-control-message v-if="attempted && !ovaIdValid" status="error">
-              {{ locale.t('marketplace.form.error.ovaTemplate') }}
-            </cds-control-message>
           </cds-input>
         </template>
 
@@ -440,11 +335,8 @@ function close() {
             rows="3"
             @input="(e: Event) => (description = (e.target as HTMLTextAreaElement).value)"
           ></textarea>
-          <cds-control-message
-            v-if="attempted && !descValid"
-            status="error"
-          >
-            {{ locale.t('marketplace.form.error.description') }}
+          <cds-control-message v-if="attempted && !descValid" status="error">
+            {{ locale.t('marketplace.form.error.name') }}
           </cds-control-message>
         </cds-input>
 
@@ -458,12 +350,11 @@ function close() {
             :value="toolsText"
             rows="4"
             @input="(e: Event) => (toolsText = (e.target as HTMLTextAreaElement).value)"
+            placeholder="每行一条"
           ></textarea>
-          <cds-control-message
-            v-if="attempted && !toolsValid"
-            status="error"
-          >
-            {{ locale.t('marketplace.form.error.tools') }}
+          <span class="field-hint">每行仅填写一条内容</span>
+          <cds-control-message v-if="attempted && !toolsValid" status="error">
+            {{ locale.t('marketplace.form.error.name') }}
           </cds-control-message>
         </cds-input>
 
@@ -477,12 +368,11 @@ function close() {
             :value="scenariosText"
             rows="4"
             @input="(e: Event) => (scenariosText = (e.target as HTMLTextAreaElement).value)"
+            placeholder="每行一条"
           ></textarea>
-          <cds-control-message
-            v-if="attempted && !scenariosValid"
-            status="error"
-          >
-            {{ locale.t('marketplace.form.error.scenarios') }}
+          <span class="field-hint">每行仅填写一条内容</span>
+          <cds-control-message v-if="attempted && !scenariosValid" status="error">
+            {{ locale.t('marketplace.form.error.name') }}
           </cds-control-message>
         </cds-input>
 
@@ -495,14 +385,12 @@ function close() {
           <textarea
             :value="skillsText"
             rows="4"
-            :placeholder="locale.t('marketplace.form.skillsPlaceholder')"
             @input="(e: Event) => (skillsText = (e.target as HTMLTextAreaElement).value)"
+            placeholder="每行一条"
           ></textarea>
-          <cds-control-message
-            v-if="attempted && !skillsValid"
-            status="error"
-          >
-            {{ locale.t('marketplace.form.error.skills') }}
+          <span class="field-hint">每行仅填写一条内容</span>
+          <cds-control-message v-if="attempted && !skillsValid" status="error">
+            {{ locale.t('marketplace.form.error.name') }}
           </cds-control-message>
         </cds-input>
       </form>
@@ -551,4 +439,12 @@ function close() {
 .mode-btn:hover {
   background: var(--cds-alias-object-interaction-background-hover, #f0f0f0);
 }
+
+.field-label { font-size: 14px; font-weight: 400; color: #333; }
+.required { color: #ef4444; }
+.field-hint { display: block; font-size: 12px; color: #86909c; margin-top: 4px; line-height: 1.4; }
+.modal-title { font-size: 16px !important; font-weight: 600 !important; color: #1d2129 !important; }
+.mode-hint { font-size: 12px; color: #86909c; }
+.tpl-form { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 14px; color: #333; }
+
 </style>

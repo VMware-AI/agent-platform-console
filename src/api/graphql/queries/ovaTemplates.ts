@@ -21,6 +21,17 @@ const FAMILY_FIELDS = /* GraphQL */ `
       ovaIdentifier
       notes
       createdAt
+      ovfProperties {
+        key
+        label
+        type
+        defaultValue
+        description
+        required
+        password
+        values
+        category
+      }
     }
   }
 `
@@ -33,6 +44,17 @@ const VERSION_FIELDS = /* GraphQL */ `
     ovaIdentifier
     notes
     createdAt
+    ovfProperties {
+      key
+      label
+      type
+      defaultValue
+      description
+      required
+      password
+      values
+      category
+    }
   }
 `
 
@@ -96,6 +118,12 @@ export const ADD_OVA_TEMPLATE_VERSION_MUTATION = gql`
   }
 `
 
+export const DELETE_OVA_TEMPLATE_FAMILY_MUTATION = gql`
+  mutation DeleteOvaTemplateFamily($id: ID!) {
+    deleteOvaTemplateFamily(id: $id)
+  }
+`
+
 // Deploy a NEW agent from an OVA template version. The backend creates the agent,
 // provisions its VM, issues the gateway key, and returns its secret ONCE via
 // `virtualKeySecret` (surfaced in a reveal dialog) — there is no separate
@@ -141,7 +169,4 @@ export const DEPLOY_AGENT_MUTATION = gql`
   }
 `
 
-export {
-  FAMILY_FIELDS,
-  VERSION_FIELDS,
-}
+export { FAMILY_FIELDS, VERSION_FIELDS }

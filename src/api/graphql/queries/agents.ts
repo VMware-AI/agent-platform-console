@@ -18,6 +18,9 @@ export const AGENT_QUERY = gql`
       }
       credentials {
         username
+        ip
+        sshCommand
+        passwordHint
       }
       endpoint
       templateFamilyId
@@ -50,6 +53,9 @@ export const AGENTS_QUERY = gql`
         createdAt
         updatedAt
         endpoint
+        credentials {
+          username
+        }
       }
       totalCount
       pageInfo {
@@ -61,37 +67,48 @@ export const AGENTS_QUERY = gql`
   }
 `
 
-export const SET_AGENT_STATUS_MUTATION = gql`
-  mutation SetAgentStatus($id: ID!, $status: AgentStatus!) {
-    setAgentStatus(id: $id, status: $status) {
+// TODO: Backend — add Agent.vmResources resolver (CPU/memory/disk/vApp props from vCenter).
+// When available, this query will hydrate the Configure dialog's resource editor.
+export const AGENT_VM_INFO_QUERY = gql`
+  query AgentVmInfo($id: ID!) {
+    agent(id: $id) {
       id
-      status
-      updatedAt
+      vmResources {
+        cpu
+        memory
+        disk
+        networkLabel
+        vAppProperties {
+          key
+          value
+        }
+      }
     }
   }
 `
 
-export const RECYCLE_AGENT_MUTATION = gql`
-  mutation RecycleAgent($input: RecycleAgentInput!) {
-    recycleAgent(input: $input) {
+// TODO: Backend — add updateAgent mutation (→ vCenter ReconfigVM_Task).
+// Accepts partial resource/network/vApp deltas; backend validates hot-add constraints.
+export const RECONFIG_AGENT_VM_MUTATION = gql`
+  mutation ReconfigAgentVM(
+    $agentId: ID!
+    $resource: AgentResourceInput
+    $network: AgentNetworkInput
+    $vAppProperties: [VAppPropertyInput!]
+  ) {
+    reconfigAgentVM(
+      agentId: $agentId
+      resource: $resource
+      network: $network
+      vAppProperties: $vAppProperties
+    ) {
       id
-      status
-      updatedAt
+      vmResources {
+        cpu
+        memory
+        disk
+        networkLabel
+      }
     }
-  }
-`
-
-// LLD-16 §4: platform pull upgrade. Enqueues an upgrade command the in-VM daemon
-// executes on its next heartbeat. requestAgentUpgrade returns true (no-op) when one
-// is already in flight; upgradeAgents (fleet) returns the count actually enqueued.
-export const REQUEST_AGENT_UPGRADE_MUTATION = gql`
-  mutation RequestAgentUpgrade($agentId: ID!, $targetVersion: String!) {
-    requestAgentUpgrade(agentId: $agentId, targetVersion: $targetVersion)
-  }
-`
-
-export const UPGRADE_AGENTS_MUTATION = gql`
-  mutation UpgradeAgents($agentIds: [ID!]!, $targetVersion: String!) {
-    upgradeAgents(agentIds: $agentIds, targetVersion: $targetVersion)
   }
 `
