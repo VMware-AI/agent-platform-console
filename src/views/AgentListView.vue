@@ -158,6 +158,7 @@ const STATUS_OPTIONS: Array<StatusKey | 'all'> = [
   'running',
   'stopped',
   'exception',
+  'provisioning',
 ]
 
 const TYPE_OPTIONS: Array<TypeKey | 'all'> = [
@@ -287,6 +288,7 @@ const ICON_FOR_ACTION: Record<RowActionKey, string> = {
 function badgeStatusFor(status: Agent['status']): 'success' | 'neutral' | 'danger' {
   if (status === 'running') return 'success'
   if (status === 'exception') return 'danger'
+  if (status === 'provisioning') return 'neutral'
   return 'neutral'
 }
 
@@ -949,11 +951,12 @@ const summaryText = computed(() => {
               class="status-badge"
             >
               <cds-icon
-                :shape="agent.status === 'running' ? 'success' : agent.status === 'exception' ? 'error' : 'pause'"
+                :shape="agent.status === 'running' ? 'success' : agent.status === 'exception' ? 'error' : agent.status === 'provisioning' ? 'hourglass' : 'pause'"
                 size="xs"
                 aria-hidden="true"
                 class="status-icon"
               ></cds-icon>
+              <span>{{ locale.t('agents.status.' + agent.status) }}</span>
             </cds-badge>
           </cds-grid-cell>
           <cds-grid-cell>
