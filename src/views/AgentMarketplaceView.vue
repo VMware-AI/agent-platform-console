@@ -306,6 +306,7 @@ async function onSubmitDeploy(payload: DeployAgentInput & { _createParents?: Arr
       return
     }
 
+    delete (payload as Record<string, unknown>)._createParents
     const r = await deployMutate({ input: payload })
     const result = r?.data?.deployAgent
     if (result?.agent) {
