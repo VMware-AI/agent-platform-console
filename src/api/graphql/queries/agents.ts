@@ -18,6 +18,9 @@ export const AGENT_QUERY = gql`
       }
       credentials {
         username
+        ip
+        sshCommand
+        passwordHint
       }
       endpoint
       templateFamilyId
@@ -50,6 +53,9 @@ export const AGENTS_QUERY = gql`
         createdAt
         updatedAt
         endpoint
+        credentials {
+          username
+        }
       }
       totalCount
       pageInfo {
@@ -61,6 +67,51 @@ export const AGENTS_QUERY = gql`
   }
 `
 
+// TODO: Backend — add Agent.vmResources resolver (CPU/memory/disk/vApp props from vCenter).
+// When available, this query will hydrate the Configure dialog's resource editor.
+export const AGENT_VM_INFO_QUERY = gql`
+  query AgentVmInfo($id: ID!) {
+    agent(id: $id) {
+      id
+      vmResources {
+        cpu
+        memory
+        disk
+        networkLabel
+        vAppProperties {
+          key
+          value
+        }
+      }
+    }
+  }
+`
+
+// TODO: Backend — add updateAgent mutation (→ vCenter ReconfigVM_Task).
+// Accepts partial resource/network/vApp deltas; backend validates hot-add constraints.
+export const RECONFIG_AGENT_VM_MUTATION = gql`
+  mutation ReconfigAgentVM(
+    $agentId: ID!
+    $resource: AgentResourceInput
+    $network: AgentNetworkInput
+    $vAppProperties: [VAppPropertyInput!]
+  ) {
+    reconfigAgentVM(
+      agentId: $agentId
+      resource: $resource
+      network: $network
+      vAppProperties: $vAppProperties
+    ) {
+      id
+      vmResources {
+        cpu
+        memory
+        disk
+        networkLabel
+      }
+    }
+  }
+`
 export const SET_AGENT_STATUS_MUTATION = gql`
   mutation SetAgentStatus($id: ID!, $status: AgentStatus!) {
     setAgentStatus(id: $id, status: $status) {
