@@ -3,7 +3,6 @@
 import { computed, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
-import { useQuery } from '@vue/apollo-composable'
 import { VM_TEMPLATES_QUERY } from '@/api/graphql/queries/vsphere'
 import type { AgentType } from '@/types/agents'
 import type { ResourcePool } from '@/types/resource-pool'

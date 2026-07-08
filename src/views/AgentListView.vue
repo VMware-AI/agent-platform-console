@@ -4,8 +4,7 @@ import '@/components/icons'
 import { computed, ref, watch } from 'vue'
 import { useToast } from '@/composables/useToast'
 import { useAgentExport } from '@/composables/useAgentExport'
-import { useMutation, useQuery } from '@vue/apollo-composable'
-import { useRouter } from 'vue-router'
+import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import AppDropdown from '@/components/AppDropdown.vue'
 import AccessInfoDialog from '@/components/AccessInfoDialog.vue'
@@ -20,10 +19,6 @@ import type {
   AgentSortField,
   AgentsQueryResult,
   AgentsQueryVars,
-  RecycleAgentResult,
-  RecycleAgentVars,
-  SetAgentStatusResult,
-  SetAgentStatusVars,
   SortDirection,
   StatusKey,
   TypeKey,
@@ -295,29 +290,9 @@ function badgeStatusFor(status: Agent['status']): 'success' | 'neutral' | 'dange
   return 'neutral'
 }
 
-/* ---------- Row / batch actions (real mutations) ----------
- * stop/restart → setAgentStatus; delete → recycleAgent (double-confirm);
- * visit → the agent's endpoint; configure → the detail page. rotateKey and
- * update still have no backend op — those keep the honest "not yet" toast. */
-
-const router = useRouter()
-const { mutate: setStatusMutate } = useMutation<SetAgentStatusResult, SetAgentStatusVars>(
-  SET_AGENT_STATUS_MUTATION,
-)
-const { mutate: recycleMutate } = useMutation<RecycleAgentResult, RecycleAgentVars>(
-  RECYCLE_AGENT_MUTATION,
-)
-const { mutate: requestUpgradeMutate } = useMutation<
-  { requestAgentUpgrade: boolean },
-  { agentId: string; targetVersion: string }
->(REQUEST_AGENT_UPGRADE_MUTATION)
-const { mutate: upgradeAgentsMutate } = useMutation<
-  { upgradeAgents: number },
-  { agentIds: string[]; targetVersion: string }
->(UPGRADE_AGENTS_MUTATION)
-
-function notReady() {
-  toast.info(locale.t('agents.action.notReady'))
+/* Stub handlers — wired to a real backend mutation later. */
+function noop(label: string, payload?: unknown) {
+  console.log(`[agents] ${label}`, payload)
 }
 
 function onConfigure(agent: Agent) {
@@ -350,26 +325,6 @@ function onRowAction(agent: Agent, key: RowActionKey) {
     noop(`row:${key}`, { id: agent.id })
   }
   closeRowActions()
-  if (!target) return
-  switch (key) {
-    case 'stop':
-      void setStatus(target, 'STOPPED', 'agents.action.stoppedOk')
-      break
-    case 'restart':
-      void setStatus(target, 'RUNNING', 'agents.action.restartedOk')
-      break
-    case 'delete':
-      deleteTarget.value = target
-      break
-    case 'update':
-      upgradeSingle.value = target
-      upgradeBatchIds.value = []
-      upgradeOpen.value = true
-      break
-    default:
-      // rotateKey — no backend op yet.
-      notReady()
-  }
 }
 
 /* Anchors for the cds-dropdown row-actions popup (per row). */
@@ -506,53 +461,16 @@ const BATCH_ICON_FOR_KEY: Record<(typeof BATCH_KEYS)[number], string> = {
   update: ICON_FOR_ACTION.update, // update
   delete: 'trash',                // matches the more-menu `delete` icon
 }
+type BatchKey = (typeof BATCH_KEYS)[number]
 
-/** Run one mutation per selected id, then summarize, clear selection, refetch. */
-async function runBatch(ids: string[], run: (id: string) => Promise<unknown>) {
-  const results = await Promise.allSettled(ids.map(run))
-  const ok = results.filter((r) => r.status === 'fulfilled').length
-  const fail = results.length - ok
-  const summary = locale
-    .t('agents.batch.done')
-    .replace('{ok}', String(ok))
-    .replace('{fail}', String(fail))
-  if (fail > 0) toast.error(summary)
-  else toast.success(summary)
-  selectedIds.value = new Set()
-  await refetch()
-}
-
-function onBatch(key: (typeof BATCH_KEYS)[number], close: () => void) {
-  close()
+function onBatch(key: BatchKey, close: () => void) {
   if (selectedIds.value.size === 0) {
-    toast.info(locale.t('agents.batch.disabled'))
+    noop('batch:disabled', key)
+    close()
     return
   }
-  const ids = [...selectedIds.value]
-  switch (key) {
-    case 'start':
-      void runBatch(ids, (id) => setStatusMutate({ id, status: 'RUNNING' }))
-      break
-    case 'stop':
-      void runBatch(ids, (id) => setStatusMutate({ id, status: 'STOPPED' }))
-      break
-    case 'delete':
-      batchDeleteOpen.value = true
-      break
-    case 'update':
-      upgradeSingle.value = null
-      upgradeBatchIds.value = ids
-      upgradeOpen.value = true
-      break
-    default:
-      notReady()
-  }
-}
-
-async function doBatchDelete() {
-  batchDeleteOpen.value = false
-  const ids = [...selectedIds.value]
-  await runBatch(ids, (id) => recycleMutate({ input: { agentId: id, confirm: true } }))
+  noop(`batch:${key}`, { ids: [...selectedIds.value] })
+  close()
 }
 
 function onExport() {
@@ -567,7 +485,7 @@ function onRefresh() {
  *  so all "创建时间/更新时间" cells in the console look the same. */
 function fmtDateTime(iso: string): string {
   try {
-    return new Intl.DateTimeFormat(locale.locale === 'zh' ? 'zh-CN' : 'en-US', {
+    return new Intl.DateTimeFormat('zh-CN', {
       dateStyle: 'medium',
       timeStyle: 'short',
     }).format(new Date(iso))
@@ -717,12 +635,12 @@ const summaryText = computed(() => {
         </template>
       </AppDropdown>
 
-      <button
-        type="button"
-        class="refresh-button"
-        :disabled="loading"
+      <cds-button
+        action="ghost"
+        class="toolbar-refresh"
         :aria-label="locale.t('agents.list.refresh')"
         :title="locale.t('agents.list.refresh')"
+        :disabled="loading"
         @click="onRefresh"
       >
         <cds-icon
@@ -731,7 +649,7 @@ const summaryText = computed(() => {
           :class="{ spinning: loading }"
           aria-hidden="true"
         ></cds-icon>
-      </button>
+      </cds-button>
     </div>
 
     <!-- Error banner sits above the grid (Clarity alert pattern) -->
@@ -748,8 +666,7 @@ const summaryText = computed(() => {
       :column-layout="'flex'"
       :selectable="null"
       role="grid"
-      :aria-label="locale.t('agents.list.title')"
-      scroll-lock
+      aria-label="agents"
     >
         <!-- Column definitions -->
         <cds-grid-column type="action" :resizable="false">
@@ -766,7 +683,7 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.name') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="locale.t('agents.aria.sort').replace('{column}', locale.t('agents.col.name'))"
+              :aria-label="`sort ${locale.t('agents.col.name')}`"
               @click="(e: MouseEvent) => onSortClick('NAME')"
             >
               <cds-icon
@@ -791,7 +708,7 @@ const summaryText = computed(() => {
             <cds-button-action
               shape="filter"
               aria-controls="filter-NAME"
-              :aria-label="locale.t('agents.aria.filter').replace('{column}', locale.t('agents.col.name'))"
+              :aria-label="`filter ${locale.t('agents.col.name')}`"
               :expanded="columnFilters.nameKeyword.length > 0"
               @click="(e: MouseEvent) => openColumnFilter('nameKeyword', e.target)"
             ></cds-button-action>
@@ -802,7 +719,7 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.type') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="locale.t('agents.aria.sort').replace('{column}', locale.t('agents.col.type'))"
+              :aria-label="`sort ${locale.t('agents.col.type')}`"
               @click="(e: MouseEvent) => onSortClick('TYPE')"
             >
               <cds-icon
@@ -827,7 +744,7 @@ const summaryText = computed(() => {
             <cds-button-action
               shape="filter"
               aria-controls="filter-TYPE"
-              :aria-label="locale.t('agents.aria.filter').replace('{column}', locale.t('agents.col.type'))"
+              :aria-label="`filter ${locale.t('agents.col.type')}`"
               :expanded="typeFilter !== 'all'"
               @click="(e: MouseEvent) => openFilter('TYPE', e.target)"
             ></cds-button-action>
@@ -838,7 +755,7 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.status') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="locale.t('agents.aria.sort').replace('{column}', locale.t('agents.col.status'))"
+              :aria-label="`sort ${locale.t('agents.col.status')}`"
               @click="(e: MouseEvent) => onSortClick('STATUS')"
             >
               <cds-icon
@@ -863,7 +780,7 @@ const summaryText = computed(() => {
             <cds-button-action
               shape="filter"
               aria-controls="filter-STATUS"
-              :aria-label="locale.t('agents.aria.filter').replace('{column}', locale.t('agents.col.status'))"
+              :aria-label="`filter ${locale.t('agents.col.status')}`"
               :expanded="statusFilter !== 'all'"
               @click="(e: MouseEvent) => openFilter('STATUS', e.target)"
             ></cds-button-action>
@@ -874,7 +791,7 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.key') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="locale.t('agents.aria.sort').replace('{column}', locale.t('agents.col.key'))"
+              :aria-label="`sort ${locale.t('agents.col.key')}`"
               @click="(e: MouseEvent) => onSortClick('API_KEY_NAME')"
             >
               <cds-icon
@@ -899,7 +816,7 @@ const summaryText = computed(() => {
             <cds-button-action
               shape="filter"
               aria-controls="filter-KEY"
-              :aria-label="locale.t('agents.aria.filter').replace('{column}', locale.t('agents.col.key'))"
+              :aria-label="`filter ${locale.t('agents.col.key')}`"
               :expanded="columnFilters.keyKeyword.length > 0"
               @click="(e: MouseEvent) => openColumnFilter('keyKeyword', e.target)"
             ></cds-button-action>
@@ -910,7 +827,7 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.username') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="locale.t('agents.aria.sort').replace('{column}', locale.t('agents.col.username'))"
+              :aria-label="`sort ${locale.t('agents.col.username')}`"
               @click="(e: MouseEvent) => onSortClick('USERNAME')"
             >
               <cds-icon
@@ -935,7 +852,7 @@ const summaryText = computed(() => {
             <cds-button-action
               shape="filter"
               aria-controls="filter-USERNAME"
-              :aria-label="locale.t('agents.aria.filter').replace('{column}', locale.t('agents.col.username'))"
+              :aria-label="`filter ${locale.t('agents.col.username')}`"
               :expanded="columnFilters.usernameKeyword.length > 0"
               @click="(e: MouseEvent) => openColumnFilter('usernameKeyword', e.target)"
             ></cds-button-action>
@@ -946,7 +863,7 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.createdAt') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="locale.t('agents.aria.sort').replace('{column}', locale.t('agents.col.createdAt'))"
+              :aria-label="`sort ${locale.t('agents.col.createdAt')}`"
               @click="(e: MouseEvent) => onSortClick('CREATED_AT')"
             >
               <cds-icon
@@ -975,7 +892,7 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.updatedAt') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="locale.t('agents.aria.sort').replace('{column}', locale.t('agents.col.updatedAt'))"
+              :aria-label="`sort ${locale.t('agents.col.updatedAt')}`"
               @click="(e: MouseEvent) => onSortClick('UPDATED_AT')"
             >
               <cds-icon
@@ -1095,7 +1012,7 @@ const summaryText = computed(() => {
 
         <!-- Empty state (official placeholder pattern) -->
         <cds-grid-placeholder v-else-if="agents.length === 0">
-          <cds-icon shape="atom" size="xl"></cds-icon>
+          <cds-icon shape="history" size="xl"></cds-icon>
           <p cds-text="subsection">{{ locale.t('agents.empty') }}</p>
         </cds-grid-placeholder>
 
@@ -1328,39 +1245,13 @@ const summaryText = computed(() => {
           class="menu-opt"
           :class="{ danger: key === 'delete' }"
           :aria-label="locale.t(`agents.action.${key}`)"
-          @click="onRowAction(key)"
+          @click="rowActionsTarget && onRowAction(rowActionsTarget, key)"
         >
           <cds-icon :shape="ICON_FOR_ACTION[key]" size="sm" aria-hidden="true"></cds-icon>
           <span>{{ locale.t(`agents.action.${key}`) }}</span>
         </button>
       </div>
     </cds-dropdown>
-
-    <ConfirmDialog
-      :open="!!deleteTarget"
-      :title="locale.t('agents.confirm.deleteTitle')"
-      :body="locale.t('agents.confirm.deleteBody').replace('{name}', deleteTarget?.name ?? '')"
-      danger
-      @close="deleteTarget = null"
-      @confirm="doDelete"
-    />
-    <ConfirmDialog
-      :open="batchDeleteOpen"
-      :title="locale.t('agents.confirm.deleteTitle')"
-      :body="locale.t('agents.confirm.batchDeleteBody').replace('{count}', String(selectedCount))"
-      danger
-      @close="batchDeleteOpen = false"
-      @confirm="doBatchDelete"
-    />
-
-    <UpgradeAgentDialog
-      :open="upgradeOpen"
-      :agent-name="upgradeSingle?.name ?? null"
-      :count="upgradeBatchIds.length"
-      :submitting="upgradeSubmitting"
-      @close="closeUpgrade"
-      @submit="onSubmitUpgrade"
-    />
   </section>
 </template>
 
@@ -1440,39 +1331,36 @@ const summaryText = computed(() => {
   margin-top: 20px;
 }
 
-/* Refresh button: fully transparent — no background, no border — so it reads
-   as a bare icon at every interaction state. Plain <button> element so we can
-   override the cds-button theme defaults (which would otherwise paint a fill
-   on ghost / outline / solid actions). */
-.refresh-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 0;
-  padding: 6px 8px;
-  margin: 0;
-  cursor: pointer;
-  color: inherit;
-  flex-shrink: 0;
-  border-radius: 0;
-}
-.refresh-button:hover:not(:disabled) {
-  color: var(--cds-alias-object-app-blue, #0072a3);
-}
-.refresh-button:focus-visible {
-  outline: 2px solid var(--cds-alias-object-app-blue, #0072a3);
-  outline-offset: 2px;
-}
-.refresh-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+/* Refresh button: fully transparent — no background, no border, no focus
+   ring, no pressed-state wash — so it reads as a bare icon at every
+   interaction state. cds-button's `:active` rule paints an *inset* box-shadow
+   on the internal `.private-host` (the "top edge" the user keeps seeing);
+   the only way to defeat it from outside the shadow DOM is to set the
+   `--box-shadow-color` token it uses as transparent. */
+.toolbar-refresh,
+.toolbar-refresh:hover,
+.toolbar-refresh:focus,
+.toolbar-refresh:focus-visible,
+.toolbar-refresh:active {
+  --background: transparent;
+  --background-hover: var(--cds-alias-object-opacity-100, rgba(0, 0, 0, 0.06));
+  --background-active: var(--cds-alias-object-opacity-200, rgba(0, 0, 0, 0.12));
+  --border-color: transparent;
+  --border-width: 0;
+  --box-shadow-color: transparent;
+  --color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  /* Keep a guaranteed clickable area even though the button looks bare. */
+  min-width: 32px;
+  min-height: 32px;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
-/* When the refresh button is in-flight, spin the icon itself. The animation
-   runs at 1s per full turn, linear, infinite. Applied to the cds-icon host;
-   its internal SVG rotates with the host transform. */
-.refresh-button .spinning {
+/* When the refresh button is in-flight, spin the icon itself (replaces
+   cds-button's built-in progress-circle, per the user's spec). The
+   animation runs at 1s per full turn, linear, infinite. Applied to the
+   cds-icon host; its internal SVG rotates with the host transform. */
+.toolbar-refresh .spinning {
   animation: refresh-spin 1s linear infinite;
   transform-origin: center;
 }
@@ -1481,7 +1369,7 @@ const summaryText = computed(() => {
   to   { transform: rotate(360deg); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .refresh-button .spinning {
+  .toolbar-refresh .spinning {
     animation: none;
   }
 }
@@ -1504,25 +1392,12 @@ const summaryText = computed(() => {
 /* Force the cds-grid host to respect the parent column. Without this the
    element's default `min-width: auto` expands to the intrinsic min-width of
    its cells (long key names + two outline action buttons), forcing a
-   horizontal scroll on the page even when the columns use % widths.
-   `scroll-lock` on <cds-grid> disables the shadow-DOM scroll container's
-   scrollbars; combined with `overflow: hidden` on the host this prevents
-   the table from ever overflowing the viewport. */
+   horizontal scroll on the page even when the columns use % widths. */
 .agent-list cds-grid {
   display: block;
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  overflow: hidden;
-}
-
-/* Force cds-grid columns + cells to clip instead of expanding past their
-   intrinsic content width (which would re-introduce the inner scrollbar
-   even with scroll-lock applied). */
-.agent-list cds-grid-column,
-.agent-list cds-grid-cell {
-  min-width: 0;
-  overflow: hidden;
 }
 
 /* Native checkbox used for row + header selection. We use a plain <input
