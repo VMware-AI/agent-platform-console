@@ -125,7 +125,7 @@ const { result: gatewaysData } = useQuery<ModelGatewaysResult>(MODEL_GATEWAYS_QU
 const { result: agentsData } = useQuery<AgentsQueryResult>(AGENTS_QUERY, {
   pagination: SELECTOR_PAGE,
 })
-const { result: formAvailableModelsData } = useQuery<
+const { result: formAvailableModelsData, loading: formAvailableModelsLoading } = useQuery<
   GatewayAvailableModelsResult,
   GatewayAvailableModelsVars
 >(GATEWAY_AVAILABLE_MODELS, () => ({ gatewayConnectionId: formGateway.value }), () => ({
@@ -392,9 +392,7 @@ async function submitKey(draft: {
   name: string
   organizationId: string
   modelGateway: string
-  agentId?: string | null
   duration?: string
-  expiresAt?: string | null
   models?: string[]
   maxBudget?: number
   budgetDuration?: string
@@ -406,7 +404,6 @@ async function submitKey(draft: {
   allowedRoutes?: string[]
   tags?: string[]
   blocked?: boolean
-  keyType?: string
   autoRotate?: boolean
   rotationInterval?: string
 }) {
@@ -420,9 +417,7 @@ async function submitKey(draft: {
           organizationId: draft.organizationId.trim(),
           name: draft.name.trim(),
           modelGateway: draft.modelGateway,
-          agentId: draft.agentId?.trim() || null,
           duration: draft.duration?.trim() || null,
-          expiresAt: draft.expiresAt ?? null,
           models: draft.models?.length ? draft.models : null,
           maxBudget: draft.maxBudget ?? null,
           budgetDuration: draft.budgetDuration?.trim() || null,
@@ -434,7 +429,9 @@ async function submitKey(draft: {
           allowedRoutes: draft.allowedRoutes,
           tags: draft.tags?.length ? draft.tags : null,
           blocked: draft.blocked ?? null,
-          keyType: draft.keyType?.trim() || null,
+          // `keyType` is a fixed default — there is no UI control to
+          // vary it; the form draft intentionally doesn't carry it.
+          keyType: 'default',
           autoRotate: draft.autoRotate ?? null,
           rotationInterval: draft.rotationInterval?.trim() || null,
         },
@@ -955,8 +952,9 @@ function goToPage(page: number) {
       v-if="formOpen"
       :open="formOpen"
       :gateways="gatewayOptions"
-      :agents="agentOptions"
+      :initial-model-gateway="formGateway"
       :available-models="formAvailableModels"
+      :available-models-loading="formAvailableModelsLoading"
       :saving="saving"
       @gateway-changed="onFormGatewayChanged"
       @close="closeForm"
