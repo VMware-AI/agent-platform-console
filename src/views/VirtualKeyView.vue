@@ -403,7 +403,6 @@ async function submitKey(draft: {
   tpmLimitType?: string
   allowedRoutes?: string[]
   tags?: string[]
-  blocked?: boolean
   autoRotate?: boolean
   rotationInterval?: string
 }) {
@@ -428,7 +427,6 @@ async function submitKey(draft: {
           tpmLimitType: draft.tpmLimitType?.trim() || null,
           allowedRoutes: draft.allowedRoutes,
           tags: draft.tags?.length ? draft.tags : null,
-          blocked: draft.blocked ?? null,
           // `keyType` is a fixed default — there is no UI control to
           // vary it; the form draft intentionally doesn't carry it.
           keyType: 'default',

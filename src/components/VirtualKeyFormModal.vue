@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, Teleport, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
 import type { VirtualKeyOption } from '@/types/virtual-key'
 import {
@@ -7,6 +7,44 @@ import {
   ROUTE_PERMISSION_PATHS,
   type RoutePermission,
 } from '@/api/graphql/queries/virtual-keys'
+
+// Duration unit — LiteLLM accepts 'd' / 'h' / 'w' / 'm' (h=hour, d=day,
+// w=7 days, m=month). The form drives the unit via a dropdown and
+// rejoins "<value><unit>" in submit() to match that exact format.
+export type DurationUnit = 'h' | 'd' | 'w' | 'm'
+
+// Rotation interval unit — a finer-grained subset than DurationUnit
+// because key rotation windows can be much shorter than key expiry
+// windows. Accepts s/m/h/d (s=second, m=minute, h=hour, d=day). No
+// week / month — those don't make sense for automatic rotation.
+export type RotationIntervalUnit = 's' | 'm' | 'h' | 'd'
+
+// Budget duration unit — LiteLLM-style, with the addition of 'mo' for
+// 自然月 (calendar month, e.g. reset on the 1st of each month). Sits
+// between RotationIntervalUnit (no month/week) and DurationUnit (which
+// has 'w' but no 's'). Default is 'mo' — the most common budget window.
+export type BudgetDurationUnit = 's' | 'm' | 'h' | 'd' | 'mo'
+
+// Rate limit type — three LiteLLM throughput modes (see design doc §4.2):
+//   best_effort_throughput (default) — soft cap; over-allocation is allowed
+//   guaranteed_throughput          — hard cap; raises an error on overuse
+//   dynamic                        — may dynamically exceed when no 429s
+// The form defaults to 'best_effort_throughput' and only writes the
+// field to the wire payload when the user picks a non-default value.
+// (Defined as a non-exported type alias because SFC `<script setup>`
+// doesn't allow top-level `export`s; export happens via the explicit
+// `VirtualKeyFormDraft` interface below if/when other modules need it.)
+type RateLimitType = 'best_effort_throughput' | 'guaranteed_throughput' | 'dynamic'
+
+// Canonical, ordered list of rate-limit-type options. Used both as the
+// iteration source for the radio UI and as the order in which options
+// appear in the picker. Defined inside <script setup> (no `export` —
+// SFC `<script setup>` doesn't allow top-level exports).
+const RATE_LIMIT_TYPES: RateLimitType[] = [
+  'best_effort_throughput',
+  'guaranteed_throughput',
+  'dynamic',
+]
 
 // VirtualKeyFormDraft — the create flow's wire payload. The postman
 // `IssueVirtualKey` mutation requires `organizationId`, `name`, and
@@ -27,12 +65,11 @@ export interface VirtualKeyFormDraft {
   rpmLimit?: number
   rpmLimitType?: string
   tpmLimitType?: string
-  // Frontend "Allow All Routes" Switch:
+  // Frontend "Allow All APIs" Switch:
   // - ON  → allowedRoutes OMITTED in the wire payload
   // - OFF → allowedRoutes = ['/v1/chat/completions', ...]
   allowedRoutes?: string[]
   tags?: string[]
-  blocked?: boolean
   // keyType is intentionally absent — the postman `IssueVirtualKey`
   // mutation always receives a fixed `default` value (see VirtualKeyView
   // submitKey), so there is no UI-driven variation to carry in the draft.
@@ -71,21 +108,81 @@ const name = ref('')
 const organizationId = ref('')
 const modelGateway = ref('')
 const selectedModels = ref<string[]>([])
-const duration = ref('')
+// Duration is split into a numeric value and a unit so the user can
+// pick the unit from a dropdown (h/d/w/m). submit() rejoins them into
+// "<n><unit>" — the format the LiteLLM-side resolver expects.
+const durationValue = ref<number | null>(null)
+const durationUnit = ref<DurationUnit>('d')
 const showAdvanced = ref(false)
 
 // Advanced
+// Budget control — a master toggle for the 「消费上限」 + 「预算周期」
+// pair. When OFF, the form OMITS both maxBudget and budgetDuration from
+// the wire payload (the resolver applies LiteLLM's default — no cap).
+// When ON, the two fields become editable and the user picks a
+// per-key spending cap + reset window.
+const budgetControl = ref(false)
 const maxBudget = ref<number | null>(null)
-const budgetDuration = ref('')
+// Budget duration mirrors the duration / rotationInterval pattern: a
+// numeric value plus a unit dropdown. submit() rejoins them into
+// "<n><unit>" — the format the LiteLLM-side resolver expects. Default
+// unit is 'mo' (自然月) — matches the most common budget reset window.
+const budgetDurationValue = ref<number | null>(null)
+const budgetDurationUnit = ref<BudgetDurationUnit>('mo')
 const maxParallelRequests = ref<number | null>(null)
+// Rate-limit control — a master toggle for the four TPM/RPM fields
+// (tpmLimit, tpmLimitType, rpmLimit, rpmLimitType). Same pattern as
+// `budgetControl` above: OFF → form OMITS all four fields from the
+// wire payload; ON → the four fields become editable and submit()
+// writes them. Without this gate, submit() would previously write the
+// (uncontrolled) null values and silently drop the type fields, which
+// meant the "limits" UX had no effect at all — even when the user had
+// typed numbers into the inputs.
+const rateLimitControl = ref(false)
 const tpmLimit = ref<number | null>(null)
 const rpmLimit = ref<number | null>(null)
-const rpmLimitType = ref('')
-const tpmLimitType = ref('')
+// rpm/tpm Limit Type — mirrors LiteLLM's three throughput modes:
+//   best_effort_throughput — over-allocation is allowed (no error)
+//   guaranteed_throughput — over-allocation raises an error
+//   dynamic              — may dynamically exceed when no 429s
+// Default 'best_effort_throughput' matches the LiteLLM resolver
+// default; the form keeps that default selected on open and only sends
+// the field when the user explicitly picks a non-default value.
+const rpmLimitType = ref<RateLimitType>('best_effort_throughput')
+const tpmLimitType = ref<RateLimitType>('best_effort_throughput')
+// Track the popover open state for the rate-limit-type pickers. The
+// <details> element itself owns the actual open/close toggle, but
+// the @click handler on each option needs to programmatically close
+// the popover after a selection, which requires a reactive ref.
+const tpmLimitPopoverOpen = ref(false)
+const rpmLimitPopoverOpen = ref(false)
+// Trigger element refs — the <summary> inside each popover's <details>.
+// The popover list is teleported to <body> (see comment near
+// <Teleport to="body"> below) so it can no longer rely on the
+// <details>'s own relative positioning — it has to be positioned
+// relative to the viewport with `position: fixed`. We measure the
+// trigger's bounding rect at open time and on every scroll / resize
+// to keep the list visually anchored under the trigger even as the
+// surrounding form scrolls inside the modal.
+const tpmLimitTriggerRef = ref<HTMLElement | null>(null)
+const rpmLimitTriggerRef = ref<HTMLElement | null>(null)
+// Live rect for the currently-open popover — null when the popover
+// is closed. Drives the `top`/`left`/`width` inline styles on the
+// teleported list so the list renders flush under the trigger. The
+// `triggerWidth` is read out of the rect at open time and reused
+// across re-renders (the list width should not depend on scroll
+// state — only the position does).
+const tpmPopoverPos = ref<{ top: number; left: number; width: number } | null>(null)
+const rpmPopoverPos = ref<{ top: number; left: number; width: number } | null>(null)
 const tagsText = ref('')
-const blocked = ref(false)
 const autoRotate = ref(false)
-const rotationInterval = ref('')
+// Rotation interval mirrors the duration pattern: a numeric value plus
+// a unit dropdown (s/m/h/d). submit() rejoins them into "<n><unit>" —
+// the format the LiteLLM-side resolver expects. Hidden when autoRotate
+// is OFF (the input is conditionally rendered). Default unit is 'h'
+// (hour) — a sensible starting window for automatic key rotation.
+const rotationIntervalValue = ref<number | null>(null)
+const rotationIntervalUnit = ref<RotationIntervalUnit>('h')
 
 // allowed_routes Switch + multi-select
 const allowAllRoutes = ref(true)
@@ -101,11 +198,17 @@ const orgValid = computed(() => organizationId.value.trim().length > 0)
 const gatewayValid = computed(() =>
   props.gateways.some((gateway) => gateway.id === modelGateway.value),
 )
+const modelsValid = computed(() => selectedModels.value.length > 0)
 const allowedRoutesValid = computed(
   () => allowAllRoutes.value || allowedRoutePermissions.value.length > 0,
 )
 const formValid = computed(
-  () => nameValid.value && orgValid.value && gatewayValid.value && allowedRoutesValid.value,
+  () =>
+    nameValid.value &&
+    orgValid.value &&
+    gatewayValid.value &&
+    modelsValid.value &&
+    allowedRoutesValid.value,
 )
 
 function reset() {
@@ -122,18 +225,22 @@ function reset() {
       : ''
   modelGateway.value = restored
   selectedModels.value = []
-  duration.value = ''
+  durationValue.value = null
+  durationUnit.value = 'd'
+  budgetControl.value = false
   maxBudget.value = null
-  budgetDuration.value = ''
+  budgetDurationValue.value = null
+  budgetDurationUnit.value = 'mo'
+  rateLimitControl.value = false
   maxParallelRequests.value = null
   tpmLimit.value = null
   rpmLimit.value = null
-  rpmLimitType.value = ''
-  tpmLimitType.value = ''
+  rpmLimitType.value = 'best_effort_throughput'
+  tpmLimitType.value = 'best_effort_throughput'
   tagsText.value = ''
-  blocked.value = false
   autoRotate.value = false
-  rotationInterval.value = ''
+  rotationIntervalValue.value = null
+  rotationIntervalUnit.value = 'h'
   allowAllRoutes.value = true
   allowedRoutePermissions.value = []
   attempted.value = false
@@ -179,6 +286,99 @@ function togglePermission(p: RoutePermission) {
   else allowedRoutePermissions.value = allowedRoutePermissions.value.filter((_, idx) => idx !== i)
 }
 
+// Recompute the viewport-relative position for one of the popover
+// lists. Called at open time and on every scroll / resize while the
+// popover is open, so the list stays flush under its trigger even as
+// the modal's internal scroll position changes. Returns null when the
+// trigger ref isn't attached yet (e.g. the popover is closed) so the
+// caller can clear its position state.
+function measurePopoverPosition(
+  trigger: HTMLElement | null,
+): { top: number; left: number; width: number } | null {
+  if (!trigger) return null
+  const rect = trigger.getBoundingClientRect()
+  // 4px mirrors the original absolute offset (`top: calc(100% + 4px)`)
+  // so the list sits 4px below the trigger, matching the previous
+  // visual rhythm.
+  return { top: rect.bottom + 4, left: rect.left, width: rect.width }
+}
+
+function refreshTpmPopoverPosition() {
+  tpmPopoverPos.value = measurePopoverPosition(tpmLimitTriggerRef.value)
+}
+function refreshRpmPopoverPosition() {
+  rpmPopoverPos.value = measurePopoverPosition(rpmLimitTriggerRef.value)
+}
+
+// Toggle the popover open state AND seed the position state. We
+// can't rely on a pure `:open` binding because by the time the next
+// paint happens the list (which is `position: fixed`) needs valid
+// coordinates or it would briefly render at the wrong viewport
+// position. Measuring at toggle time — which fires synchronously
+// after the user click — gives us a stable rect before Vue's render
+// pass starts, so the list appears under the trigger on the very
+// first frame it becomes visible.
+//
+// Each toggle also enforces mutual exclusion against its sibling:
+// opening one popover programmatically closes the other, both at
+// the reactive-ref level and at the underlying <details>.open DOM
+// level — otherwise each <details> would manage its own state
+// independently, and clicking the RPM trigger while TPM is open
+// would leave both popovers visible at once (they live in different
+// Teleport slots and so never collapse into each other visually).
+function onTpmTriggerToggle(event: Event) {
+  const open = (event.target as HTMLDetailsElement).open
+  tpmLimitPopoverOpen.value = open
+  if (open) {
+    refreshTpmPopoverPosition()
+    // Mutex: collapse the RPM popover so both can't be open at once.
+    // Set the Vue ref first so the teleported list unmounts, then
+    // sync the underlying <details>.open so a subsequent summary
+    // click still sees a consistent starting state.
+    rpmLimitPopoverOpen.value = false
+    rpmPopoverPos.value = null
+    if (rpmLimitTriggerRef.value) {
+      ;(rpmLimitTriggerRef.value as HTMLElement).closest('details')?.removeAttribute('open')
+    }
+  } else {
+    tpmPopoverPos.value = null
+  }
+}
+function onRpmTriggerToggle(event: Event) {
+  const open = (event.target as HTMLDetailsElement).open
+  rpmLimitPopoverOpen.value = open
+  if (open) {
+    refreshRpmPopoverPosition()
+    // Mutex: collapse the TPM popover (mirror of onTpmTriggerToggle).
+    tpmLimitPopoverOpen.value = false
+    tpmPopoverPos.value = null
+    if (tpmLimitTriggerRef.value) {
+      ;(tpmLimitTriggerRef.value as HTMLElement).closest('details')?.removeAttribute('open')
+    }
+  } else {
+    rpmPopoverPos.value = null
+  }
+}
+
+// Re-measure on scroll / resize while a popover is open. The trigger
+// moves with the surrounding form as the modal scrolls, so a stale
+// position would leave the list floating in the wrong place. We
+// attach a single window-level listener (added on first open, never
+// removed while the modal is alive) — cheap because it's a passive
+// listener and only fires when the user is actually scrolling.
+function onViewportChange() {
+  if (tpmLimitPopoverOpen.value) refreshTpmPopoverPosition()
+  if (rpmLimitPopoverOpen.value) refreshRpmPopoverPosition()
+}
+onMounted(() => {
+  window.addEventListener('scroll', onViewportChange, true)
+  window.addEventListener('resize', onViewportChange)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onViewportChange, true)
+  window.removeEventListener('resize', onViewportChange)
+})
+
 function submit() {
   attempted.value = true
   if (!formValid.value || props.saving) return
@@ -198,20 +398,44 @@ function submit() {
     name: name.value.trim(),
     organizationId: organizationId.value.trim(),
     modelGateway: modelGateway.value,
-    duration: duration.value.trim() || undefined,
+    duration:
+      durationValue.value != null && durationValue.value > 0
+        ? `${durationValue.value}${durationUnit.value}`
+        : undefined,
     models: selectedModels.value.length > 0 ? selectedModels.value : undefined,
-    maxBudget: maxBudget.value ?? undefined,
-    budgetDuration: budgetDuration.value || undefined,
+    maxBudget: budgetControl.value ? maxBudget.value ?? undefined : undefined,
+    budgetDuration:
+      budgetControl.value &&
+      budgetDurationValue.value != null &&
+      budgetDurationValue.value > 0
+        ? `${budgetDurationValue.value}${budgetDurationUnit.value}`
+        : undefined,
     maxParallelRequests: maxParallelRequests.value ?? undefined,
-    tpmLimit: tpmLimit.value ?? undefined,
-    rpmLimit: rpmLimit.value ?? undefined,
-    rpmLimitType: rpmLimitType.value || undefined,
-    tpmLimitType: tpmLimitType.value || undefined,
+    // Rate-limit fields are gated by the 「设置限额」 master toggle:
+    //   OFF → omit all four fields (LiteLLM's no-cap default applies)
+    //   ON  → write tpmLimit / rpmLimit when non-null; write
+    //         *LimitType only when explicitly non-default (matches the
+    //         pre-existing behavior so the wire payload stays minimal
+    //         when the user hasn't picked a throughput mode).
+    tpmLimit: rateLimitControl.value ? tpmLimit.value ?? undefined : undefined,
+    rpmLimit: rateLimitControl.value ? rpmLimit.value ?? undefined : undefined,
+    rpmLimitType:
+      rateLimitControl.value && rpmLimitType.value !== 'best_effort_throughput'
+        ? rpmLimitType.value
+        : undefined,
+    tpmLimitType:
+      rateLimitControl.value && tpmLimitType.value !== 'best_effort_throughput'
+        ? tpmLimitType.value
+        : undefined,
     allowedRoutes,
     tags: tags.length > 0 ? tags : undefined,
-    blocked: blocked.value,
     autoRotate: autoRotate.value,
-    rotationInterval: rotationInterval.value || undefined,
+    rotationInterval:
+      autoRotate.value &&
+      rotationIntervalValue.value != null &&
+      rotationIntervalValue.value > 0
+        ? `${rotationIntervalValue.value}${rotationIntervalUnit.value}`
+        : undefined,
   }
   emit('submit', draft)
 }
@@ -229,7 +453,12 @@ function submit() {
       <form class="key-form" @submit.prevent="submit">
         <!-- BASIC -->
         <cds-input :status="attempted && !nameValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('virtualKey.form.name') }}</label>
+          <label>
+            {{ locale.t('virtualKey.form.name') }}
+            <sup class="required-mark" aria-hidden="true">
+              {{ locale.t('virtualKey.form.requiredMark') }}
+            </sup>
+          </label>
           <input
             :value="name"
             maxlength="64"
@@ -243,7 +472,12 @@ function submit() {
         </cds-input>
 
         <cds-input :status="attempted && !orgValid ? 'error' : 'neutral'">
-          <label>{{ locale.t('virtualKey.form.organization') }}</label>
+          <label>
+            {{ locale.t('virtualKey.form.organization') }}
+            <sup class="required-mark" aria-hidden="true">
+              {{ locale.t('virtualKey.form.requiredMark') }}
+            </sup>
+          </label>
           <input
             :value="organizationId"
             autocomplete="off"
@@ -261,6 +495,9 @@ function submit() {
         >
           <label for="vk-gateway-select" class="gateway-label">
             {{ locale.t('virtualKey.form.gateway') }}
+            <sup class="required-mark" aria-hidden="true">
+              {{ locale.t('virtualKey.form.requiredMark') }}
+            </sup>
           </label>
           <select
             id="vk-gateway-select"
@@ -281,11 +518,38 @@ function submit() {
 
         <!-- Models multi-select — sourced from gatewayAvailableModels after
              a gateway is picked. Server-side validates each entry against
-             the gateway's live model list, so stale names 400. -->
-        <div>
-          <label class="section-label">{{ locale.t('virtualKey.form.models') }}</label>
+             the gateway's live model list, so stale names 400. Before a
+             gateway is picked the parent hasn't queried yet, so the list
+             is empty and the `model-empty` paragraph below renders the
+             「先选择网关」 hint. -->
+        <div :class="{ 'models-field-error': attempted && !modelsValid }">
+          <label class="section-label">
+            {{ locale.t('virtualKey.form.models') }}
+            <sup class="required-mark" aria-hidden="true">
+              {{ locale.t('virtualKey.form.requiredMark') }}
+            </sup>
+            <!-- 「选择网关后加载可用模型」 rendered inline next to the
+                 label as a parenthetical hint, rather than as a
+                 separate <cds-control-message> below the chip cloud.
+                 The model-picker is a visually self-explanatory
+                 control (a grid of togglable pills), and the
+                 "load-after-pick" caveat is more naturally read as a
+                 sub-label of the field name than as a footer
+                 message — keeping it next to the field name
+                 preserves a tight vertical rhythm under the basic
+                 fields section. The `.models-hint` class is
+                 scoped-styled to match the muted, smaller text weight
+                 of the parenthetical elsewhere in the app. -->
+            <span class="models-hint">
+              ({{ locale.t('virtualKey.form.modelsHint') }})
+            </span>
+          </label>
           <div class="models-grid">
-            <label v-for="model in availableModels" :key="model" class="model-option">
+            <label
+              v-for="model in availableModels"
+              :key="model"
+              class="model-option"
+            >
               <input
                 type="checkbox"
                 class="model-option-input"
@@ -306,9 +570,120 @@ function submit() {
               </template>
             </p>
           </div>
-          <cds-control-message status="neutral">
-            {{ locale.t('virtualKey.form.modelsHint') }}
+          <cds-control-message v-if="attempted && !modelsValid" status="error">
+            {{ locale.t('virtualKey.form.modelsRequired') }}
           </cds-control-message>
+        </div>
+
+        <!-- Duration lives BELOW the basic section (above 高级参数) so users
+             see the expiry toggle without expanding. Native <input> +
+             <select> rather than <cds-input>+slot: cds-input's shadow DOM
+             only projects a single form control, so a sibling <select>
+             next to the slotted <input> doesn't render. Using a plain
+             <label> + native controls mirrors ConfirmDialog's app-input
+             pattern and lets both controls take real focus. The label,
+             value input, and unit select share one row (auto / 1fr / auto)
+             to match the gateway field's two-column rhythm. -->
+        <div class="duration-field">
+          <div class="duration-row">
+            <label class="duration-label">
+              {{ locale.t('virtualKey.form.duration') }}
+            </label>
+            <input
+              class="duration-value"
+              type="number"
+              min="0"
+              step="1"
+              :value="durationValue ?? ''"
+              @input="
+                durationValue =
+                  ($event.target as HTMLInputElement).value === ''
+                    ? null
+                    : Number(($event.target as HTMLInputElement).value)
+              "
+            />
+            <select
+              class="duration-unit"
+              :value="durationUnit"
+              :aria-label="locale.t('virtualKey.form.durationUnit')"
+              @change="
+                durationUnit = ($event.target as HTMLSelectElement).value as DurationUnit
+              "
+            >
+              <option value="h">{{ locale.t('virtualKey.form.durationUnitHour') }}</option>
+              <option value="d">{{ locale.t('virtualKey.form.durationUnitDay') }}</option>
+              <option value="w">{{ locale.t('virtualKey.form.durationUnitWeek') }}</option>
+              <option value="m">{{ locale.t('virtualKey.form.durationUnitMonth') }}</option>
+            </select>
+          </div>
+          <cds-control-message status="neutral" class="duration-hint">
+            {{ locale.t('virtualKey.form.durationHint') }}
+          </cds-control-message>
+        </div>
+
+        <!-- Auto-rotate lives BELOW 生效时长, ABOVE 高级参数 — sits in the
+             "always-visible" zone with 生效时长 because rotating the key
+             is a basic key-issuance concern, not a 风控抽屉 knob. The
+             (conditional) rotation interval stacks under the toggle so
+             both pieces read as one logical group. -->
+        <div class="auto-rotate-group">
+          <cds-control class="auto-rotate-toggle">
+            <cds-toggle>
+              <label>{{ locale.t('virtualKey.form.autoRotate') }}</label>
+              <input
+                type="checkbox"
+                slot="input"
+                :checked="autoRotate"
+                @change="autoRotate = ($event.target as HTMLInputElement).checked"
+              />
+            </cds-toggle>
+          </cds-control>
+          <!-- Mirrors 生效时长's number + unit-select layout. Native label
+               + input + select (cds-input's shadow DOM only projects a
+               single form control, so a sibling <select> wouldn't render
+               inside it). Reuses the .duration-* styles so the two
+               "interval" fields look identical. -->
+          <div v-if="autoRotate" class="duration-field">
+            <div class="duration-row">
+              <label class="duration-label">
+                {{ locale.t('virtualKey.form.rotationInterval') }}
+              </label>
+              <input
+                class="duration-value"
+                type="number"
+                min="0"
+                step="1"
+                :value="rotationIntervalValue ?? ''"
+                @input="
+                  rotationIntervalValue =
+                    ($event.target as HTMLInputElement).value === ''
+                      ? null
+                      : Number(($event.target as HTMLInputElement).value)
+                "
+              />
+              <select
+                class="duration-unit"
+                :value="rotationIntervalUnit"
+                :aria-label="locale.t('virtualKey.form.rotationIntervalUnit')"
+                @change="
+                  rotationIntervalUnit = ($event.target as HTMLSelectElement).value as RotationIntervalUnit
+                "
+              >
+                <option value="s">
+                  {{ locale.t('virtualKey.form.rotationIntervalUnitSecond') }}
+                </option>
+                <option value="m">
+                  {{ locale.t('virtualKey.form.rotationIntervalUnitMinute') }}
+                </option>
+                <option value="h">
+                  {{ locale.t('virtualKey.form.rotationIntervalUnitHour') }}
+                </option>
+                <option value="d">
+                  {{ locale.t('virtualKey.form.rotationIntervalUnitDay') }}
+                </option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <!-- ADVANCED (LiteLLM design doc §4.2 风控抽屉) — chevron mirrors
@@ -321,58 +696,26 @@ function submit() {
           @toggle="showAdvanced = ($event.target as HTMLDetailsElement).open"
         >
           <summary class="advanced-toggle">
-            <cds-icon
-              shape="angle"
-              :direction="showAdvanced ? 'down' : 'right'"
-              size="sm"
-            ></cds-icon>
+            <span
+              class="advanced-chevron"
+              :class="{ 'advanced-chevron--open': showAdvanced }"
+              aria-hidden="true"
+            ></span>
             <span>{{ locale.t('virtualKey.form.advanced') }}</span>
           </summary>
 
-          <cds-input>
-            <label>{{ locale.t('virtualKey.form.duration') }}</label>
-            <input
-              :value="duration"
-              :placeholder="locale.t('virtualKey.form.durationPlaceholder')"
-              @input="duration = ($event.target as HTMLInputElement).value"
-            />
-            <cds-control-message status="neutral">
-              {{ locale.t('virtualKey.form.durationHint') }}
-            </cds-control-message>
-          </cds-input>
-
           <div class="advanced-grid">
-            <cds-input>
-              <label>{{ locale.t('virtualKey.form.maxBudget') }}</label>
+            <!-- Tags is a free-form, multi-token string — its own row so the
+                 placeholder can show several example tags on one line and
+                 the field doesn't get squeezed by the numeric neighbors. -->
+            <cds-input class="advanced-tags">
+              <label>{{ locale.t('virtualKey.form.tags') }}</label>
               <input
-                type="number"
-                min="0"
-                step="1"
-                :value="maxBudget ?? ''"
-                @input="maxBudget = Number(($event.target as HTMLInputElement).value) || null"
+                v-model="tagsText"
+                :placeholder="locale.t('virtualKey.form.tagsPlaceholder')"
               />
             </cds-input>
-            <cds-input>
-              <label>{{ locale.t('virtualKey.form.tpmLimit') }}</label>
-              <input
-                type="number"
-                min="0"
-                step="1000"
-                :value="tpmLimit ?? ''"
-                @input="tpmLimit = Number(($event.target as HTMLInputElement).value) || null"
-              />
-            </cds-input>
-            <cds-input>
-              <label>{{ locale.t('virtualKey.form.rpmLimit') }}</label>
-              <input
-                type="number"
-                min="0"
-                step="100"
-                :value="rpmLimit ?? ''"
-                @input="rpmLimit = Number(($event.target as HTMLInputElement).value) || null"
-              />
-            </cds-input>
-            <cds-input>
+            <cds-input class="advanced-full-row">
               <label>{{ locale.t('virtualKey.form.maxParallelRequests') }}</label>
               <input
                 type="number"
@@ -384,61 +727,240 @@ function submit() {
                 "
               />
             </cds-input>
-            <cds-input>
-              <label>{{ locale.t('virtualKey.form.budgetDuration') }}</label>
-              <input
-                :value="budgetDuration"
-                :placeholder="locale.t('virtualKey.form.budgetDurationPlaceholder')"
-                @input="budgetDuration = ($event.target as HTMLInputElement).value"
-              />
-            </cds-input>
-            <cds-input>
-              <label>{{ locale.t('virtualKey.form.tags') }}</label>
-              <input
-                v-model="tagsText"
-                :placeholder="locale.t('virtualKey.form.tagsPlaceholder')"
-              />
-            </cds-input>
-            <cds-control>
+          </div>
+
+          <!-- Rate-limit control group — master toggle + (conditional)
+               2×2 grid of TPM/RPM fields, rendered as its own block
+               OUTSIDE .advanced-grid (same pattern as the budget-control
+               group below). The four child fields (tpmLimitType /
+               tpmLimit / rpmLimitType / rpmLimit) are arranged in two
+               rows × two columns so they read as a paired "throughput
+               control" rather than four unrelated fields. When the
+               toggle is OFF, all four inputs are removed from the DOM
+               AND the form OMITS the four corresponding wire fields
+               (the resolver applies LiteLLM's no-cap default). -->
+          <div class="rate-limit-control-group">
+            <cds-control class="rate-limit-control-toggle">
               <cds-toggle>
-                <label>{{ locale.t('virtualKey.form.blocked') }}</label>
+                <label>{{ locale.t('virtualKey.form.rateLimitControl') }}</label>
                 <input
                   type="checkbox"
                   slot="input"
-                  :checked="blocked"
-                  @change="blocked = ($event.target as HTMLInputElement).checked"
+                  :checked="rateLimitControl"
+                  @change="rateLimitControl = ($event.target as HTMLInputElement).checked"
                 />
               </cds-toggle>
             </cds-control>
-            <div class="auto-rotate-group">
-              <cds-control>
-                <cds-toggle>
-                  <label>{{ locale.t('virtualKey.form.autoRotate') }}</label>
-                  <input
-                    type="checkbox"
-                    slot="input"
-                    :checked="autoRotate"
-                    @change="autoRotate = ($event.target as HTMLInputElement).checked"
-                  />
-                </cds-toggle>
-              </cds-control>
-              <cds-input v-if="autoRotate">
-                <label>{{ locale.t('virtualKey.form.rotationInterval') }}</label>
+            <div v-if="rateLimitControl" class="rate-limit-control-list">
+              <!-- Four fields stacked vertically — one field per row,
+                   each row spanning the full form width. This is the
+                   simplest layout for the four-parameter block: every
+                   field reads on its own line (label above the
+                   control), and there's no need for the reader to
+                   track which cell pairs with which across rows or
+                   columns. The trade-off is vertical density
+                   (4 lines instead of 2) but the rate-limit knobs are
+                   configuration rather than primary input, so a
+                   forgiving, easy-to-scan layout is more important
+                   than compactness here. -->
+              <div class="rate-limit-type-field">
+                <label class="rate-limit-type-label" :for="`tpm-limit-type-trigger`">
+                  {{ locale.t('virtualKey.form.tpmLimitType') }}
+                </label>
+                <details
+                  class="rate-limit-popover"
+                  :open="tpmLimitPopoverOpen"
+                  @toggle="onTpmTriggerToggle"
+                >
+                  <summary
+                    :id="`tpm-limit-type-trigger`"
+                    ref="tpmLimitTriggerRef"
+                    class="duration-unit duration-unit--full rate-limit-popover-trigger"
+                    :aria-label="locale.t('virtualKey.form.tpmLimitType')"
+                  >
+                    <span class="rate-limit-popover-trigger-text">
+                      {{ locale.t(`virtualKey.form.rateLimitType.${tpmLimitType}.title`) }}
+                    </span>
+                    <span class="rate-limit-popover-caret" aria-hidden="true"></span>
+                  </summary>
+                  <!-- The popover list is intentionally empty here.
+                       The actual <ul> lives in a <Teleport to="body">
+                       at the end of this template (search for
+                       `teleportRateLimitPopovers`) so it can use
+                       `position: fixed` to escape the modal's
+                       internal scroll container — that container was
+                       clipping the list at its bottom edge and
+                       hiding the scrollbar, leaving 「动态」
+                       unreachable. The trigger rect is still measured
+                       from the <summary> above; we just render the
+                       list out-of-tree so the rect math (viewport
+                       coords) lines up cleanly with the list's
+                       `position: fixed` positioning. -->
+                </details>
+              </div>
+              <cds-input>
+                <label>{{ locale.t('virtualKey.form.tpmLimit') }}</label>
                 <input
-                  :value="rotationInterval"
-                  :placeholder="locale.t('virtualKey.form.rotationIntervalPlaceholder')"
-                  @input="rotationInterval = ($event.target as HTMLInputElement).value"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  :value="tpmLimit ?? ''"
+                  @input="tpmLimit = Number(($event.target as HTMLInputElement).value) || null"
+                />
+              </cds-input>
+              <div class="rate-limit-type-field">
+                <label class="rate-limit-type-label" :for="`rpm-limit-type-trigger`">
+                  {{ locale.t('virtualKey.form.rpmLimitType') }}
+                </label>
+                <details
+                  class="rate-limit-popover"
+                  :open="rpmLimitPopoverOpen"
+                  @toggle="onRpmTriggerToggle"
+                >
+                  <summary
+                    :id="`rpm-limit-type-trigger`"
+                    ref="rpmLimitTriggerRef"
+                    class="duration-unit duration-unit--full rate-limit-popover-trigger"
+                    :aria-label="locale.t('virtualKey.form.rpmLimitType')"
+                  >
+                    <span class="rate-limit-popover-trigger-text">
+                      {{ locale.t(`virtualKey.form.rateLimitType.${rpmLimitType}.title`) }}
+                    </span>
+                    <span class="rate-limit-popover-caret" aria-hidden="true"></span>
+                  </summary>
+                  <!-- See the matching TPM popover-list comment for
+                       why the actual <ul> is teleported to <body>. -->
+                </details>
+              </div>
+              <cds-input>
+                <label>{{ locale.t('virtualKey.form.rpmLimit') }}</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="100"
+                  :value="rpmLimit ?? ''"
+                  @input="rpmLimit = Number(($event.target as HTMLInputElement).value) || null"
                 />
               </cds-input>
             </div>
           </div>
 
-          <!-- allowed_routes: 隐式白名单 (design doc §4.2) -->
-          <fieldset class="allowed-routes-set">
-            <legend>{{ locale.t('virtualKey.form.allowedRoutes') }}</legend>
+          <!-- Budget control group — toggle + (conditional) maxBudget +
+               budgetDuration pair, rendered as its own block OUTSIDE
+               .advanced-grid so it can stretch the full form width
+               without competing with the tags / maxParallelRequests
+               fields for grid columns. When the toggle is OFF, both
+               inputs are removed from the DOM and the form OMITS the
+               corresponding wire fields. Sibling to the
+               .rate-limit-control-group above — together they cover
+               the "spending cap" and "throughput cap" toggles of the
+               LiteLLM 风控抽屉 (design doc §4.2). -->
+          <div class="budget-control-group">
+            <cds-control class="budget-control-toggle">
+              <cds-toggle>
+                <label>{{ locale.t('virtualKey.form.budgetControl') }}</label>
+                <input
+                  type="checkbox"
+                  slot="input"
+                  :checked="budgetControl"
+                  @change="budgetControl = ($event.target as HTMLInputElement).checked"
+                />
+              </cds-toggle>
+            </cds-control>
+            <div v-if="budgetControl" class="budget-control-row">
+              <!-- Mirrors 生效时长's number + unit-select layout. Native
+                   label + input + select (cds-input's shadow DOM only
+                   projects a single form control, so a sibling <select>
+                   wouldn't render inside it). Reuses the .duration-*
+                   styles. Unit set is s/m/h/d/mo — 'mo' is 自然月
+                   (calendar-month reset window). -->
+              <div class="duration-field">
+                <div class="duration-row duration-row--no-unit">
+                  <label class="duration-label">
+                    {{ locale.t('virtualKey.form.maxBudget') }}
+                  </label>
+                  <input
+                    class="duration-value"
+                    type="number"
+                    min="0"
+                    step="1"
+                    :value="maxBudget ?? ''"
+                    @input="maxBudget = Number(($event.target as HTMLInputElement).value) || null"
+                  />
+                </div>
+              </div>
+              <!-- Mirrors 生效时长's number + unit-select layout. Native
+                   label + input + select (cds-input's shadow DOM only
+                   projects a single form control, so a sibling <select>
+                   wouldn't render inside it). Reuses the .duration-*
+                   styles. Unit set is s/m/h/d/mo — 'mo' is 自然月
+                   (calendar-month reset window). -->
+              <div class="duration-field">
+                <div class="duration-row">
+                  <label class="duration-label">
+                    {{ locale.t('virtualKey.form.budgetDuration') }}
+                  </label>
+                  <input
+                    class="duration-value"
+                    type="number"
+                    min="0"
+                    step="1"
+                    :value="budgetDurationValue ?? ''"
+                    @input="
+                      budgetDurationValue =
+                        ($event.target as HTMLInputElement).value === ''
+                          ? null
+                          : Number(($event.target as HTMLInputElement).value)
+                    "
+                  />
+                  <select
+                    class="duration-unit"
+                    :value="budgetDurationUnit"
+                    :aria-label="locale.t('virtualKey.form.budgetDurationUnit')"
+                    @change="
+                      budgetDurationUnit = ($event.target as HTMLSelectElement)
+                        .value as BudgetDurationUnit
+                    "
+                  >
+                    <option value="s">
+                      {{ locale.t('virtualKey.form.budgetDurationUnitSecond') }}
+                    </option>
+                    <option value="m">
+                      {{ locale.t('virtualKey.form.budgetDurationUnitMinute') }}
+                    </option>
+                    <option value="h">
+                      {{ locale.t('virtualKey.form.budgetDurationUnitHour') }}
+                    </option>
+                    <option value="d">
+                      {{ locale.t('virtualKey.form.budgetDurationUnitDay') }}
+                    </option>
+                    <option value="mo">
+                      {{ locale.t('virtualKey.form.budgetDurationUnitMonth') }}
+                    </option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- allowed_routes: 隐式白名单 (design doc §4.2). The previous
+                 <fieldset>+<legend> chrome drew a boxed caption
+                 「接口权限」 above the toggle, which read as a
+                 sub-section header and visually competed with the
+                 two other advanced toggles (「设置限额」 /
+                 「预算控制」) that render inline. We now render the
+                 section label inline next to the toggle as
+                 「允许所有接口 (接口权限)」 so all three advanced
+                 toggles share the same inline-label rhythm. -->
+          <div class="allowed-routes-group">
             <cds-control>
               <cds-toggle>
-                <label>{{ locale.t('virtualKey.form.allowAllRoutes') }}</label>
+                <label>
+                  {{ locale.t('virtualKey.form.allowAllRoutes') }}
+                  <span class="allowed-routes-caption">
+                    ({{ locale.t('virtualKey.form.allowedRoutes') }})
+                  </span>
+                </label>
                 <input
                   type="checkbox"
                   slot="input"
@@ -464,8 +986,100 @@ function submit() {
             <cds-control-message v-if="attempted && !allowedRoutesValid" status="error">
               {{ locale.t('virtualKey.form.allowedRoutesError') }}
             </cds-control-message>
-          </fieldset>
+          </div>
         </details>
+
+        <!-- teleportRateLimitPopovers — Teleport the popover lists
+             for TPM and RPM limit-type pickers out to <body>. They
+             live as fixed-position elements positioned by inline
+             `top/left/width` styles driven by the corresponding
+             trigger's `getBoundingClientRect()`. Teleporting is what
+             makes the positioning reliable: rendering the list in
+             place inside the <details> caused two failures — (a) the
+             list could be clipped by ancestor overflow containers
+             (the modal's internal scroll container clipped the
+             bottom edge, hiding 「动态」), and (b) measuring
+             <summary> inside a <details> in some browsers returned a
+             rect that didn't match the visible position, leaving the
+             list floating at the wrong viewport coordinates. With
+             the list at <body> root and the rect measured from the
+             trigger, both problems disappear: the list has no
+             overflow ancestors above <body>, and the trigger rect
+             is the only anchor. -->
+        <Teleport to="body">
+          <ul
+            v-if="tpmLimitPopoverOpen"
+            class="rate-limit-popover-list"
+            role="listbox"
+            :style="
+              tpmPopoverPos
+                ? {
+                    top: `${tpmPopoverPos.top}px`,
+                    left: `${tpmPopoverPos.left}px`,
+                    width: `${tpmPopoverPos.width}px`,
+                  }
+                : undefined
+            "
+          >
+            <li
+              v-for="opt in RATE_LIMIT_TYPES"
+              :key="opt"
+              class="rate-limit-popover-option"
+              :class="{
+                'rate-limit-popover-option--selected': tpmLimitType === opt,
+              }"
+              role="option"
+              :aria-selected="tpmLimitType === opt"
+              @click="
+                tpmLimitType = opt;
+                tpmLimitPopoverOpen = false
+              "
+            >
+              <span class="rate-limit-popover-option-title">
+                {{ locale.t(`virtualKey.form.rateLimitType.${opt}.title`) }}
+              </span>
+              <span class="rate-limit-popover-option-desc">
+                {{ locale.t(`virtualKey.form.rateLimitType.${opt}.desc`) }}
+              </span>
+            </li>
+          </ul>
+          <ul
+            v-if="rpmLimitPopoverOpen"
+            class="rate-limit-popover-list"
+            role="listbox"
+            :style="
+              rpmPopoverPos
+                ? {
+                    top: `${rpmPopoverPos.top}px`,
+                    left: `${rpmPopoverPos.left}px`,
+                    width: `${rpmPopoverPos.width}px`,
+                  }
+                : undefined
+            "
+          >
+            <li
+              v-for="opt in RATE_LIMIT_TYPES"
+              :key="opt"
+              class="rate-limit-popover-option"
+              :class="{
+                'rate-limit-popover-option--selected': rpmLimitType === opt,
+              }"
+              role="option"
+              :aria-selected="rpmLimitType === opt"
+              @click="
+                rpmLimitType = opt;
+                rpmLimitPopoverOpen = false
+              "
+            >
+              <span class="rate-limit-popover-option-title">
+                {{ locale.t(`virtualKey.form.rateLimitType.${opt}.title`) }}
+              </span>
+              <span class="rate-limit-popover-option-desc">
+                {{ locale.t(`virtualKey.form.rateLimitType.${opt}.desc`) }}
+              </span>
+            </li>
+          </ul>
+        </Teleport>
       </form>
     </cds-modal-content>
 
@@ -475,7 +1089,7 @@ function submit() {
       </cds-button>
       <cds-button
         :loading-state="saving ? 'loading' : 'default'"
-        :disabled="saving"
+        :disabled="!formValid || saving"
         @click="submit"
       >
         {{ locale.t('virtualKey.form.submit') }}
@@ -491,11 +1105,29 @@ function submit() {
 /* Indent the form body inside the lg modal so field labels no longer
    share the modal title's left edge (at lg width, that edge feels
    cramped). A fixed left margin (not max-width) keeps the indent
-   predictable and matches the "start after the title" rhythm. */
+   predictable and matches the "start after the title" rhythm. The
+   right padding adds matching breathing room on the right so the
+   form's last input doesn't sit flush against the modal edge. */
 .key-form {
   display: grid;
   gap: 16px;
   margin-left: 24px;
+  padding-right: 24px;
+}
+/* Force the two wrappers that nest grid + flex layouts under
+   .key-form to min-width: 0, so the outer 1fr column's implicit
+   `minmax(auto, 1fr)` doesn't expand past the padding-right: 24px
+   edge. The chain ends at .duration-unit { min-width: 72px } deep
+   inside the rate-limit popovers — without these clamps, the
+   wrapper's width grows past the form's right padding and the
+   popover trigger's underline + caret render outside the visible
+   frame. Scoped to the two wrappers we know about (instead of a
+   universal `.key-form > *`) so cds-input / cds-control web
+   components keep their default min-width: auto and aren't
+   accidentally flattened. */
+.key-form > .rate-limit-control-group,
+.key-form > .advanced-section {
+  min-width: 0;
 }
 /* Force every cds-input and its underlying native <input> to span the
    full form width. Without this, cds-input collapses to its content
@@ -528,6 +1160,33 @@ function submit() {
   margin-bottom: 6px;
   font-size: 13px;
   font-weight: 500;
+}
+/* Inline parenthetical hint for the 「选择可调用模型」 label. Renders
+   the 「选择网关后加载可用模型」 caveat as a muted aside next to the
+   field name, so the user doesn't have to scan below the chip
+   cloud for the explanation. The smaller font + lighter color match
+   the .allowed-routes-caption style used by the (接口权限) label
+   further down in the form. */
+.models-hint {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--cds-alias-typography-color-300, #565656);
+}
+/* Mark for backend-required fields (密钥名称 / 所属组织 / 模型网关 /
+   可调用模型). Mirrors the .required-mark style used in
+   ModelGatewayFormModal.vue / UserFormDialog.vue so all create-flow
+   modals in the app share the same red-star UX. The crimson color
+   and 0.7em size + negative top margin keep the asterisk floating
+   just above the label cap-line without visually competing with
+   the label text itself. */
+.required-mark {
+  color: var(--cds-alias-status-danger, #c21d00);
+  font-size: 0.7em;
+  font-weight: 700;
+  line-height: 1;
+  margin: -0.5em 0 0 1px;
+  display: inline-block;
 }
 /* Gateway select — mirrors the 「新建模型」 form's two-column pattern
    (label left, select right) so the 「模型网关」 label is always visible
@@ -595,6 +1254,35 @@ function submit() {
   max-height: 200px;
   overflow-y: auto;
   padding: 12px;
+  /* Pin to the form's content width so the grid keeps the modal's
+     full width when no chips are present. Without this, an empty
+     grid (no `.model-option` children to push the flex container
+     wide) collapses to its min-content — a single `.model-empty`
+     paragraph's intrinsic width, which is much narrower than the
+     form — and the surrounding modal shrinks to fit. The chips
+     case was the only thing keeping the grid wide before the dev
+     seed list was removed. box-sizing: border-box so the 12px
+     padding stays inside the form's right gutter instead of
+     spilling past it.
+
+     min-width: 750px is load-bearing here for a second reason: the
+     single grid column inside .key-form takes its track width from
+     the max min-content of its children — and a few of the siblings
+     (cds-input, the gateway field) are web components whose host
+     elements have a small min-content. The column would otherwise
+     collapse to that smaller intrinsic width, and the form would
+     not fill the dialog at lg size. Pushing the grid's min-width
+     out to 750px (the dialog content area for `size="lg"` minus
+     24px right padding) is the cleanest way to keep one row wide
+     enough to drive the column open to the dialog edge without
+     hardcoding the form's own width. The other rows (cds-input)
+     follow via their existing `width: 100%` rule on .key-form
+     cds-input. box-sizing: border-box + min-width are combined
+     because min-width alone ignores padding when content is
+     overflowing. */
+  width: 100%;
+  min-width: 750px;
+  box-sizing: border-box;
   background: var(--cds-alias-object-app-background, #f4f4f4);
   border-radius: 4px;
 }
@@ -655,6 +1343,15 @@ function submit() {
   margin: 0;
   padding: 8px 4px;
 }
+/* 可调用模型 section 的错误态 — 与「模型网关」字段共用同一种视觉
+   反馈：attempted 之后若用户没选模型，把 .models-grid 的边框从默认的
+   中性灰换成 danger 红，让错误提示出现的位置 (grid 下方) 和视觉锚
+   点 (grid 容器) 紧贴在一起。1px 实线 + box-sizing: border-box 配合
+   上面的 width: 100% + box-sizing: border-box，避免因 border 出现而
+   撑破 modal 的右内边距。 */
+.models-field-error .models-grid {
+  border: 1px solid var(--cds-alias-status-danger, #c92100);
+}
 /* Advanced section — bordered details/summary block whose chevron
    mirrors the 「新建模型」 modal (cds-icon shape="angle", direction
    driven by the open state). The default browser triangle is suppressed
@@ -662,17 +1359,36 @@ function submit() {
 .advanced-section {
   border: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
   border-radius: 4px;
-  padding: 8px 12px;
+  /* Bottom padding is intentionally larger than the 8px top/sides
+     padding so the last child (「允许所有接口 (接口权限)」) reads
+     with a clear breathing gap from the section's bottom border.
+     Without the extra inset, the toggle's bottom edge sits only
+     8px above the border and the section feels bottom-heavy. 20px
+     matches the section's outer rhythm and gives the toggle the
+     same "inside the box" feel on the bottom as the summary has
+     on the top. */
+  padding: 8px 12px 20px;
 }
-.advanced-section summary {
+/* Bump the gap between the 「高级参数」 summary and its first child
+   row (「模型标签」). Without this padding the summary's text baseline
+   sits flush against the input border and the section feels cramped
+   on first open. 12px = the section's own horizontal padding doubled,
+   so the summary-to-first-row breathing matches the visual weight of
+   the section's left/right inset and reads as a uniform inner rhythm
+   (rather than a small decorative gap). The `>` direct-child
+   combinator scopes this to the section's own summary, not any
+   nested <details> summaries (e.g. .rate-limit-popover) inside the
+   section. */
+.advanced-section > summary {
   display: flex;
   align-items: center;
   gap: 8px;
   cursor: pointer;
   font-weight: 500;
   list-style: none;
+  padding-bottom: 12px;
 }
-.advanced-section summary::-webkit-details-marker {
+.advanced-section > summary::-webkit-details-marker {
   display: none;
 }
 .advanced-toggle {
@@ -680,32 +1396,474 @@ function submit() {
   align-items: center;
   gap: 8px;
 }
-.advanced-toggle > cds-icon {
-  display: inline-flex;
+/* CSS-only chevron — drawn from a 2-border rotated square (the
+   "border-triangle" trick). Was previously a <cds-icon shape="angle"
+   :direction="…"> which crashed during HMR rerender with
+   "Cannot read properties of null (reading 'flags')" — that error
+   comes from lit-html's attribute serialization and the Carbon
+   icon's LitElement instance losing its props in the HMR boundary.
+   A pure CSS chevron sidesteps the issue entirely. */
+.advanced-chevron {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--cds-alias-object-app-foreground, #1b1b1b);
+  border-bottom: 2px solid var(--cds-alias-object-app-foreground, #1b1b1b);
+  transform: rotate(-45deg);
+  transform-origin: 50% 50%;
+  transition: transform 120ms ease;
   flex-shrink: 0;
+  /* Center the visual weight of the rotated square inside its 7x7
+     box so it doesn't look offset to the bottom-right. */
+  margin-top: -2px;
+}
+.advanced-chevron--open {
+  transform: rotate(45deg);
+  margin-top: 2px;
+}
+/* Duration row: label (fixed-ish) + value input (1fr) + unit select
+   (fixed-ish) on a single grid line. Mirrors the gateway field's
+   auto/1fr two-column rhythm and stacks the helper message under the
+   whole row (it spans both controls visually). Native underline-only
+   styling keeps both controls visually consistent with the cds-input
+   fields elsewhere in the form. */
+.duration-field {
+  display: grid;
+  /* Stack the .duration-row on row 1 and the helper message on row 2.
+     Column lines match .duration-row's auto/1fr/auto so the hint sits
+     directly under the value input (column 2), not stretched across
+     the whole field width. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 1.2rem;
+  row-gap: 6px;
+}
+.duration-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.2rem;
+}
+/* Variant used when a row has no <select> unit — collapses the third
+   column (auto) so the value input takes the full remaining width
+   instead of leaving a phantom empty cell on the right. Keeps the
+   baseline consistent with the sibling .duration-row that DOES have a
+   <select>, so the two rows inside .budget-control-row share the
+   same label / input vertical alignment. */
+.duration-row--no-unit {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.duration-hint {
+  /* Sit under the value input (column 2), not under the unit select. */
+  grid-column: 2;
+  /* Sized to match the helper text under the rest of the form so the
+     line break in 「留空表示永不过期,例如 30d」 matches neighbouring
+     fields and the unit select stays visually anchored above. The
+     :deep() descent lets the font-size + colour reach the text node
+     inside cds-control-message's shadow DOM (without it the host
+     element honors the local styles but the inner text still picks
+     up the Carbon default size). */
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--cds-alias-typography-color-300, #565656);
+}
+/* The 「留空表示永不过期,例如 30d」 helper is rendered as a
+   <cds-control-message> web component; needs the 2.6rem indent to
+   align under the value input column. Plain <p class="duration-hint">
+   elements (e.g. the rate-limit-type option descriptions) skip this
+   offset and start at the column-2 left edge. */
+cds-control-message.duration-hint {
+  margin-left: 2.6rem;
+}
+.duration-hint:deep(*) {
+  font-size: inherit;
+  color: inherit;
+}
+.duration-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.duration-value {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-size: 14px;
+  height: 32px;
+  padding: 4px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--cds-alias-object-border-color, #cbd4d8);
+  border-radius: 0;
+  background: transparent;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  outline: none;
+}
+.duration-value:focus {
+  border-bottom: 1px solid var(--cds-focus, #0f62fe);
+}
+.duration-unit {
+  font: inherit;
+  font-size: 14px;
+  min-height: 32px;
+  min-width: 72px;
+  padding: 4px 24px 4px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--cds-alias-object-border-color, #cbd4d8);
+  border-radius: 0;
+  background: transparent;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.duration-unit:focus {
+  border-bottom: 1px solid var(--cds-focus, #0f62fe);
+}
+/* Full-width variant — used when a row has no value <input> next to the
+   <select> (e.g. the rate-limit-type pickers: label + select only).
+   Drops the min-width floor and stretches the select to fill the
+   remaining grid column instead of sitting at its intrinsic 72px. */
+.duration-unit--full {
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+/* Rate-limit popover — a custom <details> dropdown whose trigger
+   button reuses .duration-unit visuals (border-bottom underline,
+   caret, padding) and whose listbox renders each option as a
+   vertical "title + description" block — exactly the LiteLLM picker
+   UX. The popover is positioned absolutely under the trigger so the
+   surrounding grid layout doesn't shift when the listbox opens. */
+.rate-limit-popover {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+.rate-limit-popover > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+}
+.rate-limit-popover > summary::-webkit-details-marker {
+  display: none;
+}
+.rate-limit-popover-trigger {
+  /* Trigger reuses .duration-unit but needs to behave like a button
+     (clickable), not a select. Override the appearance resets and
+     keep the underline look from .duration-unit. */
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: transparent;
+  text-align: left;
+  user-select: none;
+}
+.rate-limit-popover-trigger-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Slightly smaller than .duration-unit's 14px (which targets the
+     time-unit picker) so the popover trigger reads as a
+     configuration knob rather than a primary numeric input. */
+  font-size: 13px;
+}
+.rate-limit-popover-caret {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--cds-alias-object-app-foreground, #1b1b1b);
+  border-bottom: 2px solid var(--cds-alias-object-app-foreground, #1b1b1b);
+  transform: rotate(45deg);
+  transition: transform 120ms ease;
+}
+.rate-limit-popover[open] > summary .rate-limit-popover-caret {
+  transform: rotate(-135deg);
+}
+/* Rate-limit popover — a custom <details> dropdown whose trigger
+   button reuses .duration-unit visuals (border-bottom underline,
+   caret, padding) and whose listbox renders each option as a
+   vertical "title + description" block — exactly the LiteLLM picker
+   UX.
+
+   The list is `position: fixed` (not absolute) so it escapes any
+   `overflow: auto` / `overflow: hidden` ancestor — most importantly
+   the modal's own scroll container — which would otherwise clip the
+   list at its bottom edge and HIDE the scrollbar, leaving the user
+   unable to reach the lower options (e.g. 「动态」 for TPM/RPM).
+   Fixed positioning also makes `max-height: 320px` + `overflow-y:
+   auto` work as intended: the list caps at 320px tall and shows a
+   scrollbar when its content overflows. Coordinates are supplied by
+   inline style from JS (top / left / width), measured from the
+   trigger's bounding rect — see measurePopoverPosition in the
+   script section. */
+.rate-limit-popover-list {
+  position: fixed;
+  /* Must sit above Clarity cds-modal's overlay (z-index 1000000 per
+     ConfirmDialog.vue's comment) so the list is visible when it
+     opens. The list is teleported to <body>, so it lives in the
+     root stacking context — and a small z-index here would lose to
+     the modal's overlay regardless of DOM order. 1100000 mirrors
+     ConfirmDialog's own strategy for sibling modals. */
+  z-index: 1100000;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  background: #ffffff;
+  border: 1px solid var(--cds-alias-object-border-color, #cbd4d8);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  max-height: 320px;
+  overflow-y: auto;
+}
+.rate-limit-popover-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.rate-limit-popover-option:hover {
+  background: var(--cds-alias-object-app-background, #f4f4f4);
+}
+.rate-limit-popover-option--selected {
+  background: var(--cds-alias-object-app-blue-50, rgba(0, 114, 163, 0.08));
+}
+.rate-limit-popover-option-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  line-height: 1.3;
+}
+.rate-limit-popover-option-desc {
+  font-size: 10px;
+  color: var(--cds-alias-typography-color-300, #565656);
+  line-height: 1.45;
+  white-space: normal;
 }
 .advanced-grid {
   display: grid;
   gap: 12px;
   grid-template-columns: 1fr 1fr;
+  /* Push the rate-limit-control-group (设置限额) below us by 12px so
+     「最大并发请求」 (last child of .advanced-grid) doesn't sit
+     flush against the 「设置限额」 toggle — they read as distinct
+     rows rather than a single cramped column. Pairs with
+     .budget-control-group { margin-top: 12px } below to give all
+     three advanced groups (rate-limit, budget, allowed-routes) a
+     consistent 12px inter-group rhythm. */
+  margin-bottom: 12px;
 }
-/* Auto-rotate group wraps the toggle + (conditional) interval input so
-   they stack vertically AND occupy the full width of the 2-col advanced
-   grid — the interval field would otherwise get pushed into column 2. */
-.auto-rotate-group {
+/* Tags is a free-form multi-token string — give it its own row that
+   spans both columns of the advanced grid. Without this it'd share a
+   row with budgetDuration and the placeholder text would be cut off. */
+.advanced-grid .advanced-tags,
+.advanced-tags {
   grid-column: 1 / -1;
+}
+/* Same full-row span as .advanced-tags — used for maxParallelRequests,
+   which we want on its own line under 模型标签 (and not sharing a row
+   with one of the rate-limit-type popovers, which would force the
+   numeric input to fit in 50% width and feel cramped). */
+.advanced-grid .advanced-full-row,
+.advanced-full-row {
+  grid-column: 1 / -1;
+}
+/* Auto-rotate group: toggle + (conditional) rotation interval stacked
+   vertically. Lives outside 高级参数 now, so the previous `grid-column:
+   1 / -1` (which forced full width inside advanced-grid) is no longer
+   needed — the group is a top-level block child of .key-form. */
+.auto-rotate-group {
   display: grid;
   gap: 8px;
 }
-.allowed-routes-set {
-  border: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
-  border-radius: 4px;
-  padding: 8px 12px;
+/* Pull the toggle row back by 1.2rem so the 「自动轮换」 label lines up
+   with the input border column, not the form's content edge. The
+   negative offset matches the form's 1.2rem row-gap (set on
+   .key-form, .duration-row, .gateway-field). */
+.auto-rotate-toggle {
+  margin-left: -1.2rem;
+}
+/* Budget control group: same 「toggle + 条件子字段」 pattern as the
+   auto-rotate group above, but the two child inputs sit in their own
+   2-column row (消费上限 | 预算周期) so they read as a paired "spending
+   cap" control rather than two unrelated fields. Both controls reuse
+   the form's 1.2rem column gap rhythm. */
+.budget-control-group {
+  display: grid;
+  gap: 8px;
+  /* Match the rhythm set by .advanced-grid { margin-bottom: 12px }
+     above so 「设置限额」 (the sibling .rate-limit-control-group) and
+     「预算控制」 (this toggle) read as two distinct control rows
+     rather than one continuous block. Without this the two toggles
+     sit flush against each other and the eye can't easily find the
+     boundary between them. */
+  margin-top: 12px;
+}
+.budget-control-toggle {
+  margin-left: -1.2rem;
+}
+.budget-control-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+  /* Stretch both columns to the same row height — without this, the
+     native input + select row (shorter) and the no-unit row (shorter)
+     would render at their intrinsic heights and end up visually
+     misaligned with each other. align-items: stretch is the grid
+     default; spelled out here to keep the intent clear. */
+  align-items: stretch;
+}
+/* Rate-limit control group: mirrors .budget-control-group's 「toggle +
+   条件子字段」 pattern but lays the four children out as a 2-column ×
+   2-row grid so the (type, value) pairs sit side-by-side rather than
+   stacking into a tall column on the left. The toggle row gets the
+   same negative indent as .budget-control-toggle so the labels line
+   up under the form's content edge. */
+.rate-limit-control-group {
+  display: grid;
+  gap: 8px;
+  /* A small gap between the toggle and the 2x2 grid when expanded —
+     same as .budget-control-group, which uses 8px. */
+}
+.rate-limit-control-toggle {
+  margin-left: -1.2rem;
+}
+/* Rate-limit control list — outer wrapper that stacks the four
+   rate-limit fields (TPM type, TPM value, RPM type, RPM value)
+   vertically, one field per row, each spanning the full form
+   width. 8px row-gap keeps the four fields visually grouped under
+   the 「设置限额」 toggle without competing with the form's outer
+   16px gap.
+
+   `min-width: 0` is load-bearing: this wrapper lives inside
+   `.rate-limit-control-group` (grid, single 1fr column), and the
+   1fr column's implicit `minmax(auto, 1fr)` would otherwise expand
+   to the children's intrinsic min-width — the chain ends at
+   `.duration-unit { min-width: 72px }`, so without this override the
+   wrapper's width grows past the form's right padding (the modal's
+   padding-right: 24px edge) and the trigger underline of the inner
+   `.rate-limit-type-field` rows renders outside the visible frame.
+   Forcing min-width: 0 makes the grid track's 1fr the binding
+   constraint, so each row's `minmax(0, 1fr)` inside the rate-limit
+   type fields can clamp to the actual remaining column width. */
+.rate-limit-control-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+/* Rate-limit type picker — label + trigger laid out side-by-side on a
+   single grid row (auto / minmax(0, 1fr)), matching the .duration-row
+   rhythm used by 生效时长 / 预算周期. The minmax(0, 1fr) on the
+   trigger column is what keeps the popover's underline from
+   overflowing the form's right padding: a plain 1fr would let the
+   trigger inherit the form's full content width and extend past the
+   modal's padding-right: 24px edge, while minmax(0, 1fr) clamps the
+   column to whatever space remains after the label and the 1.2rem
+   gap — so the trigger's right border lines up flush with the value
+   input's right edge in the sibling .duration-row.
+
+   The descendant overrides below (min-width: 0 on .rate-limit-popover
+   + summary + the duration-unit trigger itself) are required for
+   minmax(0, 1fr) to actually clamp the column: .duration-unit carries
+   a min-width: 72px floor (set above for the time-unit picker), and
+   .rate-limit-popover + summary default to min-width: auto, so the
+   intrinsic minimum width of the trigger chain would otherwise push
+   the column past 1fr and let the trigger's underline extend past
+   the form's right padding. Forcing every link in the chain to
+   min-width: 0 makes the grid track's minmax(0, ...) the binding
+   constraint, so the column shrinks to whatever space remains. The
+   label keeps its 12px muted style (set on .rate-limit-type-label
+   below) so the rate-limit fields read as configuration knobs rather
+   than primary input like the basic 生效时长 label (13px / 600). */
+.rate-limit-type-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 1.2rem;
+}
+.rate-limit-type-field > .rate-limit-popover,
+.rate-limit-type-field > .rate-limit-popover > summary,
+.rate-limit-type-field > .rate-limit-popover > summary.duration-unit {
+  min-width: 0;
+  /* The trigger (a <summary class="duration-unit">) carries a
+     padding-right: 24px inherited from .duration-unit (designed for
+     the native <select> arrow room). Without box-sizing: border-box
+     here, that padding sits OUTSIDE the grid track's measured width,
+     so the trigger box renders 32px wider than the cell the
+     minmax(0, 1fr) column allocated — visually the caret sits flush
+     against the underline's right edge (instead of 24px inside it)
+     and reads as "stuck to the wall". Switching to border-box forces
+     the padding to count against the track width, so the trigger's
+     right border lines up flush with its grid cell.
+
+     `!important` is load-bearing here: the project ships a global
+     `*, ::after, ::before { box-sizing: inherit !important }` reset
+     (verified live via CDP `CSS.getMatchedStylesForNode` — the
+     unscoped `*` selector with !important at specificity 0,1,0,0
+     outranks any non-!important scoped rule that targets the same
+     element, because scoped styles compile to `[data-v-xxx]`
+     attribute selectors but `!important` flips the cascade
+     regardless of specificity. Without `!important` here, our
+     border-box gets ignored and the trigger inherits content-box
+     from <html>'s user-agent default. With `!important`, our
+     border-box wins and the padding stops overflowing the cell. */
+  box-sizing: border-box !important;
+}
+.rate-limit-type-field > .rate-limit-popover {
+  width: 100%;
+}
+.rate-limit-type-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--cds-alias-typography-color-300, #565656);
+  cursor: pointer;
+}
+/* allowed_routes group — previously wrapped in a bordered
+   <fieldset> + boxed <legend> that read as a sub-section header.
+   Now it's a flat block that mirrors the .rate-limit-control-group /
+   .budget-control-group layout: a single toggle row (with the section
+   label inline as 「允许所有接口 (接口权限)」), optionally followed by
+   a row of route-permission checkboxes. The 12px top margin keeps
+   visual separation from the previous advanced block without drawing
+   a border. */
+.allowed-routes-group {
   margin: 12px 0 0 0;
 }
-.allowed-routes-set legend {
+/* Pull the toggle row back by 1.2rem so the 「允许所有接口」 label
+   lines up with the other advanced toggles above (设置限额 /
+   预算控制 — both use the same -1.2rem offset via
+   .rate-limit-control-toggle / .budget-control-toggle). Before this
+   rule was added, the toggle inherited cds-control's default
+   left margin/padding and read as visibly indented to the right of
+   its siblings. The previous <fieldset>+padding: 8px 12px chrome
+   had produced the same alignment by accident — once the border was
+   removed the alignment had to be reinstated explicitly. */
+.allowed-routes-group cds-control {
+  margin-left: -1.2rem;
+}
+/* Inline 「(接口权限)」 caption — dimmer + slightly smaller than the
+   toggle label so the section identifier reads as a parenthetical
+   aside rather than a competing primary label. */
+.allowed-routes-caption {
+  margin-left: 4px;
   font-size: 12px;
-  padding: 0 6px;
+  font-weight: 400;
   color: var(--cds-alias-typography-color-300, #565656);
 }
 .allowed-routes-options {

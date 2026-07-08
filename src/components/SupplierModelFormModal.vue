@@ -697,7 +697,7 @@ function formatCost(d: SpecDraft): string {
                 <cds-input :status="attemptBasic && !nameValid ? 'error' : 'neutral'">
                   <label>
                     {{ locale.t('supplier.model.form.name') }}
-                    <span class="required-mark" aria-hidden="true">*</span>
+                    <sup class="required-mark" aria-hidden="true">*</sup>
                   </label>
                   <input
                     :value="name"
@@ -721,7 +721,7 @@ function formatCost(d: SpecDraft): string {
                 >
                   <label for="supplier-gateway-select" class="gateway-label">
                     {{ locale.t('supplier.model.form.gateway') }}
-                    <span class="required-mark" aria-hidden="true">*</span>
+                    <sup class="required-mark" aria-hidden="true">*</sup>
                   </label>
                   <select
                     id="supplier-gateway-select"
@@ -741,7 +741,7 @@ function formatCost(d: SpecDraft): string {
                 >
                   <label for="supplier-organization-input" class="organization-label">
                     {{ locale.t('supplier.model.form.organization') }}
-                    <span class="required-mark" aria-hidden="true">*</span>
+                    <sup class="required-mark" aria-hidden="true">*</sup>
                   </label>
                   <input
                     id="supplier-organization-input"
@@ -810,7 +810,7 @@ function formatCost(d: SpecDraft): string {
                       <div class="provider-field">
                         <span class="provider-label">
                           {{ locale.t('supplier.model.form.spec.provider') }}
-                          <span class="required-mark" aria-hidden="true">*</span>
+                          <sup class="required-mark" aria-hidden="true">*</sup>
                         </span>
                         <cds-select>
                           <select
@@ -833,7 +833,7 @@ function formatCost(d: SpecDraft): string {
                       >
                         <label>
                           {{ locale.t('supplier.model.form.spec.provider') }}
-                          <span class="required-mark" aria-hidden="true">*</span>
+                          <sup class="required-mark" aria-hidden="true">*</sup>
                         </label>
                         <input
                           :value="d.providerCustom"
@@ -845,7 +845,7 @@ function formatCost(d: SpecDraft): string {
                       <cds-input>
                         <label>
                           {{ locale.t('supplier.model.form.spec.apiBase') }}
-                          <span class="required-mark" aria-hidden="true">*</span>
+                          <sup class="required-mark" aria-hidden="true">*</sup>
                         </label>
                         <input
                           :value="d.apiBase"
@@ -864,7 +864,7 @@ function formatCost(d: SpecDraft): string {
                       <cds-input :status="!isEditing && attemptSpecs && !d.apiKey.trim() ? 'error' : 'neutral'">
                         <label>
                           {{ locale.t('supplier.model.form.spec.apiKey') }}
-                          <span v-if="!isEditing" class="required-mark" aria-hidden="true">*</span>
+                          <sup v-if="!isEditing" class="required-mark" aria-hidden="true">*</sup>
                         </label>
                         <input
                           type="password"
@@ -923,7 +923,7 @@ function formatCost(d: SpecDraft): string {
                       <cds-input :status="attemptSpecs && !d.model.trim() ? 'error' : 'neutral'">
                         <label>
                           {{ locale.t('supplier.model.form.spec.model') }}
-                          <span class="required-mark" aria-hidden="true">*</span>
+                          <sup class="required-mark" aria-hidden="true">*</sup>
                         </label>
                         <input
                           :value="d.model"

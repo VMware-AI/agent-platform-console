@@ -7,7 +7,7 @@ import { gql } from '@apollo/client/core'
 // the secret, or revoke (terminal).
 
 // `allowedRoutes` is the explicit whitelist; an empty list here means
-// "no restriction" (the frontend's "Allow All Routes" switch ON translates
+// "no restriction" (the frontend's "Allow All APIs" switch ON translates
 // to omit-the-field; OFF → fill with /v1/chat/completions etc).
 // `spend` + `lastActiveAt` are written by the periodic worker and feed the
 // consumption-progress column on the page.
@@ -28,7 +28,6 @@ const VIRTUAL_KEY_FIELDS = gql`
     modelGateway {
       id
       name
-      baseUrl
     }
     agentId
     models
@@ -108,7 +107,7 @@ export const GATEWAY_AVAILABLE_MODELS = gql`
 export type VirtualKeyStatus = 'active' | 'disabled' | 'revoked'
 
 // RoutePermission — frontend multi-select enum mapped to /v1/* paths
-// (LiteLLM design doc §4.2). The form's "Allow All Routes" switch, when ON,
+// (LiteLLM design doc §4.2). The form's "Allow All APIs" switch, when ON,
 // OMITS the allowed_routes field entirely; when OFF, the form picks one or
 // more of these and translates to ["/v1/chat/completions", ...].
 export type RoutePermission = 'CHAT' | 'EMBEDDINGS' | 'IMAGES' | 'AUDIO'
@@ -143,7 +142,7 @@ export interface VirtualKeyNode {
   updatedAt: string
   spend: number
   lastActiveAt: string | null
-  modelGateway: { id: string; name: string; baseUrl: string } | null
+  modelGateway: { id: string; name: string } | null
   agentId: string | null
   models: string[]
   maxBudget: number | null
@@ -187,12 +186,11 @@ export interface IssueVirtualKeyInputVars {
   rpmLimitType?: string | null
   tpmLimitType?: string | null
   // The frontend OMITS this field (not even an empty array) when the
-  // "Allow All Routes" switch is ON; the resolver sees nil and litellm
+  // "Allow All APIs" switch is ON; the resolver sees nil and litellm
   // applies its default (no restriction). When the switch is OFF, the
   // form sends the explicit list of /v1/* paths.
   allowedRoutes?: string[] | null
   tags?: string[] | null
-  blocked?: boolean | null
   keyType?: string | null
   autoRotate?: boolean | null
   rotationInterval?: string | null

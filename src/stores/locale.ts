@@ -1062,6 +1062,12 @@ export const STRINGS: Dict = {
   },
   'virtualKey.pagination.label': { zh: '令牌分页', en: 'Virtual key pagination' },
   'virtualKey.form.createTitle': { zh: '颁发密钥', en: 'New API Key' },
+  // Inline asterisk rendered next to labels of backend-required
+  // fields (密钥名称 / 所属组织 / 模型网关 / 可调用模型 — see
+  // VirtualKeyFormModal template). Mirrors the
+  // `gateway.form.requiredMark` convention so all create-flow
+  // modals in the app share the same red-star UX.
+  'virtualKey.form.requiredMark': { zh: '*', en: '*' },
   'virtualKey.form.name': { zh: '密钥名称', en: 'Key Name' },
   'virtualKey.form.namePlaceholder': {
     zh: '例如 OpenClaw_Robot_Key',
@@ -1092,6 +1098,22 @@ export const STRINGS: Dict = {
     zh: '留空表示永不过期,例如 30d',
     en: 'Leave empty for no expiry, e.g. 30d',
   },
+  'virtualKey.form.durationUnit': { zh: '单位', en: 'Unit' },
+  'virtualKey.form.durationUnitHour': { zh: '小时 (h)', en: 'Hour (h)' },
+  'virtualKey.form.durationUnitDay': { zh: '天 (d)', en: 'Day (d)' },
+  'virtualKey.form.durationUnitWeek': { zh: '周 (w)', en: 'Week (w)' },
+  'virtualKey.form.durationUnitMonth': { zh: '月 (m)', en: 'Month (m)' },
+  'virtualKey.form.rotationIntervalUnit': { zh: '单位', en: 'Unit' },
+  'virtualKey.form.rotationIntervalUnitSecond': {
+    zh: '秒 (s)',
+    en: 'Second (s)',
+  },
+  'virtualKey.form.rotationIntervalUnitMinute': {
+    zh: '分钟 (m)',
+    en: 'Minute (m)',
+  },
+  'virtualKey.form.rotationIntervalUnitHour': { zh: '小时 (h)', en: 'Hour (h)' },
+  'virtualKey.form.rotationIntervalUnitDay': { zh: '天 (d)', en: 'Day (d)' },
   'virtualKey.form.nameRequired': {
     zh: '名称长度应为 2–64 个字符',
     en: 'Name must be 2–64 characters',
@@ -1099,6 +1121,10 @@ export const STRINGS: Dict = {
   'virtualKey.form.orgRequired': {
     zh: '请输入组织 ID',
     en: 'Please enter an organization ID',
+  },
+  'virtualKey.form.modelsRequired': {
+    zh: '请至少选择一个可调用模型',
+    en: 'Please select at least one model.',
   },
   'virtualKey.form.modelsHint': {
     zh: '选择网关后加载可用模型',
@@ -1140,8 +1166,14 @@ export const STRINGS: Dict = {
   'virtualKey.toast.regenerated': { zh: '令牌已重新生成', en: 'Key secret regenerated' },
   'virtualKey.toast.regenerateFailed': { zh: '重新生成令牌失败', en: 'Failed to regenerate key' },
   'virtualKey.status.revoked': { zh: '已吊销', en: 'Revoked' },
-  'virtualKey.form.maxBudget': { zh: '消费上限', en: 'Max Budget' },
-  'virtualKey.form.models': { zh: '可调用模型', en: 'Models' },
+  'virtualKey.form.maxBudget': { zh: '预算上限', en: 'Max Budget' },
+  'virtualKey.form.budgetControl': { zh: '预算控制', en: 'Budget Control' },
+  // Master toggle that gates the four TPM/RPM fields below. Mirrors the
+  // design pattern used by `budgetControl` (also a Toggle → conditions
+  // the wire payload). When OFF, the resolver applies LiteLLM's no-cap
+  // default; when ON, the four child fields become editable.
+  'virtualKey.form.rateLimitControl': { zh: '设置限额', en: 'Rate Limits' },
+  'virtualKey.form.models': { zh: '选择可调用模型', en: 'Select Models' },
   'virtualKey.form.modelsEmpty': {
     zh: '暂无可用模型，请先选择网关',
     en: 'No available models yet — select a gateway first',
@@ -1156,21 +1188,64 @@ export const STRINGS: Dict = {
   },
   'virtualKey.form.advanced': { zh: '高级参数', en: 'Advanced' },
   'virtualKey.form.tpmLimit': { zh: 'TPM 上限', en: 'TPM Limit' },
+  'virtualKey.form.tpmLimitType': { zh: 'TPM 限流模式', en: 'TPM Limit Type' },
   'virtualKey.form.rpmLimit': { zh: 'RPM 上限', en: 'RPM Limit' },
+  'virtualKey.form.rpmLimitType': { zh: 'RPM 限流模式', en: 'RPM Limit Type' },
+  // Shared option titles + descriptions for the rate-limit-type radio
+  // picker (LiteLLM design doc §4.2). Each picker (TPM / RPM) renders
+  // the same three options; only the legend label differs above.
+  'virtualKey.form.rateLimitType.best_effort_throughput.title': {
+    zh: '默认',
+    en: 'Default',
+  },
+  'virtualKey.form.rateLimitType.best_effort_throughput.desc': {
+    zh: '尽力调度,即使超出 TPM 也不报错(超限检查在请求时按 Team/Key 限额执行)。',
+    en:
+      'Best effort throughput - no error if we\'re overallocating tpm ' +
+      '(Team/Key Limits checked at runtime).',
+  },
+  'virtualKey.form.rateLimitType.guaranteed_throughput.title': {
+    zh: '保证吞吐',
+    en: 'Guaranteed throughput',
+  },
+  'virtualKey.form.rateLimitType.guaranteed_throughput.desc': {
+    zh: '保证吞吐,超出 TPM 时报错(同时检查模型自身限额)。',
+    en:
+      'Guaranteed throughput - raise an error if we\'re overallocating ' +
+      'tpm (also checks model-specific limits).',
+  },
+  'virtualKey.form.rateLimitType.dynamic.title': {
+    zh: '动态',
+    en: 'Dynamic',
+  },
+  'virtualKey.form.rateLimitType.dynamic.desc': {
+    zh: '在 429 错误未出现时,可动态超出已设置的 TPM 限额(若设了 TPM)。',
+    en:
+      'If the key has a set TPM (e.g. 2 TPM) and there are no 429 errors, ' +
+      'it can dynamically exceed the limit.',
+  },
   'virtualKey.form.maxParallelRequests': { zh: '最大并发请求', en: 'Max Parallel Requests' },
   'virtualKey.form.budgetDuration': { zh: '预算周期', en: 'Budget Duration' },
-  'virtualKey.form.budgetDurationPlaceholder': { zh: '例如 30d / 1mo', en: 'e.g. 30d / 1mo' },
-  'virtualKey.form.tags': { zh: 'Tags (逗号分隔)', en: 'Tags (comma-separated)' },
-  'virtualKey.form.tagsPlaceholder': { zh: '例如 prod,priority-high', en: 'e.g. prod,priority-high' },
+  'virtualKey.form.budgetDurationPlaceholder': { zh: '例如 1', en: 'e.g. 1' },
+  'virtualKey.form.budgetDurationUnit': { zh: '单位', en: 'Unit' },
+  'virtualKey.form.budgetDurationUnitSecond': { zh: '秒 (s)', en: 'Second (s)' },
+  'virtualKey.form.budgetDurationUnitMinute': { zh: '分钟 (m)', en: 'Minute (m)' },
+  'virtualKey.form.budgetDurationUnitHour': { zh: '小时 (h)', en: 'Hour (h)' },
+  'virtualKey.form.budgetDurationUnitDay': { zh: '天 (d)', en: 'Day (d)' },
+  'virtualKey.form.budgetDurationUnitMonth': { zh: '月 (mo)', en: 'Month (mo)' },
+  'virtualKey.form.tags': { zh: '模型标签', en: 'Tags' },
+  'virtualKey.form.tagsPlaceholder': {
+    zh: '逗号分隔,例如 prod,priority-high',
+    en: 'comma-separated, e.g. prod,priority-high',
+  },
   'virtualKey.form.rotationInterval': { zh: '自动轮换周期', en: 'Rotation Interval' },
-  'virtualKey.form.rotationIntervalPlaceholder': { zh: '例如 30d', en: 'e.g. 30d' },
-  'virtualKey.form.blocked': { zh: '一键锁定', en: 'Lock this key' },
+  'virtualKey.form.rotationIntervalPlaceholder': { zh: '例如 12h', en: 'e.g. 12h' },
   'virtualKey.form.autoRotate': { zh: '自动轮换', en: 'Auto Rotate' },
   'virtualKey.form.allowedRoutes': { zh: '接口权限', en: 'Route Permissions' },
-  'virtualKey.form.allowAllRoutes': { zh: '允许所有路由', en: 'Allow All Routes' },
+  'virtualKey.form.allowAllRoutes': { zh: '允许所有接口', en: 'Allow All APIs' },
   'virtualKey.form.allowedRoutesError': {
-    zh: '至少选择一个接口或开启"允许所有路由"',
-    en: 'Select at least one route or enable "Allow All Routes"',
+    zh: '至少选择一个接口或开启"允许所有接口"',
+    en: 'Select at least one route or enable "Allow All APIs"',
   },
   'virtualKey.allowedRoutes.CHAT': { zh: '对话 /v1/chat/completions', en: 'Chat /v1/chat/completions' },
   'virtualKey.allowedRoutes.EMBEDDINGS': {
