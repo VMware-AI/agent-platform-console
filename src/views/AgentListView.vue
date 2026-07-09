@@ -508,11 +508,11 @@ type BatchKey = (typeof BATCH_KEYS)[number]
 
 function onBatch(key: BatchKey, close: () => void) {
   if (selectedIds.value.size === 0) {
-    noop('batch:disabled', key)
+    return
     close()
     return
   }
-  noop(`batch:${key}`, { ids: [...selectedIds.value] })
+  console.log(`[agents] batch:${key}`, { ids: [...selectedIds.value] })
   close()
 }
 
