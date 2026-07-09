@@ -63,7 +63,7 @@ async function copyText(text: string, label: string) {
 async function copyAll() {
   const lines: string[] = []
   if (apiKeyName.value) lines.push(`密钥名称: ${apiKeyName.value}`)
-  if (username.value) lines.push(`运行账户: ${username.value}`)
+  if (username.value) lines.push(`OS账户: ${username.value}`)
   if (passwordHint.value) lines.push(`登录密码: ${passwordHint.value}`)
   if (sshCmd.value) lines.push(`SSH 连接: ${sshCmd.value}`)
   if (ip.value) lines.push(`IP 地址: ${ip.value}`)
@@ -174,14 +174,14 @@ async function copyAll() {
           <div v-show="credsExpanded" class="accordion-body">
             <!-- Run-as User -->
             <div class="cred-row">
-              <label>运行账户</label>
+              <label>OS账户</label>
               <div class="cred-value">
                 <span>{{ username || '—' }}</span>
                 <cds-button-action
                   v-if="username"
                   shape="copy"
-                  title="复制运行账户"
-                  @click="copyText(username, '运行账户')"
+                  title="复制OS账户"
+                  @click="copyText(username, 'OS账户')"
                 ></cds-button-action>
               </div>
             </div>
@@ -192,13 +192,13 @@ async function copyAll() {
               <div class="cred-value">
                 <span class="pw-text">{{ showPassword ? passwordHint : '••••••••' }}</span>
                 <cds-button-action
-                  v-if="passwordHint"
+                  v-if="true"
                   :shape="showPassword ? 'eye-hide' : 'eye'"
                   :title="showPassword ? '隐藏密码' : '显示密码'"
                   @click="showPassword = !showPassword"
                 ></cds-button-action>
                 <cds-button-action
-                  v-if="passwordHint"
+                  v-if="true"
                   shape="copy"
                   title="复制密码"
                   @click="copyText(passwordHint, '登录密码')"

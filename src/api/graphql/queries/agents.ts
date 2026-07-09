@@ -40,6 +40,7 @@ export const AGENTS_QUERY = gql`
         id
         name
         type
+        resourcePoolId
         status
         apiKey {
           id
