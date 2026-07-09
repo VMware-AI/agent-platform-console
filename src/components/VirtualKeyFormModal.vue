@@ -7,6 +7,7 @@ import {
   ROUTE_PERMISSION_PATHS,
   type RoutePermission,
 } from '@/api/graphql/queries/virtual-keys'
+import type { CloneVirtualKeyInput } from '@/utils/virtualKey'
 
 // Duration unit — LiteLLM accepts 'd' / 'h' / 'w' / 'm' (h=hour, d=day,
 // w=7 days, m=month). The form drives the unit via a dropdown and
@@ -77,6 +78,12 @@ export interface VirtualKeyFormDraft {
   // keyType is intentionally absent — the postman `IssueVirtualKey`
   // mutation always receives a fixed `default` value (see VirtualKeyView
   // submitKey), so there is no UI-driven variation to carry in the draft.
+  // The clone path *does* carry the source's keyType through, so we
+  // declare it as optional here and let submit() decide whether to
+  // include it in the wire payload (create leaves it undefined →
+  // submitKey falls back to 'default'; clone forwards the source's
+  // value verbatim).
+  keyType?: string
   autoRotate?: boolean
   rotationInterval?: string
 }
@@ -97,12 +104,34 @@ const props = defineProps<{
   // "暂无可用模型，请先选择网关" while the request is still in flight.
   availableModelsLoading?: boolean
   saving?: boolean
+  // 'clone' switches the title to 克隆令牌 and tells reset() to layer
+  // the clone prefill on top of the empty baseline. 'create' (default)
+  // is the existing create-from-scratch path; clone is identical except
+  // for the prefill + title.
+  mode?: 'create' | 'clone'
+  // Full prefill for the clone path. Consumed by reset() on the
+  // false→true edge of `open`; null/undefined on the create path leaves
+  // reset()'s baseline untouched. The fields mirror what the parent's
+  // openClone() produced via `virtualKeyToIssueInput(src)`.
+  initialDraft?: CloneVirtualKeyInput | null
+  // Live duplicate-name check, driven by the parent (VirtualKeyView
+  // runs the debounced virtualKeys(nameEquals: ...) query). The modal
+  // only renders the warning — the network round-trip lives in the
+  // parent so this component stays Apollo-free. `checking` flips the
+  // indicator; `duplicate` (with the offending key's id, when known)
+  // is what blocks form submission.
+  nameDuplicate?: { checking: boolean; duplicate: boolean } | null
 }>()
 
 const emit = defineEmits<{
   (event: 'close'): void
   (event: 'gateway-changed', gatewayId: string): void
   (event: 'submit', draft: VirtualKeyFormDraft): void
+  // Emitted on every keystroke in the name input; the parent debounces
+  // and runs a virtualKeys(nameEquals: ...) query to surface a live
+  // "name already exists" warning before the user submits. Modal
+  // itself stays Apollo-free — see the prop comment above.
+  (event: 'name-change', name: string): void
 }>()
 
 const locale = useLocaleStore()
@@ -186,6 +215,13 @@ const autoRotate = ref(false)
 // (hour) — a sensible starting window for automatic key rotation.
 const rotationIntervalValue = ref<number | null>(null)
 const rotationIntervalUnit = ref<RotationIntervalUnit>('h')
+// keyType — driven only by the clone prefill path. Undefined on
+// create, in which case the parent's submitKey() falls back to the
+// hard-coded 'default'. Reading it back through the draft keeps the
+// wire payload faithful when the user *does* clone a keyType that the
+// upstream intentionally varied (rare today; intended forward-
+// compatible with a future backend IssueVirtualKeyInput change).
+const keyType = ref<string | undefined>(undefined)
 
 // allowed_routes Switch + multi-select
 const allowAllRoutes = ref(true)
@@ -195,7 +231,13 @@ const attempted = ref(false)
 
 const nameValid = computed(() => {
   const length = name.value.trim().length
-  return length >= 2 && length <= 64
+  if (length < 2 || length > 64) return false
+  // When the parent reports a duplicate, treat the name as invalid.
+  // We deliberately do NOT block submission on `checking` (only on
+  // `duplicate`) — a 300ms-debounced query is mid-flight most of the
+  // time the user is typing, and we'd be falsely red on every keypress.
+  if (props.nameDuplicate?.duplicate) return false
+  return true
 })
 const gatewayValid = computed(() =>
   props.gateways.some((gateway) => gateway.id === modelGateway.value),
@@ -248,6 +290,7 @@ function reset() {
   autoRotate.value = false
   rotationIntervalValue.value = null
   rotationIntervalUnit.value = 'h'
+  keyType.value = undefined
   allowAllRoutes.value = true
   allowedRoutePermissions.value = []
   attempted.value = false
@@ -257,6 +300,118 @@ function reset() {
   // the parent may not have set `formGateway` if this is the very first
   // open and `initialModelGateway` was empty).
   if (restored) emit('gateway-changed', restored)
+
+  // Clone prefill — layered on top of the empty baseline above so the
+  // create path is unchanged (mode === 'create' / null draft falls
+  // through). The helper at @/utils/virtualKey already cleared `name`
+  // and dropped `duration`/`agentId`, so we only re-populate the
+  // fields the source actually carries.
+  if (props.mode === 'clone' && props.initialDraft) {
+    const d = props.initialDraft
+    // name is forced empty by the helper — leave the baseline '' so
+    // the modal's required-field check fires on submit until the user
+    // types a value.
+    name.value = d.name ?? ''
+    // Gateway: prefer the source's gateway over the parent's restored
+    // value, so the form lands on the right gateway when the user
+    // clones a key bound to a gateway they hadn't last opened.
+    if (d.modelGateway && props.gateways.some((g) => g.id === d.modelGateway)) {
+      modelGateway.value = d.modelGateway
+      emit('gateway-changed', d.modelGateway)
+    }
+    if (d.models && d.models.length > 0) {
+      selectedModels.value = [...d.models]
+    }
+    // Budget: turn the master toggle on only when the source actually
+    // carried a value, so leaving both null on the source keeps the
+    // create-style "no cap" default.
+    if (typeof d.maxBudget === 'number') {
+      budgetControl.value = true
+      maxBudget.value = d.maxBudget
+    }
+    // budgetDuration is "30d" / "1mo" — split value/unit; pin to 1 if
+    // the unit is 'mo' (mirrors the baseline rule on line 256 above).
+    if (d.budgetDuration) {
+      budgetControl.value = true
+      const m = /^(\d+)([smhdwmo]+)$/.exec(d.budgetDuration)
+      if (m) {
+        budgetDurationValue.value =
+          m[2] === 'mo' ? 1 : Number(m[1])
+        budgetDurationUnit.value = m[2] as BudgetDurationUnit
+      }
+    }
+    // Rate-limit master toggle mirrors budget: ON only when the source
+    // carried at least one rate-limit field. Limits that the source
+    // didn't carry stay null (the wire payload will simply omit them,
+    // same as if the user hadn't filled the field).
+    if (
+      typeof d.maxParallelRequests === 'number' ||
+      typeof d.tpmLimit === 'number' ||
+      typeof d.rpmLimit === 'number'
+    ) {
+      rateLimitControl.value = true
+    }
+    if (typeof d.maxParallelRequests === 'number') {
+      maxParallelRequests.value = d.maxParallelRequests
+    }
+    if (typeof d.tpmLimit === 'number') tpmLimit.value = d.tpmLimit
+    if (typeof d.rpmLimit === 'number') rpmLimit.value = d.rpmLimit
+    if (d.tpmLimitType) {
+      tpmLimitType.value = d.tpmLimitType as RateLimitType
+    }
+    if (d.rpmLimitType) {
+      rpmLimitType.value = d.rpmLimitType as RateLimitType
+    }
+    // allowedRoutes: empty list / undefined means "Allow All APIs" was
+    // ON for the source. Any concrete list flips the switch OFF and
+    // maps each /v1/* path back to the RoutePermission enum value used
+    // by the form's checkbox grid.
+    if (d.allowedRoutes && d.allowedRoutes.length > 0) {
+      allowAllRoutes.value = false
+      const perms: RoutePermission[] = []
+      for (const path of d.allowedRoutes) {
+        const entry = Object.entries(ROUTE_PERMISSION_PATHS).find(
+          ([, p]) => p === path,
+        )
+        if (entry) perms.push(entry[0] as RoutePermission)
+      }
+      allowedRoutePermissions.value = perms
+    }
+    // tags ride under `metadata.tags` on the wire. The form's free-text
+    // input is comma/newline-separated; serialise back the same way the
+    // submit() path parses it (so the visible value round-trips).
+    if (d.metadata && Array.isArray(d.metadata.tags)) {
+      tagsText.value = (d.metadata.tags as unknown[])
+        .map((t) => String(t).trim())
+        .filter(Boolean)
+        .join(', ')
+    }
+    if (typeof d.autoRotate === 'boolean') {
+      autoRotate.value = d.autoRotate
+    }
+    if (d.rotationInterval) {
+      // RotationIntervalUnit is 's' | 'm' | 'h' | 'd' (no w/mo —
+      // tighter than DurationUnit because key-rotation windows are
+      // always sub-month). Restrict the regex char-class accordingly
+      // so the cast lines up with the ref's type without a `as
+      // unknown as`.
+      const m = /^(\d+)([smhd]+)$/.exec(d.rotationInterval)
+      if (m) {
+        rotationIntervalValue.value = Number(m[1])
+        rotationIntervalUnit.value = m[2] as RotationIntervalUnit
+      }
+    }
+    // Carry the source's keyType through verbatim; empty string from a
+    // malformed source maps to undefined so the parent's fallback to
+    // 'default' (in submitKey) fires for the create-equivalent case.
+    if (d.keyType && d.keyType.length > 0) {
+      keyType.value = d.keyType
+    }
+    // Force the advanced pane open on clone — too many pre-filled
+    // values to hide behind a "Show advanced" click; the user is
+    // likely here to verify or tweak them.
+    showAdvanced.value = true
+  }
 }
 
 // Reset the form fields only on the false→true edge of `open` (i.e. the
@@ -300,6 +455,18 @@ watch(budgetDurationUnit, (unit) => {
 
 function close() {
   if (!props.saving) emit('close')
+}
+
+// Single-source-of-truth for the name input's @input handler: updates
+// the local ref + bubbles the value up to the parent so its debounced
+// virtualKeys(nameEquals: ...) check can run. Inline as @input="name =
+// ($event.target as HTMLInputElement).value" used to live directly on
+// the input — moved here when the duplicate-check flow was added so
+// the emit doesn't have to be duplicated across handlers.
+function onNameInput(event: Event) {
+  const value = (event.target as HTMLInputElement).value
+  name.value = value
+  emit('name-change', value.trim())
 }
 
 function toggleModel(model: string) {
@@ -470,6 +637,10 @@ function submit() {
     // nil and the gateway keeps its default (no tags) rather than
     // receiving an empty bucket.
     metadata: tagsArray.length > 0 ? { tags: tagsArray } : undefined,
+    // keyType travels through verbatim when the clone path set it; on
+    // create (or when the helper cleared it) it stays undefined and
+    // the parent's submitKey() falls back to the hard-coded 'default'.
+    keyType: keyType.value || undefined,
     autoRotate: autoRotate.value,
     rotationInterval:
       autoRotate.value &&
@@ -486,7 +657,7 @@ function submit() {
   <cds-modal :hidden="!open" :closable="!saving" size="lg" @closeChange="close">
     <cds-modal-header>
       <h2 cds-text="title" class="modal-title">
-        {{ locale.t('virtualKey.form.createTitle') }}
+        {{ locale.t(mode === 'clone' ? 'virtualKey.form.cloneTitle' : 'virtualKey.form.createTitle') }}
       </h2>
     </cds-modal-header>
 
@@ -505,9 +676,23 @@ function submit() {
             maxlength="64"
             autocomplete="off"
             :placeholder="locale.t('virtualKey.form.namePlaceholder')"
-            @input="name = ($event.target as HTMLInputElement).value"
+            @input="onNameInput"
           />
-          <cds-control-message v-if="attempted && !nameValid" status="error">
+          <!-- Live duplicate hint — when the parent reports a hit,
+               surface it as a soft "warning" status before the user
+               hits submit (and the backend 409s). `checking` shows a
+               transient indicator; `duplicate` blocks form submission
+               via nameValid above. -->
+          <cds-control-message
+            v-if="nameDuplicate?.duplicate && (name ?? '').trim().length > 0"
+            status="warning"
+          >
+            {{ locale.t('virtualKey.form.nameDuplicate') }}
+          </cds-control-message>
+          <cds-control-message
+            v-else-if="attempted && !nameValid"
+            status="error"
+          >
             {{ locale.t('virtualKey.form.nameRequired') }}
           </cds-control-message>
         </cds-input>
