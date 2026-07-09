@@ -163,7 +163,7 @@ watch(() => props.open, (o) => {
             <div class="ic-sec">
               <div class="rr"><label class="ir" :class="{a:globalForm.parentSource==='existing'}"><input type="radio" v-model="globalForm.parentSource" value="existing"/>选择已有父虚拟机</label><label class="ir" :class="{a:globalForm.parentSource==='create'}"><input type="radio" v-model="globalForm.parentSource" value="create"/>创建新父虚拟机</label></div>
               <cds-select v-if="globalForm.parentSource==='existing'" control-width="shrink" style="margin-top:8px"><label>父虚拟机</label><select v-model="globalForm.instantCloneParent"><option value="">-- 选择 --</option><option v-for="p in instantParents" :key="p.name" :value="p.name">{{ p.name }}</option></select></cds-select>
-              <template v-else><div v-for="(p,i) in globalForm.newParents" :key="i" style="display:flex;gap:8px;align-items:flex-end;margin-top:8px"><cds-input style="flex:1"><label>名称</label><input v-model="p.name"/></cds-input><cds-input style="flex:1"><label>静态 IP</label><input v-model="p.ip"/></cds-input><cds-button-action v-if="globalForm.newParents.length>1" shape="times" @click="globalForm.newParents.splice(i,1)"/></div><cds-button size="sm" action="outline" style="margin-top:8px" @click="globalForm.newParents.push({name:'ic-p',ip:''})"><cds-icon shape="plus" size="sm"/>添加父虚拟机</cds-button></template>
+              <template v-else><div v-for="(p,i) in globalForm.newParents" :key="i" style="display:flex;gap:8px;align-items:flex-end;margin-top:8px"><cds-input style="flex:1"><label>名称</label><input v-model="p.name"/></cds-input><cds-input style="flex:1"><label>静态 IP</label><input v-model="p.ip"/></cds-input><cds-button-action v-if="globalForm.newParents.length>1" shape="times" aria-label="移除" title="移除" @click="globalForm.newParents.splice(i,1)"/></div><cds-button size="sm" action="outline" style="margin-top:8px" @click="globalForm.newParents.push({name:'ic-p',ip:''})"><cds-icon shape="plus" size="sm"/>添加父虚拟机</cds-button></template>
             </div>
           </template>
         </div>
@@ -175,13 +175,13 @@ watch(() => props.open, (o) => {
             <!-- 密码 -->
             <div class="field">
               <label class="fl">密码 <span class="rq">*</span></label>
-              <div class="pw-wrap"><input :type="showPw ? 'text' : 'password'" v-model="securityForm.password" placeholder="至少 8 位" class="uline" :class="{ 'uline-err': attempted && pwErr }" @input="pwErr = ''"/><cds-button-action :shape="showPw ? 'eye-hide' : 'eye'" :title="showPw ? '隐藏' : '显示'" @click="showPw = !showPw"/></div>
+              <div class="pw-wrap"><input :type="showPw ? 'text' : 'password'" v-model="securityForm.password" placeholder="至少 8 位" class="uline" :class="{ 'uline-err': attempted && pwErr }" @input="pwErr = ''"/><cds-button-action :shape="showPw ? 'eye-hide' : 'eye'" :title="showPw ? '隐藏' : '显示'" :aria-label="showPw ? '隐藏密码' : '显示密码'" @click="showPw = !showPw"/></div>
               <p v-if="attempted && pwErr" class="er">{{ pwErr }}</p>
             </div>
             <!-- 确认密码 -->
             <div class="field">
               <label class="fl">确认密码 <span class="rq">*</span></label>
-              <div class="pw-wrap"><input :type="showCpw ? 'text' : 'password'" v-model="securityForm.confirmPassword" placeholder="再次输入" class="uline" :class="{ 'uline-err': attempted && cpwErr }" @input="cpwErr = ''"/><cds-button-action :shape="showCpw ? 'eye-hide' : 'eye'" :title="showCpw ? '隐藏' : '显示'" @click="showCpw = !showCpw"/></div>
+              <div class="pw-wrap"><input :type="showCpw ? 'text' : 'password'" v-model="securityForm.confirmPassword" placeholder="再次输入" class="uline" :class="{ 'uline-err': attempted && cpwErr }" @input="cpwErr = ''"/><cds-button-action :shape="showCpw ? 'eye-hide' : 'eye'" :title="showCpw ? '隐藏' : '显示'" :aria-label="showCpw ? '隐藏密码' : '显示密码'" @click="showCpw = !showCpw"/></div>
               <p v-if="attempted && cpwErr" class="er">{{ cpwErr }}</p>
             </div>
             <cds-input><label>SSH 公钥（可选）</label><input v-model="securityForm.sshKey" placeholder="ssh-rsa AAA..." class="uline"/></cds-input>

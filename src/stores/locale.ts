@@ -1021,7 +1021,6 @@ export const STRINGS: Dict = {
   'virtualKey.filter.all': { zh: '全部', en: 'All' },
   'virtualKey.filter.namePlaceholder': { zh: '输入令牌名称', en: 'Enter key name' },
   'virtualKey.filter.agentPlaceholder': { zh: '输入智能体 ID', en: 'Enter agent ID' },
-  'virtualKey.filter.policyPlaceholder': { zh: '输入策略名称', en: 'Enter policy name' },
   'virtualKey.filter.datePlaceholder': { zh: '选择日期', en: 'Choose a date' },
   'virtualKey.filter.status.ALL': { zh: '全部状态', en: 'All statuses' },
   'virtualKey.filter.status.ENABLED': { zh: '启用', en: 'Enabled' },
@@ -1075,11 +1074,6 @@ export const STRINGS: Dict = {
   },
   'virtualKey.form.cancel': { zh: '取消', en: 'Cancel' },
   'virtualKey.form.submit': { zh: '颁发', en: 'Issue' },
-  'virtualKey.form.organization': { zh: '所属组织', en: 'Organization' },
-  'virtualKey.form.organizationPlaceholder': {
-    zh: '例如org-xxx',
-    en: 'e.g. org-xxx',
-  },
   'virtualKey.form.gateway': { zh: '模型网关', en: 'Model Gateway' },
   'virtualKey.form.gatewayPlaceholder': {
     zh: '请选择模型网关',
@@ -1089,7 +1083,7 @@ export const STRINGS: Dict = {
     zh: '请选择模型网关',
     en: 'Please select a model gateway',
   },
-  'virtualKey.form.duration': { zh: '生效时长', en: 'Duration' },
+  'virtualKey.form.duration': { zh: '有效时长', en: 'Duration' },
   'virtualKey.form.durationPlaceholder': {
     zh: '例如 30d',
     en: 'e.g. 30d',
@@ -1117,10 +1111,6 @@ export const STRINGS: Dict = {
   'virtualKey.form.nameRequired': {
     zh: '名称长度应为 2–64 个字符',
     en: 'Name must be 2–64 characters',
-  },
-  'virtualKey.form.orgRequired': {
-    zh: '请输入组织 ID',
-    en: 'Please enter an organization ID',
   },
   'virtualKey.form.modelsRequired': {
     zh: '请至少选择一个可调用模型',
@@ -1166,7 +1156,7 @@ export const STRINGS: Dict = {
   'virtualKey.toast.regenerated': { zh: '令牌已重新生成', en: 'Key secret regenerated' },
   'virtualKey.toast.regenerateFailed': { zh: '重新生成令牌失败', en: 'Failed to regenerate key' },
   'virtualKey.status.revoked': { zh: '已吊销', en: 'Revoked' },
-  'virtualKey.form.maxBudget': { zh: '预算上限', en: 'Max Budget' },
+  'virtualKey.form.maxBudget': { zh: '最大预算（maxBudget）', en: 'Max Budget (maxBudget)' },
   'virtualKey.form.budgetControl': { zh: '预算控制', en: 'Budget Control' },
   // Master toggle that gates the four TPM/RPM fields below. Mirrors the
   // design pattern used by `budgetControl` (also a Toggle → conditions
@@ -1187,9 +1177,9 @@ export const STRINGS: Dict = {
     en: 'This gateway has no available models',
   },
   'virtualKey.form.advanced': { zh: '高级参数', en: 'Advanced' },
-  'virtualKey.form.tpmLimit': { zh: 'TPM 上限', en: 'TPM Limit' },
+  'virtualKey.form.tpmLimit': { zh: '每分钟 Tokens（tpm）', en: 'Tokens per Minute (tpm)' },
   'virtualKey.form.tpmLimitType': { zh: 'TPM 限流模式', en: 'TPM Limit Type' },
-  'virtualKey.form.rpmLimit': { zh: 'RPM 上限', en: 'RPM Limit' },
+  'virtualKey.form.rpmLimit': { zh: '每分钟 请求（rpm）', en: 'Requests per Minute (rpm)' },
   'virtualKey.form.rpmLimitType': { zh: 'RPM 限流模式', en: 'RPM Limit Type' },
   // Shared option titles + descriptions for the rate-limit-type radio
   // picker (LiteLLM design doc §4.2). Each picker (TPM / RPM) renders
@@ -1225,7 +1215,7 @@ export const STRINGS: Dict = {
       'it can dynamically exceed the limit.',
   },
   'virtualKey.form.maxParallelRequests': { zh: '最大并发请求', en: 'Max Parallel Requests' },
-  'virtualKey.form.budgetDuration': { zh: '预算周期', en: 'Budget Duration' },
+  'virtualKey.form.budgetDuration': { zh: '预算周期（budgetDuration）', en: 'Budget Duration (budgetDuration)' },
   'virtualKey.form.budgetDurationPlaceholder': { zh: '例如 1', en: 'e.g. 1' },
   'virtualKey.form.budgetDurationUnit': { zh: '单位', en: 'Unit' },
   'virtualKey.form.budgetDurationUnitSecond': { zh: '秒 (s)', en: 'Second (s)' },
@@ -1275,10 +1265,11 @@ export const STRINGS: Dict = {
   'supplier.sort': { zh: '排序：{column}', en: 'Sort {column}' },
   'supplier.filter': { zh: '过滤：{column}', en: 'Filter {column}' },
   'supplier.filter.clear': { zh: '清除过滤', en: 'Clear filter' },
-  'supplier.filter.namePlaceholder': { zh: '输入策略名称', en: 'Enter policy name' },
+  'supplier.filter.namePlaceholder': { zh: '输入模型名称', en: 'Enter model name' },
   'supplier.filter.status.ALL': { zh: '全部状态', en: 'All statuses' },
   'supplier.filter.status.ENABLED': { zh: '启用', en: 'Enabled' },
   'supplier.filter.status.DISABLED': { zh: '未启用', en: 'Disabled' },
+  'supplier.filter.gateway.ALL': { zh: '全部模型网关', en: 'All gateways' },
   'supplier.action.create': { zh: '新建模型', en: 'New Model' },
   'supplier.action.batch': { zh: '批量操作', en: 'Batch Actions' },
   'supplier.action.refresh': { zh: '刷新', en: 'Refresh' },
@@ -1332,16 +1323,6 @@ export const STRINGS: Dict = {
   'supplier.type.TOKEN': { zh: 'Token 限制', en: 'Token Limit' },
   'supplier.type.REQUEST': { zh: '请求数限制', en: 'Request Limit' },
   'supplier.type.COMBINED': { zh: '组合限制', en: 'Combined Limit' },
-  'supplier.confirm.deleteBody': {
-    zh: '确定要删除策略“{name}”吗？此操作无法撤销。',
-    en: 'Delete policy “{name}”? This action cannot be undone.',
-  },
-  'supplier.confirm.batchDeleteTitle': { zh: '确认批量删除', en: 'Delete Selected Policies' },
-  'supplier.toast.apply': {
-    zh: '正在配置“{name}”的应用范围',
-    en: 'Configuring targets for “{name}”',
-  },
-  'supplier.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
   // ProviderModel-specific (供应商模型) — reuses the supplier.* prefix but
   // everything below the model.* separator is the new form/column copy
   // introduced by the LiteLLM design doc §2.2 refactor. SupplierModelView
@@ -1464,6 +1445,27 @@ export const STRINGS: Dict = {
   'supplier.model.form.review.limits': { zh: '限流', en: 'Limits' },
   'supplier.model.form.review.cost': { zh: '单价(/token)', en: 'Cost (per token)' },
   'supplier.model.form.review.unset': { zh: '(未设置)', en: '(not set)' },
+  // API Key 在 review 步不展示明文,只展示轮换状态。创建模式:已设置新密钥;
+  // 编辑模式:用户清空则保持原值(rotate=false),否则将轮换为新值(rotate=true)。
+  'supplier.model.form.review.apiKey': { zh: 'API Key', en: 'API Key' },
+  'supplier.model.form.review.apiKeySet': {
+    zh: '已设置新密钥',
+    en: 'New key will be set',
+  },
+  'supplier.model.form.review.apiKeyKeep': {
+    zh: '保持原密钥',
+    en: 'Current key kept',
+  },
+  'supplier.model.form.review.apiKeyRotate': {
+    zh: '将轮换为新密钥',
+    en: 'New key will replace current',
+  },
+  // 模型模式在 review 步展示:不指定 / 已知值 / 自定义值。
+  'supplier.model.form.review.mode': { zh: '模型模式', en: 'Model mode' },
+  // 三个独立 toggle(限流 / 单价 已是合并行,这里只补剩下的三个):
+  // 透传模式 / 使用 chat completions 接口 / 合并 reasoning 到 choices。
+  'supplier.model.form.review.toggleOn': { zh: '开', en: 'On' },
+  'supplier.model.form.review.toggleOff': { zh: '关', en: 'Off' },
   'supplier.form.nameLockedHint': {
     zh: '编辑时名称不可更改',
     en: 'Name cannot be changed when editing',

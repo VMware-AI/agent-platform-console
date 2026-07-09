@@ -96,7 +96,6 @@ const expiresAtFilter = ref('')
 // Backed by the same inputs that drive the VIRTUAL_KEYS_QUERY vars: when they
 // change, the query re-fires with the new value. We keep per-column client
 // filters for status / dates / name on top.
-const orgFilter = ref('')
 const gatewayFilter = ref('')
 const filterMenuAnchor = ref<HTMLElement | null>(null)
 const filterMenuKey = ref<KeyColumn | null>(null)
@@ -109,10 +108,9 @@ const {
   result: keysData,
   loading,
   refetch: refetchKeys,
-} = useQuery<VirtualKeysResult, { organizationId: string | null; agentId: string | null; modelGateway: string | null }>(
+} = useQuery<VirtualKeysResult, { agentId: string | null; modelGateway: string | null }>(
   VIRTUAL_KEYS_QUERY,
   () => ({
-    organizationId: orgFilter.value.trim() || null,
     agentId: agentFilter.value.trim() || null,
     modelGateway: gatewayFilter.value || null,
   }),
@@ -142,7 +140,18 @@ const agentOptions = computed<VirtualKeyOption[]>(() =>
   (agentsData.value?.agents?.nodes ?? []).map((agent) => ({ id: agent.id, name: agent.name })),
 )
 const formAvailableModels = computed<string[]>(
-  () => formAvailableModelsData.value?.gatewayAvailableModels ?? [],
+  () =>
+    // Gate on formGateway being non-empty. Without this guard,
+    // Apollo's cache for the last-fetched gateway keeps the previous
+    // result in `formAvailableModelsData.value` even after closeForm()
+    // clears formGateway — so reopening with an empty gateway would
+    // still render the previous gateway's model pills in the picker.
+    // With this guard, an empty gateway forces an empty picker list,
+    // which the modal's empty state already handles (shows the
+    // 「先选择网关」 hint).
+    formGateway.value
+      ? (formAvailableModelsData.value?.gatewayAvailableModels ?? [])
+      : [],
 )
 const agentNameById = computed(() => {
   const map = new Map<string, string>()
@@ -372,6 +381,15 @@ function openCreate() {
 function closeForm() {
   if (saving.value) return
   formOpen.value = false
+  // Clear formGateway so reopen doesn't restore the previously-picked
+  // gateway. bb84882 made formGateway a persistent ref (so the model
+  // list survives a reopen), but never paired that persistence with
+  // a clear-on-close — so cancel / submit-success both left the next
+  // open pre-filled with the old gateway + its (possibly stale) model
+  // list. Reset to '' so reset() in the modal falls back to its empty
+  // placeholder (initialModelGateway is read inside reset() and already
+  // handles '' by leaving modelGateway blank).
+  formGateway.value = ''
 }
 
 function revealSecret(secret: string) {
@@ -390,7 +408,6 @@ function onFormGatewayChanged(gatewayId: string) {
 
 async function submitKey(draft: {
   name: string
-  organizationId: string
   modelGateway: string
   duration?: string
   models?: string[]
@@ -402,7 +419,7 @@ async function submitKey(draft: {
   rpmLimitType?: string
   tpmLimitType?: string
   allowedRoutes?: string[]
-  tags?: string[]
+  metadata?: Record<string, any>
   autoRotate?: boolean
   rotationInterval?: string
 }) {
@@ -413,9 +430,14 @@ async function submitKey(draft: {
       mutation: ISSUE_VIRTUAL_KEY,
       variables: {
         input: {
-          organizationId: draft.organizationId.trim(),
           name: draft.name.trim(),
           modelGateway: draft.modelGateway,
+          // TODO(auth): backend currently requires `userId` on
+          // IssueVirtualKeyInput; hardcoded to 'admin' until auth.user.id
+          // is wired through. Replace with `useAuthStore().user?.id` once
+          // the auth store exposes a stable id (currently exposes email
+          // only on the login mutation result).
+          userId: 'admin',
           duration: draft.duration?.trim() || null,
           models: draft.models?.length ? draft.models : null,
           maxBudget: draft.maxBudget ?? null,
@@ -426,7 +448,12 @@ async function submitKey(draft: {
           rpmLimitType: draft.rpmLimitType?.trim() || null,
           tpmLimitType: draft.tpmLimitType?.trim() || null,
           allowedRoutes: draft.allowedRoutes,
-          tags: draft.tags?.length ? draft.tags : null,
+          // IssueVirtualKeyInput now ships tags under `metadata.tags`.
+          // The form modal OMITS `metadata` entirely when the input is
+          // empty, so we pass through `?? null` rather than coercing an
+          // empty object — matches the omit-when-unset style of the
+          // other optional fields above.
+          metadata: draft.metadata ?? null,
           // `keyType` is a fixed default — there is no UI control to
           // vary it; the form draft intentionally doesn't carry it.
           keyType: 'default',

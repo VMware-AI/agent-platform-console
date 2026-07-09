@@ -47,14 +47,14 @@ const RATE_LIMIT_TYPES: RateLimitType[] = [
 ]
 
 // VirtualKeyFormDraft — the create flow's wire payload. The postman
-// `IssueVirtualKey` mutation requires `organizationId`, `name`, and
-// `modelGateway`; everything else is optional. Models are sourced from
-// `gatewayAvailableModels(gatewayConnectionId)` (the parent re-queries
-// when the gateway picker changes) — there is no longer any M2 网关路由
-// involved at this layer.
+// `IssueVirtualKey` mutation now requires only `name` and
+// `modelGateway` (the org scope is resolved server-side from the
+// caller's session); everything else is optional. Models are sourced
+// from `gatewayAvailableModels(gatewayConnectionId)` (the parent
+// re-queries when the gateway picker changes) — there is no longer
+// any M2 网关路由 involved at this layer.
 export interface VirtualKeyFormDraft {
   name: string
-  organizationId: string
   modelGateway: string
   duration?: string
   models?: string[]
@@ -69,7 +69,11 @@ export interface VirtualKeyFormDraft {
   // - ON  → allowedRoutes OMITTED in the wire payload
   // - OFF → allowedRoutes = ['/v1/chat/completions', ...]
   allowedRoutes?: string[]
-  tags?: string[]
+  // The wire payload now ships tags under `metadata.tags` (per the
+  // IssueVirtualKeyInput contract change); the form's free-text input
+  // still parses the same comma/newline-separated list, we just place
+  // it inside the metadata bucket at submit time.
+  metadata?: Record<string, any>
   // keyType is intentionally absent — the postman `IssueVirtualKey`
   // mutation always receives a fixed `default` value (see VirtualKeyView
   // submitKey), so there is no UI-driven variation to carry in the draft.
@@ -105,7 +109,6 @@ const locale = useLocaleStore()
 
 // Basic
 const name = ref('')
-const organizationId = ref('')
 const modelGateway = ref('')
 const selectedModels = ref<string[]>([])
 // Duration is split into a numeric value and a unit so the user can
@@ -194,7 +197,6 @@ const nameValid = computed(() => {
   const length = name.value.trim().length
   return length >= 2 && length <= 64
 })
-const orgValid = computed(() => organizationId.value.trim().length > 0)
 const gatewayValid = computed(() =>
   props.gateways.some((gateway) => gateway.id === modelGateway.value),
 )
@@ -205,7 +207,6 @@ const allowedRoutesValid = computed(
 const formValid = computed(
   () =>
     nameValid.value &&
-    orgValid.value &&
     gatewayValid.value &&
     modelsValid.value &&
     allowedRoutesValid.value,
@@ -213,7 +214,6 @@ const formValid = computed(
 
 function reset() {
   name.value = ''
-  organizationId.value = ''
   // Restore the parent's last-selected gateway on reopen, so the
   // previously-loaded model list reappears without re-picking. Only
   // restore if the gateway id still exists in the current gateway list
@@ -229,7 +229,14 @@ function reset() {
   durationUnit.value = 'd'
   budgetControl.value = false
   maxBudget.value = null
-  budgetDurationValue.value = null
+  // Budget duration's default unit is 'mo' (自然月) — and the resolver
+  // (LiteLLM) treats the value as "calendar months" which is meaningless
+  // as a fractional count, so we pin the value to 1 whenever the unit
+  // is 'mo' (see the watch on budgetDurationUnit below for the same
+  // rule applied on user-driven unit changes). Initialise the value
+  // here so the disabled input shows "1" on first open rather than
+  // an empty box.
+  budgetDurationValue.value = budgetDurationUnit.value === 'mo' ? 1 : null
   budgetDurationUnit.value = 'mo'
   rateLimitControl.value = false
   maxParallelRequests.value = null
@@ -252,13 +259,44 @@ function reset() {
   if (restored) emit('gateway-changed', restored)
 }
 
+// Reset the form fields only on the false→true edge of `open` (i.e. the
+// moment the modal opens). Earlier this watcher also listed
+// `props.gateways` and `props.initialModelGateway` as deps and called
+// reset() on any change while open — that wiped the user's
+// 「密钥名称」/「所属组织」 as soon as they picked a gateway, because
+// picking a gateway emitted `gateway-changed`, the parent updated
+// `formGateway`, and the new `initialModelGateway` value triggered
+// reset() with `open` still true. Edge-only reset is the right shape:
+// the `gateways` list and `initialModelGateway` are read inside reset()
+// already (to restore the previously-selected gateway), so the
+// dependency is fine — the only requirement is that reset() must NOT
+// fire when the user changes a dep while the modal is already open.
 watch(
-  () => [props.open, props.gateways, props.initialModelGateway] as const,
-  ([open]) => {
-    if (open) reset()
+  () => props.open,
+  (open, prev) => {
+    if (open && !prev) reset()
   },
   { immediate: true },
 )
+
+// When the user picks 'mo' as the budget-duration unit, the resolver
+// (LiteLLM) treats the value as a count of calendar months, so any
+// fractional value would round to a whole number anyway. To keep the
+// UI consistent with that constraint — and to prevent the user from
+// typing a meaningless value like 0.5mo or 13mo (which the resolver
+// does accept but reads as "1 month" or "12 months" respectively) —
+// we force the value to 1 and disable the numeric input while the
+// unit is 'mo'. The watch fires on the unit <select>'s @change; it
+// does NOT fire when the user types into the (disabled) input, since
+// the input is disabled while the unit is 'mo'. When the user
+// switches AWAY from 'mo' (e.g. to 'd'), we leave the value alone
+// rather than clearing it — the user may have explicitly set a
+// number while it was editable (e.g. typed 30 when the unit was 'd'
+// before switching to 'mo' and back) and we shouldn't silently wipe
+// their input.
+watch(budgetDurationUnit, (unit) => {
+  if (unit === 'mo') budgetDurationValue.value = 1
+})
 
 function close() {
   if (!props.saving) emit('close')
@@ -382,7 +420,7 @@ onBeforeUnmount(() => {
 function submit() {
   attempted.value = true
   if (!formValid.value || props.saving) return
-  const tags = tagsText.value
+  const tagsArray = tagsText.value
     .split(/[,\n，]/)
     .map((s) => s.trim())
     .filter(Boolean)
@@ -396,7 +434,6 @@ function submit() {
 
   const draft: VirtualKeyFormDraft = {
     name: name.value.trim(),
-    organizationId: organizationId.value.trim(),
     modelGateway: modelGateway.value,
     duration:
       durationValue.value != null && durationValue.value > 0
@@ -428,7 +465,11 @@ function submit() {
         ? tpmLimitType.value
         : undefined,
     allowedRoutes,
-    tags: tags.length > 0 ? tags : undefined,
+    // IssueVirtualKeyInput now carries tags under `metadata.tags`; when
+    // the input is empty we OMIT the field entirely so the resolver sees
+    // nil and the gateway keeps its default (no tags) rather than
+    // receiving an empty bucket.
+    metadata: tagsArray.length > 0 ? { tags: tagsArray } : undefined,
     autoRotate: autoRotate.value,
     rotationInterval:
       autoRotate.value &&
@@ -468,24 +509,6 @@ function submit() {
           />
           <cds-control-message v-if="attempted && !nameValid" status="error">
             {{ locale.t('virtualKey.form.nameRequired') }}
-          </cds-control-message>
-        </cds-input>
-
-        <cds-input :status="attempted && !orgValid ? 'error' : 'neutral'">
-          <label>
-            {{ locale.t('virtualKey.form.organization') }}
-            <sup class="required-mark" aria-hidden="true">
-              {{ locale.t('virtualKey.form.requiredMark') }}
-            </sup>
-          </label>
-          <input
-            :value="organizationId"
-            autocomplete="off"
-            :placeholder="locale.t('virtualKey.form.organizationPlaceholder')"
-            @input="organizationId = ($event.target as HTMLInputElement).value"
-          />
-          <cds-control-message v-if="attempted && !orgValid" status="error">
-            {{ locale.t('virtualKey.form.orgRequired') }}
           </cds-control-message>
         </cds-input>
 
@@ -621,8 +644,8 @@ function submit() {
           </cds-control-message>
         </div>
 
-        <!-- Auto-rotate lives BELOW 生效时长, ABOVE 高级参数 — sits in the
-             "always-visible" zone with 生效时长 because rotating the key
+        <!-- Auto-rotate lives BELOW 有效时长, ABOVE 高级参数 — sits in the
+             "always-visible" zone with 有效时长 because rotating the key
              is a basic key-issuance concern, not a 风控抽屉 knob. The
              (conditional) rotation interval stacks under the toggle so
              both pieces read as one logical group. -->
@@ -638,7 +661,7 @@ function submit() {
               />
             </cds-toggle>
           </cds-control>
-          <!-- Mirrors 生效时长's number + unit-select layout. Native label
+          <!-- Mirrors 有效时长's number + unit-select layout. Native label
                + input + select (cds-input's shadow DOM only projects a
                single form control, so a sibling <select> wouldn't render
                inside it). Reuses the .duration-* styles so the two
@@ -868,7 +891,7 @@ function submit() {
               </cds-toggle>
             </cds-control>
             <div v-if="budgetControl" class="budget-control-row">
-              <!-- Mirrors 生效时长's number + unit-select layout. Native
+              <!-- Mirrors 有效时长's number + unit-select layout. Native
                    label + input + select (cds-input's shadow DOM only
                    projects a single form control, so a sibling <select>
                    wouldn't render inside it). Reuses the .duration-*
@@ -889,7 +912,7 @@ function submit() {
                   />
                 </div>
               </div>
-              <!-- Mirrors 生效时长's number + unit-select layout. Native
+              <!-- Mirrors 有效时长's number + unit-select layout. Native
                    label + input + select (cds-input's shadow DOM only
                    projects a single form control, so a sibling <select>
                    wouldn't render inside it). Reuses the .duration-*
@@ -906,6 +929,7 @@ function submit() {
                     min="0"
                     step="1"
                     :value="budgetDurationValue ?? ''"
+                    :disabled="budgetDurationUnit === 'mo'"
                     @input="
                       budgetDurationValue =
                         ($event.target as HTMLInputElement).value === ''
@@ -1283,7 +1307,12 @@ function submit() {
   width: 100%;
   min-width: 750px;
   box-sizing: border-box;
-  background: var(--cds-alias-object-app-background, #f4f4f4);
+  /* 浅蓝灰 hsl(198, 15%, 93%) 作为 chip 选择区背景 —— hue 198°
+     偏冷,saturation 15% 极低,lightness 93% 接近白底,与
+     light theme 整体节奏兼容,与高级参数 section 内 #f4f4f4
+     的背景微妙区分但不刺眼,让「选择多个 model 的容器」与
+     普通 cds-input 区在视觉上分开。 */
+  background: hsl(198, 15%, 93%);
   border-radius: 4px;
 }
 .model-option {
@@ -1321,12 +1350,21 @@ function submit() {
 /* Selected state — matches the "soft-tint pill" used elsewhere in the
    app (see SupplierModelView's status-filter chip): a low-saturation
    blue-50 fill with a muted info-blue border + text. Avoids the bright
-   Carbon primary which reads as too loud against the neutral chrome. */
+   Carbon primary which reads as too loud against the neutral chrome.
+
+   选中态加深:把填充 alpha 从 0.08 → 0.18 让 chip 背景蓝更明显、
+   边框从 1px → 2px 加重视觉边界,使选中 model 在 chip 列表中
+   一眼可辨。字色保持 #0079ad 不变(font-weight 500 不变),不会
+   与未选中 chip 的中性灰文字形成突兀色差。 */
 .model-option:has(.model-option-input:checked) .model-option-pill {
-  background: var(--cds-alias-object-app-blue-50, rgba(0, 114, 163, 0.08));
-  border-color: var(--cds-alias-status-info, #0079ad);
+  background: hsl(198, 100%, 95%);
+  border: 2px solid var(--cds-alias-status-info, #0079ad);
   color: var(--cds-alias-status-info, #0079ad);
   font-weight: 500;
+  /* 2px 边框比未选中 pill 多 2px,把上下 padding 各减小 1px,
+     让 chip 高度与未选中 chip 一致(避免选中后 chip 高度变化
+     跳动)。 */
+  padding: 5px 11px;
 }
 /* Hover / focus — only meaningful when the pill is unselected; the
    tinted state already reads as "on". */
@@ -1491,26 +1529,60 @@ cds-control-message.duration-hint {
   min-width: 0;
   font: inherit;
   font-size: 14px;
-  height: 32px;
+  /* `box-sizing: border-box !important` 是 load-bearing:
+     Chrome 给 <input> 套了 user-agent shadow root,
+     user-agent origin 把 box-sizing 强制设成 content-box 且带
+     !important,优先级高于 author 普通规则。
+     .duration-value 直接挂在 light DOM (不在任何 web component
+     shadow 里),所以 user-agent 规则会作用,普通的
+     `box-sizing: border-box` 没法 override。
+     !important 让 author 优先级升到 user-agent !important 之上,
+     `height: 24px` 锁住渲染高度(与 cds-input 24px 对齐)、
+     不再因 padding+border 把 .duration-field grid 行撑高到 41px。
+     cds-input 内部 input 不受影响,因为 Carbon web component
+     shadow 里有 author-origin override。 */
+  box-sizing: border-box !important;
+  height: 24px;
   padding: 4px 8px;
   border: 0;
-  border-bottom: 1px solid var(--cds-alias-object-border-color, #cbd4d8);
+  /* 下边框深色 (#21333b) 与对话框底部的横线视觉一致 —— 强调
+     "高级参数"section 内的次级控件边界,但不抢主输入的视觉重量。
+     focus 态仍是 Carbon 蓝色 (var(--cds-focus)),保留键盘可访问性。 */
+  border-bottom: 1px solid #21333b;
   border-radius: 0;
   background: transparent;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
   outline: none;
 }
 .duration-value:focus {
-  border-bottom: 1px solid var(--cds-focus, #0f62fe);
+  /* focus 态用 1px #0079ad 色带覆盖原 1px #21333b 下边框,
+     background-size: 100% 1px 让色带刚好占满 input 整宽 1px,
+     视觉上是一条 #0079ad 横线(替代 border-bottom 颜色)。
+     background-position: bottom 把色带贴底;用 background-image
+     而不是直接改 border-bottom 颜色是为了避免与其他可能叠加
+     在该位置的高亮(例如后续再加 hover/helper 提示)冲突。 */
+  border-bottom: 1px solid #21333b;
+  background-image: linear-gradient(#0079ad, #0079ad);
+  background-size: 100% 1px;
+  background-repeat: no-repeat;
+  background-position: bottom;
 }
 .duration-unit {
   font: inherit;
   font-size: 14px;
-  min-height: 32px;
+  /* 与 .duration-value 同理:Chrome 给 <select> 也套了 user-agent
+     shadow root,user-agent origin 把 box-sizing 强制设成
+     content-box !important,普通 `box-sizing: border-box` 没法
+     override。!important 让 `min-height: 24px` 锁住 24px 实际
+     渲染高度(与 cds-input 24px 一致),避免 grid 行被撑高。 */
+  box-sizing: border-box !important;
+  min-height: 24px;
   min-width: 72px;
   padding: 4px 24px 4px 8px;
   border: 0;
-  border-bottom: 1px solid var(--cds-alias-object-border-color, #cbd4d8);
+  /* 与 .duration-value 同色 (#21333b),统一"高级参数"section 内
+     这六个字段的下边框视觉;focus 态仍是 Carbon 蓝色。 */
+  border-bottom: 1px solid #21333b;
   border-radius: 0;
   background: transparent;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
@@ -1526,7 +1598,17 @@ cds-control-message.duration-hint {
   background-repeat: no-repeat;
 }
 .duration-unit:focus {
-  border-bottom: 1px solid var(--cds-focus, #0f62fe);
+  /* 与 .duration-value:focus 同视觉 —— 1px #0079ad 色带覆盖
+     1px #21333b 下边框。需要重新声明下拉箭头 caret (linear-gradient
+     三角形),否则 :focus 内 background-image 会覆盖普通态的
+     箭头;CSS background-image 后写覆盖前写。 */
+  border-bottom: 1px solid #21333b;
+  background-image: linear-gradient(#0079ad, #0079ad),
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-size: 100% 1px, 5px 5px, 5px 5px;
+  background-position: bottom, calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-repeat: no-repeat;
 }
 /* Full-width variant — used when a row has no value <input> next to the
    <select> (e.g. the rate-limit-type pickers: label + select only).
@@ -1576,10 +1658,11 @@ cds-control-message.duration-hint {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  /* Slightly smaller than .duration-unit's 14px (which targets the
-     time-unit picker) so the popover trigger reads as a
-     configuration knob rather than a primary numeric input. */
-  font-size: 13px;
+  /* 字体大小沿用父级 .duration-unit 的 14px(继承),与 cds-input
+     输入文字(14px)节奏一致。之前显式设 13px 是为了让触发器
+     "读起来像配置旋钮而不是主输入",但在和「每分钟 Tokens (tpm)」
+     14px 输入左右对照后,这种小差异反而显得不整齐,去掉 override
+     让两者节奏统一。 */
 }
 .rate-limit-popover-caret {
   flex: 0 0 auto;
@@ -1719,11 +1802,17 @@ cds-control-message.duration-hint {
 }
 .budget-control-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.2rem;
-  /* Stretch both columns to the same row height — without this, the
+  /* 单列:每个字段各占一行。原本是两列(1fr 1fr)让 maxBudget 与
+     budgetDuration 并排,但在中文标签下两列挤在同一行视觉负担较重,
+     改为各占一行更易读。align-items: stretch 仍是 grid 默认,
+     写出来明确意图。gap 8px 与 .rate-limit-control-list /
+     .advanced-section padding 一致,保持高级参数 section 内的
+     视觉节奏统一(单位字段不会再用 1.2rem 这种 grid 列间距)。 */
+  grid-template-columns: 1fr;
+  gap: 8px;
+  /* Stretch both rows to the same column width — without this, the
      native input + select row (shorter) and the no-unit row (shorter)
-     would render at their intrinsic heights and end up visually
+     would render at their intrinsic widths and end up visually
      misaligned with each other. align-items: stretch is the grid
      default; spelled out here to keep the intent clear. */
   align-items: stretch;
@@ -1769,7 +1858,7 @@ cds-control-message.duration-hint {
 }
 /* Rate-limit type picker — label + trigger laid out side-by-side on a
    single grid row (auto / minmax(0, 1fr)), matching the .duration-row
-   rhythm used by 生效时长 / 预算周期. The minmax(0, 1fr) on the
+   rhythm used by 有效时长 / 预算周期. The minmax(0, 1fr) on the
    trigger column is what keeps the popover's underline from
    overflowing the form's right padding: a plain 1fr would let the
    trigger inherit the form's full content width and extend past the
@@ -1790,7 +1879,7 @@ cds-control-message.duration-hint {
    constraint, so the column shrinks to whatever space remains. The
    label keeps its 12px muted style (set on .rate-limit-type-label
    below) so the rate-limit fields read as configuration knobs rather
-   than primary input like the basic 生效时长 label (13px / 600). */
+   than primary input like the basic 有效时长 label (13px / 600). */
 .rate-limit-type-field {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -1829,9 +1918,15 @@ cds-control-message.duration-hint {
   width: 100%;
 }
 .rate-limit-type-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--cds-alias-typography-color-300, #565656);
+  /* 与 cds-input label 同节奏 —— 13px / 600 / 默认前景色 #1b1b1b,
+     让「TPM 限流模式」「RPM 限流模式」label 在视觉上与
+     「每分钟 Tokens (tpm)」「每分钟 请求 (rpm)」cds-input label
+     完全一致。原来是 12px / 500 / muted #565656,把这两个 label
+     读成"次要配置说明",但同一 grid 里左右对照,读者会期望两者
+     节奏一致,改为同 cds-input label 节奏后视觉更整齐。 */
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
   cursor: pointer;
 }
 /* allowed_routes group — previously wrapped in a bordered

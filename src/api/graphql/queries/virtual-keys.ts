@@ -17,7 +17,6 @@ const VIRTUAL_KEY_FIELDS = gql`
     id
     name
     maskedKey
-    organizationId
     status
     duration
     expiresAt
@@ -48,8 +47,8 @@ const VIRTUAL_KEY_FIELDS = gql`
 `
 
 export const VIRTUAL_KEYS_QUERY = gql`
-  query VirtualKeys($organizationId: ID, $agentId: ID, $modelGateway: ID) {
-    virtualKeys(organizationId: $organizationId, agentId: $agentId, modelGateway: $modelGateway) {
+  query VirtualKeys($agentId: ID, $modelGateway: ID) {
+    virtualKeys(agentId: $agentId, modelGateway: $modelGateway) {
       ...VirtualKeyFields
     }
   }
@@ -134,7 +133,6 @@ export interface VirtualKeyNode {
   id: string
   name: string
   maskedKey: string | null
-  organizationId: string | null
   status: VirtualKeyStatus
   duration: string | null
   expiresAt: string | null
@@ -161,7 +159,6 @@ export interface VirtualKeyNode {
 }
 
 export interface VirtualKeysVars {
-  organizationId?: string | null
   agentId?: string | null
   modelGateway?: string | null
 }
@@ -171,10 +168,15 @@ export interface VirtualKeysResult {
 }
 
 export interface IssueVirtualKeyInputVars {
-  organizationId: string
   name: string
   modelGateway: string
   agentId?: string | null
+  // Backend added `userId` to IssueVirtualKeyInput (caller-supplied
+  // owner/creator id, default 'admin' on the dev console for now).
+  // Frontend hardcodes 'admin' here per current product scope; once
+  // auth.user.id is wired up to a real session, this should read from
+  // the auth store instead of being a literal.
+  userId?: string | null
   duration?: string | null
   expiresAt?: string | null
   models?: string[] | null
@@ -190,7 +192,12 @@ export interface IssueVirtualKeyInputVars {
   // applies its default (no restriction). When the switch is OFF, the
   // form sends the explicit list of /v1/* paths.
   allowedRoutes?: string[] | null
-  tags?: string[] | null
+  // Per the IssueVirtualKeyInput contract change, `tags` is no longer a
+  // top-level field — it now travels under `metadata.tags` (a JSON value)
+  // to align with the deploy-side metadata bucket. The read-side
+  // `VirtualKey.tags` (and the DB column behind it) is unchanged, so list
+  // views still surface tags at the top level.
+  metadata?: Record<string, any> | null
   keyType?: string | null
   autoRotate?: boolean | null
   rotationInterval?: string | null
