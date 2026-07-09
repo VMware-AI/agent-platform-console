@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, Teleport, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
 import type { VirtualKeyOption } from '@/types/virtual-key'
 import {
   ROUTE_PERMISSIONS,
   ROUTE_PERMISSION_PATHS,
   type RoutePermission,
+  type VirtualKeyMetadata,
 } from '@/api/graphql/queries/virtual-keys'
 import type { CloneVirtualKeyInput } from '@/utils/virtualKey'
 
@@ -74,7 +75,7 @@ export interface VirtualKeyFormDraft {
   // IssueVirtualKeyInput contract change); the form's free-text input
   // still parses the same comma/newline-separated list, we just place
   // it inside the metadata bucket at submit time.
-  metadata?: Record<string, any>
+  metadata?: VirtualKeyMetadata
   // keyType is intentionally absent — the postman `IssueVirtualKey`
   // mutation always receives a fixed `default` value (see VirtualKeyView
   // submitKey), so there is no UI-driven variation to carry in the draft.
@@ -380,8 +381,8 @@ function reset() {
     // tags ride under `metadata.tags` on the wire. The form's free-text
     // input is comma/newline-separated; serialise back the same way the
     // submit() path parses it (so the visible value round-trips).
-    if (d.metadata && Array.isArray(d.metadata.tags)) {
-      tagsText.value = (d.metadata.tags as unknown[])
+    if (d.metadata) {
+      tagsText.value = d.metadata.tags
         .map((t) => String(t).trim())
         .filter(Boolean)
         .join(', ')

@@ -57,6 +57,9 @@ type StatusFilter = 'ALL' | ProviderModelStatus
 // from the wire-level sort enum (`'STATUS'`, `'GATEWAY'`). All sort-state
 // functions below operate on column keys and translate to/from the wire
 // field via this map, so the page template never sees the wire enum.
+// Note: GATEWAY is column-only — it has a filter button but no sort
+// button, so `toggleSort('GATEWAY')` is never invoked. We still keep the
+// mapping here so the column-key/wire-field lookup stays uniform.
 type SortColumnKey = 'NAME' | 'HEALTH' | 'GATEWAY'
 const COLUMN_TO_SORT_FIELD: Record<SortColumnKey, ProviderModelSortField> = {
   NAME: 'NAME',
@@ -571,14 +574,6 @@ async function confirmDelete() {
             <span>{{ locale.t('supplier.col.gateway') }}</span>
             <span class="column-head-actions">
               <cds-button-action
-                :aria-label="locale.t('supplier.sort').replace('{column}', locale.t('supplier.col.gateway'))"
-                @click="toggleSort('GATEWAY')"
-              >
-                <cds-icon v-if="sortStateFor('GATEWAY') === 'ascending'" shape="angle" direction="up" size="sm"></cds-icon>
-                <cds-icon v-else-if="sortStateFor('GATEWAY') === 'descending'" shape="angle" direction="down" size="sm"></cds-icon>
-                <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-              </cds-button-action>
-              <cds-button-action
                 shape="filter"
                 :expanded="hasFilter('GATEWAY')"
                 :aria-label="locale.t('supplier.filter').replace('{column}', locale.t('supplier.col.gateway'))"
@@ -592,14 +587,6 @@ async function confirmDelete() {
           <div class="column-head">
             <span>{{ locale.t('supplier.col.status') }}</span>
             <span class="column-head-actions">
-              <cds-button-action
-                :aria-label="locale.t('supplier.sort').replace('{column}', locale.t('supplier.col.status'))"
-                @click="toggleSort('HEALTH')"
-              >
-                <cds-icon v-if="sortStateFor('HEALTH') === 'ascending'" shape="angle" direction="up" size="sm"></cds-icon>
-                <cds-icon v-else-if="sortStateFor('HEALTH') === 'descending'" shape="angle" direction="down" size="sm"></cds-icon>
-                <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-              </cds-button-action>
               <cds-button-action
                 shape="filter"
                 :expanded="hasFilter('HEALTH')"

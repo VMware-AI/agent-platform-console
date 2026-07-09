@@ -34,10 +34,10 @@ import {
   type GatewayAvailableModelsVars,
   type PurgeRevokedVirtualKeysResult,
   type PurgeRevokedVirtualKeysVars,
+  type VirtualKeyMetadata,
 } from '@/api/graphql/queries/virtual-keys'
 import { virtualKeyToIssueInput, type CloneVirtualKeyInput } from '@/utils/virtualKey'
 import { MODEL_GATEWAYS_QUERY } from '@/api/graphql/queries/model-gateways'
-import { AGENTS_QUERY } from '@/api/graphql/queries/agents'
 import '@/components/icons'
 
 const locale = useLocaleStore()
@@ -106,17 +106,13 @@ const COLUMNS: Array<{ key: KeyColumn; label: string; width: string }> = [
   { key: 'TIME_INFO', label: 'virtualKey.col.timeInfo', width: '12%' },
 ]
 
-// Selector data sources. Agents/gateways are paged on the backend; pull a
-// large page so the issue form's dropdowns hold the full set.
-const SELECTOR_PAGE = { page: 1, pageSize: 1000 }
+// Selector data sources. Gateways are paged on the backend; pull a
+// large page so the issue form's dropdowns hold the full set. The
+// query below uses an inline page shape (`{ limit, offset }`) rather
+// than a shared constant because each consumer (gateways vs agents
+// vs whatever comes next) tends to require slightly different field
+// names, and inlining keeps the constant site readable.
 
-interface AgentNode {
-  id: string
-  name: string
-}
-interface AgentsQueryResult {
-  agents: { nodes: AgentNode[] }
-}
 interface ModelGatewayFieldsLite {
   id: string
   name: string
@@ -262,9 +258,6 @@ const { result: gatewaysData } = useQuery<ModelGatewaysResult>(MODEL_GATEWAYS_QU
   page: { limit: 1000, offset: 0 },
   sort: null,
 })
-const { result: agentsData } = useQuery<AgentsQueryResult>(AGENTS_QUERY, {
-  pagination: SELECTOR_PAGE,
-})
 const { result: formAvailableModelsData, loading: formAvailableModelsLoading } = useQuery<
   GatewayAvailableModelsResult,
   GatewayAvailableModelsVars
@@ -278,9 +271,9 @@ const gatewayOptions = computed<VirtualKeyOption[]>(() =>
     name: gateway.name,
   })),
 )
-const agentOptions = computed<VirtualKeyOption[]>(() =>
-  (agentsData.value?.agents?.nodes ?? []).map((agent) => ({ id: agent.id, name: agent.name })),
-)
+// `agentOptions` (agentsData → AgentNode shape) was removed as part of
+// the lint cleanup — the form modal queries AGENTS_QUERY itself and
+// filters inline. The previous computed here was never read.
 const formAvailableModels = computed<string[]>(
   () =>
     // Gate on formGateway being non-empty. Without this guard,
@@ -295,205 +288,9 @@ const formAvailableModels = computed<string[]>(
       ? (formAvailableModelsData.value?.gatewayAvailableModels ?? [])
       : [],
 )
-// TEMP mock fixture — short-circuits the GraphQL result so the
-// progress-bar styling can be visually verified across every colour
-// band (green / amber / red) without a backend wired up. Ratios
-// chosen to exercise each threshold:
-//   0%   → green (just-started key)
-//   35%  → green (mid-band, healthy)
-//   72%  → amber (just past the 70% warning threshold)
-//   87%  → amber (deep in warning band)
-//   96%  → red   (over the 95% danger threshold)
-//   100% → red   (clamped, maxes out the bar)
-//   no-budget → "—" centered label + no fill (edge case)
-//
-// Revert this block (delete `mockKeys` + the override below) once the
-// progress styling is signed off.
-const mockKeys: VirtualKeyNode[] = [
-  {
-    id: 'mock-0',
-    name: 'mock-progress-0pct',
-    maskedKey: 'sk-…aBc0',
-    status: 'active',
-    modelGateway: { id: 'gw-openai', name: 'OpenAI Gateway' },
-    agent: null,
-    models: ['gpt-4o-mini'],
-    expiresAt: null,
-    createdAt: '2026-07-01T08:00:00Z',
-    updatedAt: '2026-07-09T08:00:00Z',
-    lastActiveAt: '2026-07-10T03:24:00Z',
-    spend: 0,
-    maxBudget: 1000,
-    budgetDuration: '30d',
-    maxParallelRequests: null,
-    rpmLimit: null,
-    tpmLimit: null,
-    rpmLimitType: null,
-    tpmLimitType: null,
-    keyType: 'default',
-    autoRotate: false,
-    rotationInterval: null,
-    allowedRoutes: null,
-    tags: null,
-  },
-  {
-    id: 'mock-35',
-    name: 'mock-progress-35pct',
-    maskedKey: 'sk-…dEf1',
-    status: 'active',
-    modelGateway: { id: 'gw-azure', name: 'Azure Gateway' },
-    agent: { id: 'agent-1', name: 'support-bot' },
-    models: ['gpt-4o-mini', 'text-embedding-3-small'],
-    expiresAt: '2026-12-31T23:59:59Z',
-    createdAt: '2026-06-15T08:00:00Z',
-    updatedAt: '2026-07-08T08:00:00Z',
-    lastActiveAt: '2026-07-10T01:12:00Z',
-    spend: 350,
-    maxBudget: 1000,
-    budgetDuration: '7d',
-    maxParallelRequests: 10,
-    rpmLimit: 60,
-    tpmLimit: 10000,
-    rpmLimitType: null,
-    tpmLimitType: null,
-    keyType: 'default',
-    autoRotate: false,
-    rotationInterval: null,
-    allowedRoutes: null,
-    tags: null,
-  },
-  {
-    id: 'mock-72',
-    name: 'mock-progress-72pct',
-    maskedKey: 'sk-…gHi2',
-    status: 'active',
-    modelGateway: { id: 'gw-anthropic', name: 'Anthropic Gateway' },
-    agent: { id: 'agent-2', name: 'summarizer' },
-    models: ['claude-3-5-sonnet-20240620', 'text-embedding-3-large'],
-    expiresAt: null,
-    createdAt: '2026-05-20T08:00:00Z',
-    updatedAt: '2026-07-05T08:00:00Z',
-    lastActiveAt: '2026-07-10T02:33:00Z',
-    spend: 720,
-    maxBudget: 1000,
-    budgetDuration: '30d',
-    maxParallelRequests: 20,
-    rpmLimit: 120,
-    tpmLimit: 50000,
-    rpmLimitType: null,
-    tpmLimitType: null,
-    keyType: 'default',
-    autoRotate: true,
-    rotationInterval: '7d',
-    allowedRoutes: null,
-    tags: null,
-  },
-  {
-    id: 'mock-87',
-    name: 'mock-progress-87pct',
-    maskedKey: 'sk-…jKl3',
-    status: 'active',
-    modelGateway: { id: 'gw-vertex', name: 'Vertex Gateway' },
-    agent: { id: 'agent-3', name: 'router' },
-    models: ['gemini-1.5-pro', 'gemini-1.5-flash'],
-    expiresAt: '2026-09-30T23:59:59Z',
-    createdAt: '2026-04-10T08:00:00Z',
-    updatedAt: '2026-07-09T08:00:00Z',
-    lastActiveAt: '2026-07-10T05:48:00Z',
-    spend: 870,
-    maxBudget: 1000,
-    budgetDuration: '30d',
-    maxParallelRequests: 20,
-    rpmLimit: 120,
-    tpmLimit: 50000,
-    rpmLimitType: null,
-    tpmLimitType: null,
-    keyType: 'default',
-    autoRotate: true,
-    rotationInterval: '7d',
-    allowedRoutes: null,
-    tags: null,
-  },
-  {
-    id: 'mock-96',
-    name: 'mock-progress-96pct',
-    maskedKey: 'sk-…mNo4',
-    status: 'disabled',
-    modelGateway: { id: 'gw-bedrock', name: 'Bedrock Gateway' },
-    agent: { id: 'agent-4', name: 'multi-model-proxy' },
-    models: ['claude-3-haiku-20240307'],
-    expiresAt: '2027-01-15T23:59:59Z',
-    createdAt: '2026-03-01T08:00:00Z',
-    updatedAt: '2026-07-09T08:00:00Z',
-    lastActiveAt: '2026-07-10T06:11:00Z',
-    spend: 960,
-    maxBudget: 1000,
-    budgetDuration: '30d',
-    maxParallelRequests: 30,
-    rpmLimit: 240,
-    tpmLimit: 100000,
-    rpmLimitType: null,
-    tpmLimitType: null,
-    keyType: 'default',
-    autoRotate: false,
-    rotationInterval: null,
-    allowedRoutes: null,
-    tags: null,
-  },
-  {
-    id: 'mock-100',
-    name: 'mock-progress-100pct-clamped',
-    maskedKey: 'sk-…pQr5',
-    status: 'active',
-    modelGateway: { id: 'gw-openai', name: 'OpenAI Gateway' },
-    agent: null,
-    models: ['gpt-4-turbo-2024-04-09', 'gpt-3.5-turbo-0125'],
-    expiresAt: null,
-    createdAt: '2026-02-15T08:00:00Z',
-    updatedAt: '2026-07-09T08:00:00Z',
-    lastActiveAt: '2026-07-10T07:02:00Z',
-    spend: 1223,
-    maxBudget: 1000,
-    budgetDuration: '30d',
-    maxParallelRequests: 50,
-    rpmLimit: 500,
-    tpmLimit: 200000,
-    rpmLimitType: null,
-    tpmLimitType: null,
-    keyType: 'default',
-    autoRotate: false,
-    rotationInterval: null,
-    allowedRoutes: null,
-    tags: null,
-  },
-  {
-    id: 'mock-no-budget',
-    name: 'mock-no-budget-set',
-    maskedKey: 'sk-…sTu6',
-    status: 'active',
-    modelGateway: { id: 'gw-azure', name: 'Azure Gateway' },
-    agent: null,
-    models: ['gpt-4o-mini'],
-    expiresAt: null,
-    createdAt: '2026-07-05T08:00:00Z',
-    updatedAt: '2026-07-09T08:00:00Z',
-    lastActiveAt: '2026-07-10T04:18:00Z',
-    spend: 12.4,
-    maxBudget: null,
-    budgetDuration: null,
-    maxParallelRequests: null,
-    rpmLimit: null,
-    tpmLimit: null,
-    rpmLimitType: null,
-    tpmLimitType: null,
-    keyType: 'default',
-    autoRotate: false,
-    rotationInterval: null,
-    allowedRoutes: null,
-    tags: null,
-  },
-]
-const virtualKeys = computed<VirtualKeyNode[]>(() => mockKeys)
+const virtualKeys = computed<VirtualKeyNode[]>(
+  () => keysData.value?.virtualKeys ?? [],
+)
 
 function displayName(key: VirtualKeyNode): string {
   return key.name || '—'
@@ -1171,7 +968,7 @@ async function submitKey(draft: {
   rpmLimitType?: string
   tpmLimitType?: string
   allowedRoutes?: string[]
-  metadata?: Record<string, any>
+  metadata?: VirtualKeyMetadata
   // Optional — the modal's VirtualKeyFormDraft declared keyType as
   // optional and only the clone path populates it (the create path
   // doesn't carry a UI control). Fall through to 'default' so the
@@ -2245,11 +2042,11 @@ function goToPage(page: number) {
      `--cds-alias-object-app-background` (#f4f4f4) so the empty
      portion of the bar stays visible at 0% / 0-of-cap, where the
      previous app-background grey was nearly indistinguishable from
-     the surrounding cell. Uses `--cds-alias-object-border-color`
-     (#e8e8e8) — the same border grey used elsewhere in the app —
-     so the empty track reads as a soft inline rail without
-     introducing a new colour. */
-  background: var(--cds-alias-object-border-color, #e8e8e8);
+     the surrounding cell. Picks a literal `#ececec` (one notch
+     lighter than the `#e8e8e8` border grey used elsewhere) so the
+     empty track reads as a soft inline rail without visually
+     competing with the row's separators. */
+  background: #ececec;
   border-radius: 4px;
   overflow: hidden;
   min-width: 0;

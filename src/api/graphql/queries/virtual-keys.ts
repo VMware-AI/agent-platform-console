@@ -190,6 +190,20 @@ export const ROUTE_PERMISSION_PATHS: Record<RoutePermission, string> = {
   AUDIO: '/v1/audio/*',
 }
 
+/**
+ * Wire shape of `metadata` on VirtualKey read + write paths. Only
+ * `tags` is currently consumed by the console; `index` records any
+ * other backend-owned keys (e.g. `description`, `owner`) so we
+ * don't silently lose data when round-tripping. Adding a new metadata
+ * field means extending `index` rather than reverting to
+ * `Record<string, any>`. `index` is optional because the form submits
+ * `{ tags }` without an `index` when the user hasn't set any extras.
+ */
+export interface VirtualKeyMetadata {
+  tags: string[]
+  index?: Record<string, string | number | boolean | null>
+}
+
 export interface VirtualKeyNode {
   id: string
   name: string
@@ -292,7 +306,7 @@ export interface IssueVirtualKeyInputVars {
   // to align with the deploy-side metadata bucket. The read-side
   // `VirtualKey.tags` (and the DB column behind it) is unchanged, so list
   // views still surface tags at the top level.
-  metadata?: Record<string, any> | null
+  metadata?: VirtualKeyMetadata | null
   keyType?: string | null
   autoRotate?: boolean | null
   rotationInterval?: string | null
