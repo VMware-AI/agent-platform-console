@@ -20,9 +20,9 @@ export const PROVIDER_MODEL_STATUSES: ProviderModelStatus[] = [
   'unknown',
 ]
 
-export type ProviderModelSortField = 'NAME' | 'STATUS'
+export type ProviderModelSortField = 'NAME' | 'STATUS' | 'GATEWAY'
 
-export const PROVIDER_MODEL_SORT_FIELDS: ProviderModelSortField[] = ['NAME', 'STATUS']
+export const PROVIDER_MODEL_SORT_FIELDS: ProviderModelSortField[] = ['NAME', 'STATUS', 'GATEWAY']
 
 // Node / model-name regex — wire constraint: uppercase OR lowercase letters,
 // digits, hyphens, and dots. Reused by the form's inline validation.

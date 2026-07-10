@@ -4,7 +4,7 @@ import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
 
-// Shown ONCE after a key is issued or regenerated — the backend never returns the
+// Shown ONCE after a key is issued — the backend never returns the
 // secret again. Lets the operator copy it before dismissing.
 const props = defineProps<{
   open: boolean

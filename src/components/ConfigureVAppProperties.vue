@@ -50,7 +50,7 @@ function removeProp(idx: number) { props_.value.splice(idx, 1); props_.value = [
     <div v-for="(p, i) in props_" :key="i" class="vapp-prop-row">
       <input class="vapp-input vapp-key" :value="p.key" :disabled="disabled" placeholder="属性名" @input="(e: Event) => onPropKeyChange(i, e)">
       <input class="vapp-input vapp-val" :value="p.value" :disabled="disabled" placeholder="属性值" @input="(e: Event) => onPropValChange(i, e)">
-      <cds-button-action v-if="!disabled" shape="times" title="移除" @click="removeProp(i)"></cds-button-action>
+      <cds-button-action v-if="!disabled" shape="times" title="移除" aria-label="移除" @click="removeProp(i)"></cds-button-action>
     </div>
     <cds-button v-if="!disabled" size="sm" action="outline" class="add-prop-btn" @click="addProp">+ 添加属性</cds-button>
   </div>
