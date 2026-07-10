@@ -4,13 +4,14 @@ import '@/components/icons'
 import { computed, ref, watch } from 'vue'
 import { useToast } from '@/composables/useToast'
 import { useAgentExport } from '@/composables/useAgentExport'
-import { useQuery } from '@vue/apollo-composable'
+import { useMutation, useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import AppDropdown from '@/components/AppDropdown.vue'
 import AccessInfoDialog from '@/components/AccessInfoDialog.vue'
 import ConfigureAgentDialog from '@/components/ConfigureAgentDialog.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
-import { AGENTS_QUERY, AGENT_QUERY } from '@/api/graphql/queries/agents'
+import { AGENTS_QUERY, AGENT_QUERY, SET_AGENT_STATUS_MUTATION, RECYCLE_AGENT_MUTATION } from '@/api/graphql/queries/agents'
 import { apolloClient } from '@/api/graphql/client'
 import type {
   Agent,
@@ -158,6 +159,7 @@ const STATUS_OPTIONS: Array<StatusKey | 'all'> = [
   'running',
   'stopped',
   'exception',
+  'provisioning',
 ]
 
 const TYPE_OPTIONS: Array<TypeKey | 'all'> = [
@@ -287,12 +289,48 @@ const ICON_FOR_ACTION: Record<RowActionKey, string> = {
 function badgeStatusFor(status: Agent['status']): 'success' | 'neutral' | 'danger' {
   if (status === 'running') return 'success'
   if (status === 'exception') return 'danger'
+  if (status === 'provisioning') return 'neutral'
   return 'neutral'
 }
 
-/* Stub handlers — wired to a real backend mutation later. */
-function noop(label: string, payload?: unknown) {
-  console.log(`[agents] ${label}`, payload)
+/* Row action handlers — wired to real backend mutations. */
+const actionTarget = ref<Agent | null>(null)
+const actionConfirmOpen = ref(false)
+const actionConfirmMode = ref<'stop' | 'restart' | 'delete'>('stop')
+
+const { mutate: setStatusMutate } = useMutation(SET_AGENT_STATUS_MUTATION)
+const { mutate: recycleMutate } = useMutation(RECYCLE_AGENT_MUTATION)
+
+function openActionConfirm(agent: Agent, mode: 'stop' | 'restart' | 'delete') {
+  actionTarget.value = agent
+  actionConfirmMode.value = mode
+  actionConfirmOpen.value = true
+}
+
+function closeActionConfirm() {
+  actionConfirmOpen.value = false
+  actionTarget.value = null
+}
+
+async function confirmAction() {
+  const agent = actionTarget.value
+  if (!agent) return
+  const mode = actionConfirmMode.value
+  closeActionConfirm()
+  try {
+    if (mode === 'delete') {
+      await recycleMutate({ input: { agentId: agent.id, confirm: true } })
+      toast.success(`已删除 ${agent.name}`)
+    } else {
+      const status = mode === 'stop' ? 'stopped' : 'running'
+      await setStatusMutate({ id: agent.id, status })
+      toast.success(mode === 'stop' ? `已停止 ${agent.name}` : `已重启 ${agent.name}`)
+    }
+    await refetch()
+  } catch (err: unknown) {
+    console.error(`[agents] ${mode} failed`, err)
+    toast.error(`${mode === 'stop' ? '停止' : mode === 'restart' ? '重启' : '删除'}失败`)
+  }
 }
 
 function onConfigure(agent: Agent) {
@@ -310,19 +348,24 @@ function closeConfigureDialog() {
 }
 function onConfigureRotateKey(agent: Agent) {
   closeConfigureDialog()
-  // Delegate to existing key rotation (noop stub for now — wired later)
-  noop('rotateKey', { id: agent.id })
+  onCopyAccess(agent)
 }
 function onConfigureRestart(agent: Agent) {
   closeConfigureDialog()
-  noop('restart', { id: agent.id })
+  openActionConfirm(agent, 'restart')
 }
 
 function onRowAction(agent: Agent, key: RowActionKey) {
   if (key === 'copyAccess') {
     onCopyAccess(agent)
+  } else if (key === 'restart') {
+    openActionConfirm(agent, 'restart')
+  } else if (key === 'stop') {
+    openActionConfirm(agent, 'stop')
+  } else if (key === 'delete') {
+    openActionConfirm(agent, 'delete')
   } else {
-    noop(`row:${key}`, { id: agent.id })
+    console.log(`[agents] row:${key}`, { id: agent.id })
   }
   closeRowActions()
 }
@@ -465,11 +508,11 @@ type BatchKey = (typeof BATCH_KEYS)[number]
 
 function onBatch(key: BatchKey, close: () => void) {
   if (selectedIds.value.size === 0) {
-    noop('batch:disabled', key)
+    return
     close()
     return
   }
-  noop(`batch:${key}`, { ids: [...selectedIds.value] })
+  console.log(`[agents] batch:${key}`, { ids: [...selectedIds.value] })
   close()
 }
 
@@ -949,11 +992,12 @@ const summaryText = computed(() => {
               class="status-badge"
             >
               <cds-icon
-                :shape="agent.status === 'running' ? 'success' : agent.status === 'exception' ? 'error' : 'pause'"
+                :shape="agent.status === 'running' ? 'success' : agent.status === 'exception' ? 'error' : agent.status === 'provisioning' ? 'hourglass' : 'pause'"
                 size="xs"
                 aria-hidden="true"
                 class="status-icon"
               ></cds-icon>
+              <span>{{ locale.t('agents.status.' + agent.status) }}</span>
             </cds-badge>
           </cds-grid-cell>
           <cds-grid-cell>
@@ -971,8 +1015,8 @@ const summaryText = computed(() => {
           <cds-grid-cell>
             <span
               class="username-cell"
-              :title="agent.credentials?.username || undefined"
-            >{{ agent.credentials?.username ?? '—' }}</span>
+              :title="agent.owner?.displayName || undefined"
+            >{{ agent.owner?.displayName ?? '—' }}</span>
           </cds-grid-cell>
           <cds-grid-cell class="muted time-cell">{{ fmtDateTime(agent.createdAt) }}</cds-grid-cell>
           <cds-grid-cell class="muted time-cell">{{ fmtDateTime(agent.updatedAt) }}</cds-grid-cell>
@@ -1253,6 +1297,16 @@ const summaryText = computed(() => {
       </div>
     </cds-dropdown>
   </section>
+  <!-- Action confirm dialog (stop/restart/delete) -->
+  <ConfirmDialog
+    :open="actionConfirmOpen"
+    :title="actionConfirmMode === 'stop' ? '停止智能体' : actionConfirmMode === 'restart' ? '重启智能体' : '删除智能体'"
+    :body="actionConfirmMode === 'stop' ? `确定停止 ${actionTarget?.name ?? ''} 吗？` : actionConfirmMode === 'restart' ? `确定重启 ${actionTarget?.name ?? ''} 吗？` : `确定删除 ${actionTarget?.name ?? ''} 吗？此操作不可撤销。`"
+    confirm-text="确认"
+    cancel-text="取消"
+    @confirm="confirmAction"
+    @cancel="closeActionConfirm"
+  />
 </template>
 
 <style scoped>

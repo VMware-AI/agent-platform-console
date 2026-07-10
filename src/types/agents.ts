@@ -50,6 +50,7 @@ export interface Agent {
   templateFamilyId: string | null
   templateVersionId: string | null
   resourcePoolId: string | null
+  owner: { displayName: string; email: string } | null
 }
 
 export interface PageInfo {
