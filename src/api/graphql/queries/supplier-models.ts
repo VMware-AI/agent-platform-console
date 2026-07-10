@@ -296,7 +296,7 @@ export type ProviderModelStatus =
   | 'full_outage'
   | 'unknown'
 
-export type ProviderModelSortField = 'NAME' | 'STATUS'
+export type ProviderModelSortField = 'NAME' | 'STATUS' | 'GATEWAY'
 export type SortDirection = 'ASC' | 'DESC'
 export const SORT_DIRECTIONS: SortDirection[] = ['ASC', 'DESC']
 
@@ -310,6 +310,11 @@ export interface PageInput {
 export interface ProviderModelInfoFilterInput {
   search?: string | null
   status?: ProviderModelStatus | null
+  // Wire name from the GraphQL schema: `modelGatewayId` matches the
+  // ProviderModel modelGateway foreign-key on the backend. The local
+  // symbol is exported as-is so a future schema rename is a one-line
+  // change here.
+  modelGatewayId?: string | null
 }
 
 export interface ProviderModelInfoSort {

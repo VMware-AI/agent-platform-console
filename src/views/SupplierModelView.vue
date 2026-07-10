@@ -53,15 +53,34 @@ type StatusFilter = 'ALL' | ProviderModelStatus
 // evaluates the computed synchronously on init, so any ref read inside the
 // reactive fn must already be in scope — referencing a not-yet-initialized
 // `const` throws `ReferenceError: Cannot access 'nameFilter' before initialization`.
+// Column-key aliases — the UI header keys (`'HEALTH'`, `'GATEWAY'`) differ
+// from the wire-level sort enum (`'STATUS'`, `'GATEWAY'`). All sort-state
+// functions below operate on column keys and translate to/from the wire
+// field via this map, so the page template never sees the wire enum.
+// Note: GATEWAY is column-only — it has a filter button but no sort
+// button, so `toggleSort('GATEWAY')` is never invoked. We still keep the
+// mapping here so the column-key/wire-field lookup stays uniform.
+type SortColumnKey = 'NAME' | 'HEALTH' | 'GATEWAY'
+const COLUMN_TO_SORT_FIELD: Record<SortColumnKey, ProviderModelSortField> = {
+  NAME: 'NAME',
+  HEALTH: 'STATUS',
+  GATEWAY: 'GATEWAY',
+}
+
 const selectedIds = ref<Set<string>>(new Set())
 const nameFilter = ref('')
 const statusFilter = ref<StatusFilter>('ALL')
+// `''` means "no gateway filter" — null would collide with the
+// `modelGatewayId?: string | null` GraphQL filter input, where null is
+// the canonical "no filter" wire value. We resolve `''` → `null` at the
+// useQuery boundary (see the `filter` object below).
+const gatewayFilter = ref<string>('')
 const pageSize = ref<PageSize>(10)
 const currentPage = ref(1)
 const sortField = ref<ProviderModelSortField | null>(null)
 const sortDirection = ref<SortDirection>('ASC')
 const filterMenuAnchor = ref<HTMLElement | null>(null)
-const filterMenuKey = ref<'NAME' | 'HEALTH' | null>(null)
+const filterMenuKey = ref<SortColumnKey | null>(null)
 
 const formOpen = ref(false)
 const editingModel = ref<ProviderModelNode | null>(null)
@@ -76,6 +95,7 @@ const { result, loading, refetch } = useQuery<ProviderModelInfoResult>(
     filter: {
       search: nameFilter.value.trim() || null,
       status: statusFilter.value === 'ALL' ? null : statusFilter.value,
+      modelGatewayId: gatewayFilter.value || null,
     },
     page: {
       limit: pageSize.value,
@@ -178,15 +198,20 @@ function toggleSelectAll(checked: boolean) {
   selectedIds.value = next
 }
 
-function sortStateFor(
-  field: 'NAME' | 'HEALTH',
-): 'none' | 'ascending' | 'descending' {
-  if (sortField.value !== field) return 'none'
+function sortStateFor(field: SortColumnKey): 'none' | 'ascending' | 'descending' {
+  // Compare via the column→wire map so the column key never sees the wire
+  // enum directly. Without this, the previous `'HEALTH'` column key
+  // silently never matched `sortField.value === 'STATUS'` and the status
+  // header's sort icon stayed frozen in the idle state — the column key
+  // and wire field names were aligned by hand-written `===` checks that
+  // drifted the moment we added a column whose column-key and wire-field
+  // differ (GATEWAY).
+  if (sortField.value !== COLUMN_TO_SORT_FIELD[field]) return 'none'
   return sortDirection.value === 'ASC' ? 'ascending' : 'descending'
 }
 
-function toggleSort(field: 'NAME' | 'HEALTH') {
-  const target: ProviderModelSortField = field === 'HEALTH' ? 'STATUS' : 'NAME'
+function toggleSort(field: SortColumnKey) {
+  const target = COLUMN_TO_SORT_FIELD[field]
   const state = sortStateFor(field)
   if (state === 'none') {
     sortField.value = target
@@ -200,7 +225,7 @@ function toggleSort(field: 'NAME' | 'HEALTH') {
   currentPage.value = 1
 }
 
-function openFilterMenu(key: 'NAME' | 'HEALTH', event: MouseEvent) {
+function openFilterMenu(key: SortColumnKey, event: MouseEvent) {
   filterMenuKey.value = key
   filterMenuAnchor.value = event.currentTarget as HTMLElement
 }
@@ -210,8 +235,9 @@ function closeFilterMenu() {
   filterMenuAnchor.value = null
 }
 
-function hasFilter(key: 'NAME' | 'HEALTH'): boolean {
+function hasFilter(key: SortColumnKey): boolean {
   if (key === 'NAME') return Boolean(nameFilter.value.trim())
+  if (key === 'GATEWAY') return Boolean(gatewayFilter.value)
   return statusFilter.value !== 'ALL'
 }
 
@@ -226,9 +252,15 @@ function setStatusFilter(value: StatusFilter) {
   closeFilterMenu()
 }
 
+function setGatewayFilter(value: string) {
+  gatewayFilter.value = value
+  currentPage.value = 1
+}
+
 function clearActiveFilter() {
   if (filterMenuKey.value === 'NAME') nameFilter.value = ''
   else if (filterMenuKey.value === 'HEALTH') statusFilter.value = 'ALL'
+  else if (filterMenuKey.value === 'GATEWAY') gatewayFilter.value = ''
   currentPage.value = 1
   closeFilterMenu()
 }
@@ -537,23 +569,37 @@ async function confirmDelete() {
           </div>
         </cds-grid-column>
 
-        <cds-grid-column width="8%">{{ locale.t('supplier.col.gateway') }}</cds-grid-column>
+        <cds-grid-column width="8%">
+          <div class="column-head">
+            <span>{{ locale.t('supplier.col.gateway') }}</span>
+            <span class="column-head-actions">
+              <cds-button-action
+                shape="filter"
+                :expanded="hasFilter('GATEWAY')"
+                :aria-label="locale.t('supplier.filter').replace('{column}', locale.t('supplier.col.gateway'))"
+                @click="(event: MouseEvent) => openFilterMenu('GATEWAY', event)"
+              ></cds-button-action>
+            </span>
+          </div>
+        </cds-grid-column>
 
-        <cds-grid-column width="8%">{{ locale.t('supplier.col.status') }}</cds-grid-column>
+        <cds-grid-column width="8%">
+          <div class="column-head">
+            <span>{{ locale.t('supplier.col.status') }}</span>
+            <span class="column-head-actions">
+              <cds-button-action
+                shape="filter"
+                :expanded="hasFilter('HEALTH')"
+                :aria-label="locale.t('supplier.filter').replace('{column}', locale.t('supplier.col.status'))"
+                @click="(event: MouseEvent) => openFilterMenu('HEALTH', event)"
+              ></cds-button-action>
+            </span>
+          </div>
+        </cds-grid-column>
 
         <cds-grid-column width="13%">
           <div class="column-head">
             <span>{{ locale.t('supplier.col.specs') }}</span>
-            <span class="column-head-actions">
-              <cds-button-action
-                :aria-label="locale.t('supplier.sort').replace('{column}', locale.t('supplier.col.specs'))"
-                @click="toggleSort('HEALTH')"
-              >
-                <cds-icon v-if="sortStateFor('HEALTH') === 'ascending'" shape="angle" direction="up" size="sm"></cds-icon>
-                <cds-icon v-else-if="sortStateFor('HEALTH') === 'descending'" shape="angle" direction="down" size="sm"></cds-icon>
-                <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-              </cds-button-action>
-            </span>
           </div>
         </cds-grid-column>
 
@@ -712,23 +758,44 @@ async function confirmDelete() {
     </div>
 
     <cds-dropdown
-      v-if="filterMenuAnchor && filterMenuKey"
-      :hidden="false"
+      :hidden="!filterMenuAnchor"
       :anchor="filterMenuAnchor"
       closable
       @closeChange="closeFilterMenu"
     >
       <div class="filter-panel">
-        <input
-          v-if="filterMenuKey === 'NAME'"
-          class="filter-input"
-          type="text"
-          :value="nameFilter"
-          :placeholder="locale.t('supplier.filter.namePlaceholder')"
-          :aria-label="locale.t('supplier.filter.namePlaceholder')"
-          @input="setNameFilter(($event.target as HTMLInputElement).value)"
-        />
-        <div v-else class="filter-options">
+        <cds-input v-if="filterMenuKey === 'NAME'">
+          <input
+            type="text"
+            :value="nameFilter"
+            :placeholder="locale.t('supplier.filter.namePlaceholder')"
+            :aria-label="locale.t('supplier.filter.namePlaceholder')"
+            @input="setNameFilter(($event.target as HTMLInputElement).value)"
+          />
+        </cds-input>
+        <div v-else-if="filterMenuKey === 'GATEWAY'" class="filter-options">
+          <button
+            type="button"
+            class="filter-option"
+            :class="{ active: gatewayFilter === '' }"
+            @click="setGatewayFilter('')"
+          >
+            <span>{{ locale.t('supplier.filter.gateway.ALL') }}</span>
+            <cds-icon v-if="gatewayFilter === ''" shape="check" size="sm"></cds-icon>
+          </button>
+          <button
+            v-for="g in gateways"
+            :key="g.id"
+            type="button"
+            class="filter-option"
+            :class="{ active: gatewayFilter === g.id }"
+            @click="setGatewayFilter(g.id)"
+          >
+            <span>{{ g.name }}</span>
+            <cds-icon v-if="gatewayFilter === g.id" shape="check" size="sm"></cds-icon>
+          </button>
+        </div>
+        <div v-else-if="filterMenuKey === 'HEALTH'" class="filter-options">
           <button
             v-for="status in STATUS_FILTER_OPTIONS"
             :key="status"
@@ -741,7 +808,7 @@ async function confirmDelete() {
             <cds-icon v-if="statusFilter === status" shape="check" size="sm"></cds-icon>
           </button>
         </div>
-        <div v-if="hasFilter(filterMenuKey)" class="filter-footer">
+        <div v-if="filterMenuKey && hasFilter(filterMenuKey)" class="filter-footer">
           <cds-button action="outline" size="sm" @click="clearActiveFilter">
             {{ locale.t('supplier.filter.clear') }}
           </cds-button>
@@ -1061,20 +1128,18 @@ async function confirmDelete() {
   min-width: 250px;
   padding: 8px;
 }
-.filter-input {
+/* Carbon <cds-input> host sits inside cds-dropdown's popup-content — by
+   default the host shrinks to its label width because cds-input's
+   user-agent shadow root forces `width: auto !important`. Force 100% so
+   the inner native <input> stretches to the popup content width and
+   matches the resource pool name filter's look. */
+.filter-panel > cds-input {
   width: 100%;
-  min-height: 32px;
-  padding: 6px 9px;
-  border: 1px solid var(--cds-alias-object-border-color, #8c8c8c);
-  border-radius: 3px;
-  background: var(--cds-alias-object-container-background, #fff);
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font: inherit;
+  box-sizing: border-box;
 }
-.filter-input:focus {
-  border-color: var(--cds-alias-object-interaction-color, #0072a3);
-  outline: 2px solid color-mix(in srgb, var(--cds-alias-object-interaction-color, #0072a3) 20%, transparent);
-  outline-offset: 1px;
+.filter-panel > cds-input > input {
+  width: 100%;
+  box-sizing: border-box;
 }
 .filter-options {
   display: flex;

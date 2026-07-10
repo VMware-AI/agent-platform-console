@@ -22,6 +22,7 @@ import {
   type TestPrivateModelSpecConnectionResult,
   type TestPrivateModelSpecConnectionVars,
 } from '@/api/graphql/queries/supplier-models'
+import type { BudgetDurationUnit } from '@/components/VirtualKeyFormModal.vue'
 
 // ─── Wizard state machine ────────────────────────────────────────────────
 // Three steps: row-level identity (name + gateway), per-deployment detail
@@ -52,11 +53,21 @@ interface SpecDraft {
   tpm: number | null
   rpm: number | null
   maxBudget: number | null
-  budgetDuration: string
+  // 预算周期:与 VirtualKeyFormModal 的「有效时长 / 预算周期」一致,
+  // 拆成 number + unit 两个字段,UI 用 number input + unit select。
+  // submit() 时由 formatBudgetDuration 重新拼成 "<n><unit>" 字符串,
+  // 这是 LiteLLM 端 resolver 期望的格式。空 / 0 视为未设置。
+  budgetDurationValue: number | null
+  budgetDurationUnit: BudgetDurationUnit
   useInPassThrough: boolean
   useChatCompletionsApi: boolean
   mergeReasoningContentInChoices: boolean
-  tags: string[]
+  // 模型标签的 UI 状态:自由文本,逗号 / 换行 / 中文逗号 都视作分隔符。
+  // 用自由文本而非即时 split 是为了避免每次按键都触发 round-trip:
+  // 用户输入半形逗号时,如果立即 split + filter + rejoin,空串会被过滤
+  // 掉,刚打进去的逗号就被"吞"了,光标也会跳。延迟到 submit 时再解析,
+  // 与 VirtualKeyFormModal.vue 的 tagsText 行为一致。
+  tagsText: string
   // 设置限额开关:关闭时 tpm/rpm/maxBudget/budgetDuration 四个输入整体隐藏,
   // 提交时四项限额字段为 null。开启后,四项限额输入才出现。
   useLimits: boolean
@@ -82,11 +93,12 @@ function emptySpec(): SpecDraft {
     tpm: null,
     rpm: null,
     maxBudget: null,
-    budgetDuration: '',
+    budgetDurationValue: null,
+    budgetDurationUnit: 'mo',
     useInPassThrough: false,
     useChatCompletionsApi: true,
     mergeReasoningContentInChoices: false,
-    tags: [],
+    tagsText: '',
     useLimits: false,
     useCustomPrice: false,
     inputCostPerToken: null,
@@ -101,6 +113,79 @@ function emptySpec(): SpecDraft {
 // modeSelect/modeCustom helper inline in draftToSpecInput.
 function effectiveProvider(d: SpecDraft): string {
   return d.providerSelect === PROVIDER_CUSTOM ? d.providerCustom.trim() : d.providerSelect
+}
+
+// Resolve the *effective* mode string from the two-field state. Mirrors
+// effectiveProvider — MODE_CUSTOM sentinel means the user picked the
+// "custom…" branch and the real value lives in d.modeCustom.
+function effectiveMode(d: SpecDraft): string {
+  return d.modeSelect === MODE_CUSTOM ? d.modeCustom.trim() : d.modeSelect
+}
+
+// 把 tagsText 解析成提交用的 string[]。空文本 / 全空 token 都返回 null,
+// 让后端保持「不指定」的语义。分隔符支持半形逗号、换行、中文全角逗号,
+// 与 VirtualKeyFormModal.vue 保持一致。
+function parseTags(text: string): string[] | null {
+  const tokens = text
+    .split(/[,\n，]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  return tokens.length > 0 ? tokens : null
+}
+
+// ─── budgetDuration (wire: "<n><unit>" 字符串) ↔ UI (number + unit) ───
+// LiteLLM resolver 期望的 wire 格式,例如 "30d" / "1mo" / "12h"。
+// UI 与 VirtualKeyFormModal 的预算周期控件一致:数字 + 单位下拉。
+// 单位集合来自 BudgetDurationUnit,与 VirtualKeyFormModal 同步,
+// 避免 supplier / virtual-key 两边「单位语义不一致」。
+const BUDGET_DURATION_UNITS: readonly BudgetDurationUnit[] = ['s', 'm', 'h', 'd', 'mo']
+
+// 默认单位:月(mo),与 VirtualKeyFormModal 一致 —— 大多数预算周期都是
+// 「自然月」reset 窗口。
+const DEFAULT_BUDGET_DURATION_UNIT: BudgetDurationUnit = 'mo'
+
+// wire 字符串 → UI 的 number + unit。解析失败回退到 null + 'mo',
+// 与空字符串的展示保持一致,避免脏数据把表单卡死。
+function parseBudgetDuration(wire: string | null): {
+  budgetDurationValue: number | null
+  budgetDurationUnit: BudgetDurationUnit
+} {
+  if (!wire) return { budgetDurationValue: null, budgetDurationUnit: DEFAULT_BUDGET_DURATION_UNIT }
+  // 末段识别单位 —— 优先匹配两位字母 'mo',再退回到单位表里的任意 1 字母。
+  // 用 longest-match-first 避免 '1mo' 被错切成 number='1m' / unit='o'。
+  const m = wire.match(/^(-?\d+(?:\.\d+)?)(s|m|h|d|mo)?$/)
+  if (!m) return { budgetDurationValue: null, budgetDurationUnit: DEFAULT_BUDGET_DURATION_UNIT }
+  const value = Number(m[1])
+  const unit = (m[2] as BudgetDurationUnit | undefined) ?? DEFAULT_BUDGET_DURATION_UNIT
+  return { budgetDurationValue: value, budgetDurationUnit: unit }
+}
+
+// UI 的 number + unit → wire 字符串。空 / 0 / 负数都返回 null,
+// 让后端保持「不指定」的语义,与 tpm / rpm / maxBudget 一致。
+function formatBudgetDuration(
+  value: number | null,
+  unit: BudgetDurationUnit,
+): string | null {
+  if (value == null || value <= 0) return null
+  return `${value}${unit}`
+}
+
+// unit → i18n key 后缀。复用 VirtualKeyFormModal 已有的 locale 词条
+// (virtualKey.form.budgetDurationUnitSecond / Minute / Hour / Day / Month),
+// 避免重复维护。
+//   's'  → 'Second'   (秒)
+//   'm'  → 'Minute'   (分钟)
+//   'h'  → 'Hour'     (小时)
+//   'd'  → 'Day'      (天)
+//   'mo' → 'Month'    (月 —— 自然月 reset 窗口)
+function unitLabelSuffix(unit: BudgetDurationUnit): string {
+  switch (unit) {
+    case 's':  return 'Second'
+    case 'm':  return 'Minute'
+    case 'h':  return 'Hour'
+    case 'd':  return 'Day'
+    case 'mo': return 'Month'
+  }
 }
 
 const props = defineProps<{
@@ -231,11 +316,16 @@ watch(
           tpm: s.litellmParams.tpm,
           rpm: s.litellmParams.rpm,
           maxBudget: s.litellmParams.maxBudget,
-          budgetDuration: s.litellmParams.budgetDuration ?? '',
+          // budgetDuration 在 wire 上是 "<n><unit>" 字符串(例如 "30d",
+          // "1mo")。回填时拆成 number + unit,UI 用两个独立控件编辑,
+          // submit() 再由 formatBudgetDuration 拼回去。
+          ...parseBudgetDuration(s.litellmParams.budgetDuration ?? null),
           useInPassThrough: s.litellmParams.useInPassThrough,
           useChatCompletionsApi: s.litellmParams.useChatCompletionsApi,
           mergeReasoningContentInChoices: s.litellmParams.mergeReasoningContentInChoices,
-          tags: [...s.litellmParams.tags],
+          // 模型标签:回填到 tagsText(逗号 + 空格分隔,符合占位符风格),
+          // 真正的 string[] 在 submit 时再由 parseTags 解析。
+          tagsText: s.litellmParams.tags.join(', '),
           // 任一限额字段已设置即视为「设置限额」开启,避免来回切换
           // 时把后端已存的值藏起来、丢失。
           useLimits:
@@ -479,7 +569,8 @@ function onUseLimitsChange(d: SpecDraft, ev: Event) {
     d.tpm = null
     d.rpm = null
     d.maxBudget = null
-    d.budgetDuration = ''
+    d.budgetDurationValue = null
+    // 单位保留默认值 'mo',关闭开关并不清单位 —— 下次开开关时直接沿用。
   }
 }
 
@@ -509,11 +600,11 @@ function draftToSpecInput(d: SpecDraft): ModelSpecInput {
     tpm: d.tpm,
     rpm: d.rpm,
     maxBudget: d.maxBudget,
-    budgetDuration: d.budgetDuration || null,
+    budgetDuration: formatBudgetDuration(d.budgetDurationValue, d.budgetDurationUnit),
     useInPassThrough: d.useInPassThrough,
     useChatCompletionsApi: d.useChatCompletionsApi,
     mergeReasoningContentInChoices: d.mergeReasoningContentInChoices,
-    tags: d.tags.length > 0 ? d.tags : null,
+    tags: parseTags(d.tagsText),
     inputCostPerToken: d.inputCostPerToken,
     outputCostPerToken: d.outputCostPerToken,
     cacheReadInputTokenCost: d.cacheReadInputTokenCost,
@@ -581,7 +672,7 @@ const currentGatewayName = computed(() => {
 
  
 function hasLimits(d: SpecDraft): boolean {
-  return Boolean(d.tpm ?? d.rpm ?? d.maxBudget ?? d.budgetDuration)
+  return Boolean(d.tpm ?? d.rpm ?? d.maxBudget ?? d.budgetDurationValue)
 }
 
  
@@ -590,7 +681,9 @@ function formatLimits(d: SpecDraft): string {
   if (d.tpm) parts.push(`tpm ${d.tpm}`)
   if (d.rpm) parts.push(`rpm ${d.rpm}`)
   if (d.maxBudget) parts.push(`maxBudget ${d.maxBudget}`)
-  if (d.budgetDuration) parts.push(`budgetDuration ${d.budgetDuration}`)
+  // budgetDuration:review 时也是 "<n><unit>",与提交时的 wire 格式一致。
+  const budgetDuration = formatBudgetDuration(d.budgetDurationValue, d.budgetDurationUnit)
+  if (budgetDuration) parts.push(`budgetDuration ${budgetDuration}`)
   return parts.join(' / ')
 }
 
@@ -687,17 +780,17 @@ function formatCost(d: SpecDraft): string {
               <dl v-if="isEditing" class="basic-readonly">
                 <dt>{{ locale.t('supplier.model.form.name') }}</dt>
                 <dd>{{ name }}</dd>
-                <dt>{{ locale.t('supplier.model.form.gateway') }}</dt>
-                <dd>{{ currentGatewayName }}</dd>
                 <dt>{{ locale.t('supplier.model.form.organization') }}</dt>
                 <dd>{{ organization || '—' }}</dd>
+                <dt>{{ locale.t('supplier.model.form.gateway') }}</dt>
+                <dd>{{ currentGatewayName }}</dd>
               </dl>
 
               <template v-else>
                 <cds-input :status="attemptBasic && !nameValid ? 'error' : 'neutral'">
                   <label>
                     {{ locale.t('supplier.model.form.name') }}
-                    <span class="required-mark" aria-hidden="true">*</span>
+                    <sup class="required-mark" aria-hidden="true">*</sup>
                   </label>
                   <input
                     :value="name"
@@ -716,32 +809,12 @@ function formatCost(d: SpecDraft): string {
                 </cds-input>
 
                 <div
-                  class="gateway-field"
-                  :class="{ error: attemptBasic && !gatewayValid }"
-                >
-                  <label for="supplier-gateway-select" class="gateway-label">
-                    {{ locale.t('supplier.model.form.gateway') }}
-                    <span class="required-mark" aria-hidden="true">*</span>
-                  </label>
-                  <select
-                    id="supplier-gateway-select"
-                    class="gateway-select"
-                    :value="gatewayId"
-                    :aria-label="locale.t('supplier.model.form.gateway')"
-                    @change="gatewayId = ($event.target as HTMLSelectElement).value"
-                  >
-                    <option value="">{{ locale.t('supplier.model.form.gatewayPlaceholder') }}</option>
-                    <option v-for="g in gateways" :key="g.id" :value="g.id">{{ g.name }}</option>
-                  </select>
-                </div>
-
-                <div
                   class="organization-field"
                   :class="{ error: attemptBasic && !organizationValid }"
                 >
                   <label for="supplier-organization-input" class="organization-label">
                     {{ locale.t('supplier.model.form.organization') }}
-                    <span class="required-mark" aria-hidden="true">*</span>
+                    <sup class="required-mark" aria-hidden="true">*</sup>
                   </label>
                   <input
                     id="supplier-organization-input"
@@ -758,6 +831,26 @@ function formatCost(d: SpecDraft): string {
                   >
                     {{ locale.t('supplier.model.form.organizationError') }}
                   </cds-control-message>
+                </div>
+
+                <div
+                  class="gateway-field"
+                  :class="{ error: attemptBasic && !gatewayValid }"
+                >
+                  <label for="supplier-gateway-select" class="gateway-label">
+                    {{ locale.t('supplier.model.form.gateway') }}
+                    <sup class="required-mark" aria-hidden="true">*</sup>
+                  </label>
+                  <select
+                    id="supplier-gateway-select"
+                    class="gateway-select"
+                    :value="gatewayId"
+                    :aria-label="locale.t('supplier.model.form.gateway')"
+                    @change="gatewayId = ($event.target as HTMLSelectElement).value"
+                  >
+                    <option value="">{{ locale.t('supplier.model.form.gatewayPlaceholder') }}</option>
+                    <option v-for="g in gateways" :key="g.id" :value="g.id">{{ g.name }}</option>
+                  </select>
                 </div>
               </template>
             </div>
@@ -810,7 +903,7 @@ function formatCost(d: SpecDraft): string {
                       <div class="provider-field">
                         <span class="provider-label">
                           {{ locale.t('supplier.model.form.spec.provider') }}
-                          <span class="required-mark" aria-hidden="true">*</span>
+                          <sup class="required-mark" aria-hidden="true">*</sup>
                         </span>
                         <cds-select>
                           <select
@@ -833,7 +926,7 @@ function formatCost(d: SpecDraft): string {
                       >
                         <label>
                           {{ locale.t('supplier.model.form.spec.provider') }}
-                          <span class="required-mark" aria-hidden="true">*</span>
+                          <sup class="required-mark" aria-hidden="true">*</sup>
                         </label>
                         <input
                           :value="d.providerCustom"
@@ -845,7 +938,7 @@ function formatCost(d: SpecDraft): string {
                       <cds-input>
                         <label>
                           {{ locale.t('supplier.model.form.spec.apiBase') }}
-                          <span class="required-mark" aria-hidden="true">*</span>
+                          <sup class="required-mark" aria-hidden="true">*</sup>
                         </label>
                         <input
                           :value="d.apiBase"
@@ -864,7 +957,7 @@ function formatCost(d: SpecDraft): string {
                       <cds-input :status="!isEditing && attemptSpecs && !d.apiKey.trim() ? 'error' : 'neutral'">
                         <label>
                           {{ locale.t('supplier.model.form.spec.apiKey') }}
-                          <span v-if="!isEditing" class="required-mark" aria-hidden="true">*</span>
+                          <sup v-if="!isEditing" class="required-mark" aria-hidden="true">*</sup>
                         </label>
                         <input
                           type="password"
@@ -923,7 +1016,7 @@ function formatCost(d: SpecDraft): string {
                       <cds-input :status="attemptSpecs && !d.model.trim() ? 'error' : 'neutral'">
                         <label>
                           {{ locale.t('supplier.model.form.spec.model') }}
-                          <span class="required-mark" aria-hidden="true">*</span>
+                          <sup class="required-mark" aria-hidden="true">*</sup>
                         </label>
                         <input
                           :value="d.model"
@@ -991,9 +1084,8 @@ function formatCost(d: SpecDraft): string {
                             type="text"
                             class="tags-input"
                             autocomplete="off"
-                            :value="d.tags.join(', ')"
+                            v-model="d.tagsText"
                             placeholder="production, reasoner"
-                            @input="d.tags = ($event.target as HTMLInputElement).value.split(/[,\n，]/).map((s) => s.trim()).filter(Boolean)"
                           />
                         </div>
                       </div>
@@ -1033,39 +1125,105 @@ function formatCost(d: SpecDraft): string {
                           </cds-toggle>
                         </cds-control>
                         <div v-if="d.useLimits" class="toggles-subgrid toggles-subgrid--limits">
-                          <cds-input>
-                            <label>{{ locale.t('supplier.model.form.limits.tpm') }}</label>
-                            <input
-                              type="number"
-                              :value="d.tpm ?? ''"
-                              @input="d.tpm = numOrNull(($event.target as HTMLInputElement).value)"
-                            />
-                          </cds-input>
-                          <cds-input>
-                            <label>{{ locale.t('supplier.model.form.limits.rpm') }}</label>
-                            <input
-                              type="number"
-                              :value="d.rpm ?? ''"
-                              @input="d.rpm = numOrNull(($event.target as HTMLInputElement).value)"
-                            />
-                          </cds-input>
-                          <cds-input>
-                            <label>{{ locale.t('supplier.model.form.limits.maxBudget') }}</label>
-                            <input
-                              type="number"
-                              step="any"
-                              :value="d.maxBudget ?? ''"
-                              @input="d.maxBudget = numOrNull(($event.target as HTMLInputElement).value)"
-                            />
-                          </cds-input>
-                          <cds-input>
-                            <label>{{ locale.t('supplier.model.form.limits.budgetDuration') }}</label>
-                            <input
-                              :value="d.budgetDuration"
-                              placeholder="30d"
-                              @input="d.budgetDuration = ($event.target as HTMLInputElement).value"
-                            />
-                          </cds-input>
+                          <!-- 设置限额下的 7 个数字输入框 (TPM / RPM / 最大预算 /
+                               预算周期 / 输入 / 输出 / 缓存读 / 缓存写 —— 预算周期
+                               因为带单位下拉所以保留原 .duration-row,其余 6 个用
+                               .duration-row--no-unit) 全部用原生 label + native
+                               input,绕开 cds-input web component 自带的
+                               `layout="horizontal"` 行为 (label + input 在一行,
+                               input 宽度被 input-message-container 限制为
+                               `cds-global-layout-space-xxxl * 3` ≈ 192px)。
+                               .duration-row + .duration-value/.duration-label
+                               与「有效时长」「预算周期」同源,已经验证在 1fr
+                               grid 内撑满父级。 -->
+                          <div class="duration-field">
+                            <div class="duration-row duration-row--no-unit">
+                              <label class="duration-label" :for="`spec-tpm-${i}`">
+                                {{ locale.t('supplier.model.form.limits.tpm') }}
+                              </label>
+                              <input
+                                :id="`spec-tpm-${i}`"
+                                class="duration-value"
+                                type="number"
+                                min="0"
+                                step="1000"
+                                :value="d.tpm ?? ''"
+                                @input="d.tpm = numOrNull(($event.target as HTMLInputElement).value)"
+                              />
+                            </div>
+                          </div>
+                          <div class="duration-field">
+                            <div class="duration-row duration-row--no-unit">
+                              <label class="duration-label" :for="`spec-rpm-${i}`">
+                                {{ locale.t('supplier.model.form.limits.rpm') }}
+                              </label>
+                              <input
+                                :id="`spec-rpm-${i}`"
+                                class="duration-value"
+                                type="number"
+                                min="0"
+                                step="100"
+                                :value="d.rpm ?? ''"
+                                @input="d.rpm = numOrNull(($event.target as HTMLInputElement).value)"
+                              />
+                            </div>
+                          </div>
+                          <div class="duration-field">
+                            <div class="duration-row duration-row--no-unit">
+                              <label class="duration-label" :for="`spec-maxBudget-${i}`">
+                                {{ locale.t('supplier.model.form.limits.maxBudget') }}
+                              </label>
+                              <input
+                                :id="`spec-maxBudget-${i}`"
+                                class="duration-value"
+                                type="number"
+                                min="0"
+                                step="any"
+                                :value="d.maxBudget ?? ''"
+                                @input="d.maxBudget = numOrNull(($event.target as HTMLInputElement).value)"
+                              />
+                            </div>
+                          </div>
+                          <!-- 预算周期:与 VirtualKeyFormModal 一致的「数字 + 单位」
+                               双控件布局。cds-input 的 shadow DOM 只投影一个
+                               form control,这里用原生 label + input + select
+                               替代,复用 .duration-* 样式保持视觉一致。
+                               submit() 时由 formatBudgetDuration 拼成
+                               "<n><unit>" 字符串提交。 -->
+                          <div class="duration-field">
+                            <div class="duration-row">
+                              <label class="duration-label" :for="`spec-budgetDuration-${i}`">
+                                {{ locale.t('supplier.model.form.limits.budgetDuration') }}
+                              </label>
+                              <input
+                                :id="`spec-budgetDuration-${i}`"
+                                class="duration-value"
+                                type="number"
+                                min="0"
+                                step="1"
+                                :value="d.budgetDurationValue ?? ''"
+                                @input="
+                                  d.budgetDurationValue =
+                                    ($event.target as HTMLInputElement).value === ''
+                                      ? null
+                                      : Number(($event.target as HTMLInputElement).value)
+                                "
+                              />
+                              <select
+                                class="duration-unit"
+                                :value="d.budgetDurationUnit"
+                                :aria-label="locale.t('virtualKey.form.budgetDurationUnit')"
+                                @change="
+                                  d.budgetDurationUnit = ($event.target as HTMLSelectElement)
+                                    .value as BudgetDurationUnit
+                                "
+                              >
+                                <option v-for="u in BUDGET_DURATION_UNITS" :key="u" :value="u">
+                                  {{ locale.t(`virtualKey.form.budgetDurationUnit${unitLabelSuffix(u)}`) }}
+                                </option>
+                              </select>
+                            </div>
+                          </div>
                         </div>
                         <cds-control>
                           <cds-toggle>
@@ -1079,42 +1237,70 @@ function formatCost(d: SpecDraft): string {
                           </cds-toggle>
                         </cds-control>
                         <div v-if="d.useCustomPrice" class="toggles-subgrid toggles-subgrid--price">
-                          <cds-input>
-                            <label>{{ locale.t('supplier.model.form.cost.input') }}</label>
-                            <input
-                              type="number"
-                              step="any"
-                              :value="d.inputCostPerToken ?? ''"
-                              @input="d.inputCostPerToken = numOrNull(($event.target as HTMLInputElement).value)"
-                            />
-                          </cds-input>
-                          <cds-input>
-                            <label>{{ locale.t('supplier.model.form.cost.output') }}</label>
-                            <input
-                              type="number"
-                              step="any"
-                              :value="d.outputCostPerToken ?? ''"
-                              @input="d.outputCostPerToken = numOrNull(($event.target as HTMLInputElement).value)"
-                            />
-                          </cds-input>
-                          <cds-input>
-                            <label>{{ locale.t('supplier.model.form.cost.cacheRead') }}</label>
-                            <input
-                              type="number"
-                              step="any"
-                              :value="d.cacheReadInputTokenCost ?? ''"
-                              @input="d.cacheReadInputTokenCost = numOrNull(($event.target as HTMLInputElement).value)"
-                            />
-                          </cds-input>
-                          <cds-input>
-                            <label>{{ locale.t('supplier.model.form.cost.cacheWrite') }}</label>
-                            <input
-                              type="number"
-                              step="any"
-                              :value="d.cacheCreationInputTokenCost ?? ''"
-                              @input="d.cacheCreationInputTokenCost = numOrNull(($event.target as HTMLInputElement).value)"
-                            />
-                          </cds-input>
+                          <div class="duration-field">
+                            <div class="duration-row duration-row--no-unit">
+                              <label class="duration-label" :for="`spec-inputPrice-${i}`">
+                                {{ locale.t('supplier.model.form.cost.input') }}
+                              </label>
+                              <input
+                                :id="`spec-inputPrice-${i}`"
+                                class="duration-value"
+                                type="number"
+                                min="0"
+                                step="any"
+                                :value="d.inputCostPerToken ?? ''"
+                                @input="d.inputCostPerToken = numOrNull(($event.target as HTMLInputElement).value)"
+                              />
+                            </div>
+                          </div>
+                          <div class="duration-field">
+                            <div class="duration-row duration-row--no-unit">
+                              <label class="duration-label" :for="`spec-outputPrice-${i}`">
+                                {{ locale.t('supplier.model.form.cost.output') }}
+                              </label>
+                              <input
+                                :id="`spec-outputPrice-${i}`"
+                                class="duration-value"
+                                type="number"
+                                min="0"
+                                step="any"
+                                :value="d.outputCostPerToken ?? ''"
+                                @input="d.outputCostPerToken = numOrNull(($event.target as HTMLInputElement).value)"
+                              />
+                            </div>
+                          </div>
+                          <div class="duration-field">
+                            <div class="duration-row duration-row--no-unit">
+                              <label class="duration-label" :for="`spec-cacheRead-${i}`">
+                                {{ locale.t('supplier.model.form.cost.cacheRead') }}
+                              </label>
+                              <input
+                                :id="`spec-cacheRead-${i}`"
+                                class="duration-value"
+                                type="number"
+                                min="0"
+                                step="any"
+                                :value="d.cacheReadInputTokenCost ?? ''"
+                                @input="d.cacheReadInputTokenCost = numOrNull(($event.target as HTMLInputElement).value)"
+                              />
+                            </div>
+                          </div>
+                          <div class="duration-field">
+                            <div class="duration-row duration-row--no-unit">
+                              <label class="duration-label" :for="`spec-cacheWrite-${i}`">
+                                {{ locale.t('supplier.model.form.cost.cacheWrite') }}
+                              </label>
+                              <input
+                                :id="`spec-cacheWrite-${i}`"
+                                class="duration-value"
+                                type="number"
+                                min="0"
+                                step="any"
+                                :value="d.cacheCreationInputTokenCost ?? ''"
+                                @input="d.cacheCreationInputTokenCost = numOrNull(($event.target as HTMLInputElement).value)"
+                              />
+                            </div>
+                          </div>
                         </div>
                         <cds-control>
                           <cds-toggle>
@@ -1216,10 +1402,10 @@ function formatCost(d: SpecDraft): string {
                 <dl>
                   <dt>{{ locale.t('supplier.model.form.review.name') }}</dt>
                   <dd>{{ name }}</dd>
-                  <dt>{{ locale.t('supplier.model.form.review.gateway') }}</dt>
-                  <dd>{{ currentGatewayName }}</dd>
                   <dt>{{ locale.t('supplier.model.form.review.organization') }}</dt>
                   <dd>{{ organization || locale.t('supplier.model.form.review.unset') }}</dd>
+                  <dt>{{ locale.t('supplier.model.form.review.gateway') }}</dt>
+                  <dd>{{ currentGatewayName }}</dd>
                 </dl>
               </section>
 
@@ -1242,24 +1428,39 @@ function formatCost(d: SpecDraft): string {
                   <dl>
                     <!-- Field order mirrors the spec step's .spec-grid /
                          .advanced-section input order: 供应商 first (top
-                         of .spec-grid), then API 地址, then 选择模型 at
-                         the bottom of .spec-grid, then 模型标签 from
-                         .advanced-section, then the two composite
-                         summaries (限流 / 单价) which fold in the
-                         toggle subgrids. Earlier recap put 选择模型
-                         first, which mismatched the entry order the
-                         user just typed and read as reordered. -->
+                         of .spec-grid), then API 地址, then API Key, then
+                         选择模型 at the bottom of .spec-grid, then 模型模式
+                         and 模型标签 from .advanced-section, then the two
+                         composite summaries (限流 / 单价) which fold in
+                         the toggle subgrids, then the three standalone
+                         toggles (透传 / chat completions / 合并 reasoning).
+                         API Key is shown as a status string only, never
+                         the literal secret. -->
                     <dt>{{ locale.t('supplier.model.form.review.customLlmProvider') }}</dt>
                     <dd>{{ effectiveProvider(d) || locale.t('supplier.model.form.review.unset') }}</dd>
                     <template v-if="d.apiBase">
                       <dt>{{ locale.t('supplier.model.form.review.apiBase') }}</dt>
                       <dd>{{ d.apiBase }}</dd>
                     </template>
+                    <dt>{{ locale.t('supplier.model.form.review.apiKey') }}</dt>
+                    <dd>
+                      {{
+                        isEditing
+                          ? (d.apiKey.trim()
+                              ? locale.t('supplier.model.form.review.apiKeyRotate')
+                              : locale.t('supplier.model.form.review.apiKeyKeep'))
+                          : locale.t('supplier.model.form.review.apiKeySet')
+                      }}
+                    </dd>
                     <dt>{{ locale.t('supplier.model.form.review.model') }}</dt>
                     <dd>{{ d.model || locale.t('supplier.model.form.review.unset') }}</dd>
-                    <template v-if="d.tags.length">
+                    <template v-if="effectiveMode(d)">
+                      <dt>{{ locale.t('supplier.model.form.review.mode') }}</dt>
+                      <dd>{{ effectiveMode(d) }}</dd>
+                    </template>
+                    <template v-if="parseTags(d.tagsText)">
                       <dt>{{ locale.t('supplier.model.form.review.tags') }}</dt>
-                      <dd>{{ d.tags.join(', ') }}</dd>
+                      <dd>{{ parseTags(d.tagsText)?.join(', ') }}</dd>
                     </template>
                     <template v-if="hasLimits(d)">
                       <dt>{{ locale.t('supplier.model.form.review.limits') }}</dt>
@@ -1269,6 +1470,12 @@ function formatCost(d: SpecDraft): string {
                       <dt>{{ locale.t('supplier.model.form.review.cost') }}</dt>
                       <dd>{{ formatCost(d) }}</dd>
                     </template>
+                    <dt>{{ locale.t('supplier.model.form.flag.useInPassThrough') }}</dt>
+                    <dd>{{ d.useInPassThrough ? locale.t('supplier.model.form.review.toggleOn') : locale.t('supplier.model.form.review.toggleOff') }}</dd>
+                    <dt>{{ locale.t('supplier.model.form.flag.useChatCompletionsApi') }}</dt>
+                    <dd>{{ d.useChatCompletionsApi ? locale.t('supplier.model.form.review.toggleOn') : locale.t('supplier.model.form.review.toggleOff') }}</dd>
+                    <dt>{{ locale.t('supplier.model.form.flag.mergeReasoningContentInChoices') }}</dt>
+                    <dd>{{ d.mergeReasoningContentInChoices ? locale.t('supplier.model.form.review.toggleOn') : locale.t('supplier.model.form.review.toggleOff') }}</dd>
                   </dl>
                 </article>
               </section>
@@ -1370,7 +1577,12 @@ function formatCost(d: SpecDraft): string {
   display: inline-flex;
   flex-shrink: 0;
 }
-.advanced-grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; margin-bottom: 8px; }
+/* 单列布局:每个 label+input 字段独占一行,占满整行宽度。
+   原 1fr 1fr 两列布局会让单字段(如 模型模式 / 模型标签 / modeCustom)只
+   占第一列 ≈50% 宽度,视觉上字段过窄、显空;改成 1fr 后所有
+   .advanced-grid 块内部的字段都全宽显示,label+input 在同一行、上下
+   字段纵向堆叠,与 设置限额 / 自定义价格 子网格的策略一致。 */
+.advanced-grid { display: grid; gap: 12px; grid-template-columns: 1fr; margin-bottom: 8px; }
 .mode-field { display: flex; align-items: center; gap: 8px; }
 .mode-field > cds-select { flex: 1; min-width: 0; }
 .mode-label { font-size: 13px; font-weight: 600; color: var(--cds-alias-object-app-foreground, #1b1b1b); white-space: nowrap; flex-shrink: 0; }
@@ -1426,16 +1638,20 @@ function formatCost(d: SpecDraft): string {
    blocks carry — keeping the toggle column flush with the section
    above. */
 .toggles-column {
-  grid-template-columns: 1fr;
+  /* 单列 grid,但用 `minmax(0, 1fr)` 而非 `1fr` —— 后者在 grid 1fr
+     column 内 sibling 子项的 max-content 会撑开 column (cds-control
+     包 toggle 的实际 content width 是 216px,会让 1fr track 缩到
+     ~216,即 .toggles-subgrid width 不超过 sibling 宽度 → 7 个
+     new input 右端距 modal 内边距留 ~150px 空白)。`minmax(0, 1fr)`
+     允许 column 收缩到 0,grid track 撑满父级 (advanced-section
+     padding 内的 content width = ~356px) 而非按 max-content 算。
+     这样 .toggles-subgrid (.toggles-column 的直接子节点) 占满整列,
+     内层 .duration-value 100% 才能撑到列右端。
+     cds-control 自身仍然用 `width: max-content` + `max-width: 100%`
+     单独收缩 (见下一条 rule),不让其被 grid stretch 拉宽。 */
+  grid-template-columns: minmax(0, 1fr);
   margin-bottom: 0;
-  /* Increase horizontal spacing between columns (single column here, so
-     this is mostly a no-op visually, but kept for consistency with the
-     other two-column .advanced-grid blocks). No row-gap — toggles
-     stack with no vertical breathing room between them. */
   column-gap: 1.2rem;
-  /* Keep each cds-control flush-left on the grid's leading edge instead
-     of stretching to fill the column width. */
-  justify-items: start;
 }
 .toggles-column > cds-control {
   width: max-content;
@@ -1444,14 +1660,26 @@ function formatCost(d: SpecDraft): string {
 }
 /* Sub-grid that holds the four limit / price inputs right under their
    controlling toggle. Lives as a single grid item inside .toggles-column
-   — two columns by default, same rhythm as the other .advanced-grid
-   blocks in the section. No bottom margin so the next toggle (or the
-   column's bottom edge) sits at a consistent gap. */
+   — 单列布局,每个 label+input 字段独占一行,占满整行宽度。
+   原 grid-template-columns: 1fr 1fr 让四个字段呈 2×2 排列,label+input
+   共同占一行约一半的宽度,字段显得过窄且阅读节奏不佳;改成 1fr 后
+   四个字段纵向堆叠,label+input 各占一行,视觉上更宽松、输入控件也更
+   易点击。与 用户在 #supplierModelForm 提的需求一致:「设置限额 /
+   自定义价格」的四个参数全部各占一行显示。 */
 .toggles-subgrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 12px;
   margin-bottom: 0;
+  /* 显式 width: 100% 让 grid 1fr column 占满父级(advanced-section
+     padding 内部全宽),子元素 .duration-value 再 100% 撑到列右端。
+     `!important` 强制覆盖任何 grid 子项收缩行为(比如父级
+     .toggles-column 是 grid 1fr 时,在某些浏览器下子项默认
+     min-content 而非 stretch,会让 grid track 收缩到内容宽度,
+     即使 grid-template-columns 是 1fr 也会留白)。
+     box-sizing: border-box 防止任何 padding 撑破父级宽度。 */
+  width: 100% !important;
+  box-sizing: border-box;
 }
 /* Extra breathing room above each subgrid so the first row of inputs
    doesn't sit flush against its controlling toggle — gives the
@@ -1461,12 +1689,140 @@ function formatCost(d: SpecDraft): string {
 .test-row { display: flex; align-items: center; gap: 10px; }
 .test-status { text-transform: capitalize; }
 .drop-warning { margin-top: 8px; }
+/* duration-* — 数字 + 单位 选择器布局,与 VirtualKeyFormModal 一致。
+   当前用于 Spec 草稿里的 budgetDuration 字段。每个表单里独立维护一份,
+   因为 .duration-* 在源组件是 scoped,不会跨组件泄漏。 */
+.duration-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 1.2rem;
+  row-gap: 6px;
+}
+.duration-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.2rem;
+}
+/* Variant used when a row has no <select> unit — collapses the third
+   column (auto) so the value input takes the full remaining width
+   instead of leaving a phantom empty cell on the right. Keeps the
+   baseline consistent with the sibling .duration-row that DOES have a
+   <select>, so all rows inside .toggles-subgrid share the same label /
+   input vertical alignment. (与 VirtualKeyFormModal 同步定义;
+   SupplierModal 之前只用了带 select 的 budgetDuration 字段,7 个
+   new input 改造后必须显式定义 --no-unit variant,否则会 fallback
+   到 .duration-row 的 3 列 auto 布局,第三列空 auto 列仍占 grid
+   track 推挤 input 列 —— 实测会让 1fr input 列短几 px。) */
+.duration-row--no-unit {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.duration-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.duration-value {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-size: 14px;
+  /* `box-sizing: border-box !important` 与 VirtualKeyFormModal
+     同源:Chrome 给 <input> 套 user-agent shadow root,user-agent
+     origin 强制 content-box !important,普通 `box-sizing` 没法
+     override。锁住 24px 实际渲染高度,避免 .duration-field grid
+     行被 padding+border 撑到 41px。 */
+  box-sizing: border-box !important;
+  height: 24px;
+  padding: 4px 8px;
+  border: 0;
+  border-bottom: 1px solid #21333b;
+  border-radius: 0;
+  background: transparent;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  outline: none;
+}
+.duration-value:focus {
+  /* focus 态用 1px #0079ad 色带覆盖原 1px #21333b 下边框。
+     background-size: 100% 1px 让色带刚好占满 input 整宽 1px,
+     background-position: bottom 贴底。 */
+  border-bottom: 1px solid #21333b;
+  background-image: linear-gradient(#0079ad, #0079ad);
+  background-size: 100% 1px;
+  background-repeat: no-repeat;
+  background-position: bottom;
+}
+.duration-unit {
+  font: inherit;
+  font-size: 14px;
+  box-sizing: border-box !important;
+  min-height: 24px;
+  min-width: 72px;
+  padding: 4px 24px 4px 8px;
+  border: 0;
+  border-bottom: 1px solid #21333b;
+  border-radius: 0;
+  background: transparent;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.duration-unit:focus {
+  /* 与 .duration-value:focus 同视觉 —— 1px #0079ad 色带覆盖 1px
+     #21333b 下边框。需要重新声明下拉箭头 caret (linear-gradient
+     三角形),否则 :focus 内 background-image 会覆盖普通态箭头。 */
+  border-bottom: 1px solid #21333b;
+  background-image: linear-gradient(#0079ad, #0079ad),
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-size: 100% 1px, 5px 5px, 5px 5px;
+  background-position: bottom, calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-repeat: no-repeat;
+}
 .wizard-step {
   display: grid;
   gap: 16px;
 }
 .wizard-step.review {
   gap: 20px;
+}
+/* 与 VirtualKeyFormModal 的 `.key-form cds-input` 同源:Carbon
+   <cds-input> 内部 host 默认 inline-block,grid (`.advanced-grid`,
+   `.toggles-subgrid`) 是 1fr 单元,但 child 没显式 width 时按
+   content 收缩,label 短的 cds-input (如「每分钟 tokens (tpm)」)
+   就只占 label 那段宽度。强制 cds-input 与底层 native input
+   撑满父级 1fr,让 step 3 高级参数里的所有 cds-input 与
+   「模型标签」(.tags-input) 同宽。
+   所有 .wizard-step 内的 cds-input 模板上设了 `layout="vertical"`,
+   让 label 出现在上方而不是左侧,把 input 行留给原生 <input>
+   撑满整个 host 宽度 (horizontal 模式下 label 和 input 平分一行,
+   会让 input 宽度只有 host 的一半多一点)。
+
+   `!important` 是必要的 —— Chrome 给 <cds-input> 套了
+   user-agent shadow root,user-agent origin 给 host 设了
+   `width: auto !important` 与 `box-sizing: content-box !important`,
+   优先级高于 author 普通规则。Author 普通 `width: 100%` 无法
+   override,会导致宽度按 content 收缩 (与 VirtualKeyFormModal
+   早期碰到的同一类问题 —— 必须用 !important 把 author
+   优先级升到 user-agent !important 之上)。box-sizing: border-box
+   防止 padding+border 撑破 .wizard-step 的内容宽度。 */
+.wizard-step cds-input,
+.wizard-step cds-input > input,
+.wizard-step cds-textarea,
+.wizard-step cds-textarea > textarea {
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 .review-section h3 {
   margin: 0 0 8px;

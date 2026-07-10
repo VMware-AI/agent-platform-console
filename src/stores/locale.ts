@@ -1020,8 +1020,8 @@ export const STRINGS: Dict = {
   'virtualKey.filter.clear': { zh: '清除过滤', en: 'Clear filter' },
   'virtualKey.filter.all': { zh: '全部', en: 'All' },
   'virtualKey.filter.namePlaceholder': { zh: '输入令牌名称', en: 'Enter key name' },
-  'virtualKey.filter.agentPlaceholder': { zh: '输入智能体 ID', en: 'Enter agent ID' },
-  'virtualKey.filter.policyPlaceholder': { zh: '输入策略名称', en: 'Enter policy name' },
+  'virtualKey.filter.agentPlaceholder': { zh: '输入智能体名称', en: 'Enter agent name' },
+  'virtualKey.filter.modelsPlaceholder': { zh: '输入模型名称', en: 'Enter model name' },
   'virtualKey.filter.datePlaceholder': { zh: '选择日期', en: 'Choose a date' },
   'virtualKey.filter.status.ALL': { zh: '全部状态', en: 'All statuses' },
   'virtualKey.filter.status.ENABLED': { zh: '启用', en: 'Enabled' },
@@ -1032,12 +1032,28 @@ export const STRINGS: Dict = {
   'virtualKey.action.copyKey': { zh: '复制令牌', en: 'Copy Key' },
   'virtualKey.action.copyAgent': { zh: '复制智能体 ID', en: 'Copy Agent ID' },
   'virtualKey.action.copyMasked': { zh: '复制令牌掩码', en: 'Copy masked key' },
-  'virtualKey.action.more': { zh: '更多操作', en: 'More Actions' },
   'virtualKey.action.edit': { zh: '编辑', en: 'Edit' },
   'virtualKey.action.enable': { zh: '启用', en: 'Enable' },
   'virtualKey.action.disable': { zh: '禁用', en: 'Disable' },
   'virtualKey.action.delete': { zh: '删除', en: 'Delete' },
-  'virtualKey.action.regenerate': { zh: '重新生成', en: 'Regenerate' },
+  // View row action — opens a read-only modal with the key's full
+  // configuration (model allowlist, budget, rate limits, allowed routes,
+  // tags, etc). Non-destructive; available to any operator so they can
+  // audit a key without needing edit / clone permissions.
+  'virtualKey.action.view': { zh: '查看', en: 'View' },
+  // Clone row action — re-opens the issue form pre-populated from this
+  // row's governance fields. Non-destructive; the source key stays put.
+  // Source-side label is intentionally brief; the modal title carries
+  // the "克隆令牌" wording.
+  'virtualKey.action.clone': { zh: '克隆', en: 'Clone' },
+  // Admin-only ops shortcut on the toolbar — opens the bulk-purge
+  // confirm dialog. "清理 revoked key" reads naturally on a CN
+  // console; "Purge revoked keys" on the EN side matches the
+  // backend mutation's verb (purgeRevokedVirtualKeys).
+  'virtualKey.action.purge': {
+    zh: '清理密钥',
+    en: 'Purge keys',
+  },
   'virtualKey.batch.enable': { zh: '批量启用', en: 'Enable Selected' },
   'virtualKey.batch.disable': { zh: '批量禁用', en: 'Disable Selected' },
   'virtualKey.batch.delete': { zh: '批量删除', en: 'Delete Selected' },
@@ -1045,15 +1061,99 @@ export const STRINGS: Dict = {
   'virtualKey.col.selectAll': { zh: '选择当前页全部令牌', en: 'Select all keys on this page' },
   'virtualKey.col.selectKey': { zh: '选择令牌 {name}', en: 'Select key {name}' },
   'virtualKey.col.name': { zh: '名称', en: 'Name' },
-  'virtualKey.col.agent': { zh: '绑定的智能体 ID', en: 'Bound Agent ID' },
+  'virtualKey.col.agent': { zh: '绑定的智能体', en: 'Bound Agent' },
+  'virtualKey.col.modelGateway': { zh: '所属模型网关', en: 'Gateway' },
+  'virtualKey.col.models': { zh: '可调用模型', en: 'Allowed Models' },
+  // +N overflow affordance shown after the first 3 model badges in a row.
+  // `modelsMore` is the visible label (already includes the `+` glyph), used
+  // as `title` on the button so hover reveals "再显示 N 个" hint without
+  // needing the popover open. `modelsMoreAria` is the longer screen-reader
+  // label because the visible `+N` alone reads ambiguously to AT.
+  'virtualKey.col.modelsMore': { zh: '再显示 {count} 个', en: '+{count} more' },
+  'virtualKey.col.modelsMoreAria': { zh: '展开剩余 {count} 个模型', en: 'Show remaining {count} models' },
+  'virtualKey.col.maskedKey': { zh: '密钥', en: 'Key' },
   'virtualKey.col.status': { zh: '状态', en: 'Status' },
-  'virtualKey.col.createdAt': { zh: '创建时间', en: 'Created At' },
   'virtualKey.col.expiresAt': { zh: '过期时间', en: 'Expires At' },
   'virtualKey.col.progress': { zh: '消费进度', en: 'Consumption' },
+  'virtualKey.col.timeInfo': { zh: '时间信息', en: 'Time Info' },
+  // Sub-labels for the time-info cells + drawer rows. Kept under the same
+  // `virtualKey.col.*` namespace since they render next to their values
+  // just like a normal column label, but they no longer address a real
+  // <cds-grid-column> (the three former columns were collapsed into
+  // TIME_INFO).
+  'virtualKey.col.lastActiveAt': { zh: '最近活动', en: 'Last Active' },
+  'virtualKey.col.createdAt': { zh: '创建', en: 'Created' },
+  'virtualKey.col.updatedAt': { zh: '更新', en: 'Updated' },
+  // Inline affordance on the TIME_INFO cell that opens the per-key
+  // detail drawer with all three timestamps. Compact two-character
+  // label so it fits the 12% column without forcing the row's height
+  // to grow.
+  'virtualKey.col.timeInfoMore': { zh: '更多', en: 'More' },
   'virtualKey.col.actions': { zh: '操作', en: 'Actions' },
   'virtualKey.status.enabled': { zh: '启用', en: 'Enabled' },
   'virtualKey.status.disabled': { zh: '禁用', en: 'Disabled' },
   'virtualKey.empty': { zh: '暂无密钥', en: 'No API keys' },
+  // Time-info detail (drawer opened by clicking the 时间信息 column cell).
+  // Labels reuse the existing `virtualKey.col.*` strings where the
+  // wording matches (createdAt / lastActiveAt); only new keys are added
+  // here — drawer close button + the never-yet-active placeholder.
+  'virtualKey.detail.neverActive': { zh: '暂无活动', en: 'Never active' },
+  'virtualKey.detail.close': { zh: '关闭', en: 'Close' },
+  // View modal (read-only) — opened by the row's "查看" action. The
+  // modal title mirrors the create / clone form's title pattern
+  // (action · name), so the operator can tell at a glance which key
+  // they're inspecting when multiple are open across navigation.
+  'virtualKey.view.title': { zh: '查看密钥', en: 'View API Key' },
+  'virtualKey.view.close': { zh: '关闭', en: 'Close' },
+  // Subtitle shown beneath the modal title in the header block.
+  // Generic read-only cue; the section cards below carry per-section
+  // headings so the subtitle stays section-agnostic.
+  'virtualKey.view.subtitle': {
+    zh: '只读模式 — 以下为该密钥的当前配置参数',
+    en: 'Read-only view of this key’s current configuration',
+  },
+  // Section labels used inside the view modal. Grouped under
+  // `virtualKey.view.section.*` so the modal can pick from a flat
+  // namespace and reuse the strings if a section is hidden.
+  'virtualKey.view.section.basic': { zh: '基本信息', en: 'Basic' },
+  'virtualKey.view.section.governance': { zh: '治理参数', en: 'Governance' },
+  'virtualKey.view.section.rateLimit': { zh: '速率限制', en: 'Rate Limits' },
+  'virtualKey.view.section.routing': { zh: '路由与标签', en: 'Routing & Tags' },
+  'virtualKey.view.field.name': { zh: '名称', en: 'Name' },
+  'virtualKey.view.field.status': { zh: '状态', en: 'Status' },
+  'virtualKey.view.field.keyType': { zh: '密钥类型', en: 'Key Type' },
+  'virtualKey.view.field.maskedKey': { zh: '令牌掩码', en: 'Masked Key' },
+  'virtualKey.view.field.agent': { zh: '绑定的智能体', en: 'Bound Agent' },
+  'virtualKey.view.field.modelGateway': { zh: '所属模型网关', en: 'Gateway' },
+  // AllowedModels deliberately omitted — the row's MODELS cell + the
+  // +N overflow popover cover this. Putting the list inside the modal
+  // too would just duplicate the table view.
+  'virtualKey.view.field.allowedRoutes': { zh: '可调用接口', en: 'Allowed Endpoints' },
+  // Default sentinel for fields where "no value" semantically means
+  // "unrestricted" rather than "missing" — used for allowedRoutes /
+  // allowedModels / tags where a missing array means the key has no
+  // restriction list.
+  'virtualKey.view.unrestricted': { zh: '全部', en: 'All' },
+  'virtualKey.view.field.tags': { zh: '标签', en: 'Tags' },
+  'virtualKey.view.field.expiresAt': { zh: '过期时间', en: 'Expires At' },
+  // Budget cap renders as a single "spent / cap (period)" string —
+  // 见 VirtualKeyViewModal.vue `budgetLine`. Spent and budgetDuration
+  // don't get individual keys; they're formatted together to keep
+  // the governance section visually tight.
+  'virtualKey.view.field.maxBudget': { zh: '消费上限', en: 'Spend Cap' },
+  'virtualKey.view.field.maxParallelRequests': { zh: '最大并发', en: 'Max Parallel' },
+  'virtualKey.view.field.rpmLimit': { zh: 'RPM 限制', en: 'RPM Limit' },
+  'virtualKey.view.field.tpmLimit': { zh: 'TPM 限制', en: 'TPM Limit' },
+  'virtualKey.view.field.rpmLimitType': { zh: 'RPM 模式', en: 'RPM Mode' },
+  'virtualKey.view.field.tpmLimitType': { zh: 'TPM 模式', en: 'TPM Mode' },
+  'virtualKey.view.field.autoRotate': { zh: '自动轮换', en: 'Auto Rotate' },
+  'virtualKey.view.field.rotationInterval': { zh: '轮换周期', en: 'Rotation Interval' },
+  'virtualKey.view.field.lastActiveAt': { zh: '最近活动', en: 'Last Active' },
+  'virtualKey.view.field.createdAt': { zh: '创建时间', en: 'Created' },
+  'virtualKey.view.field.updatedAt': { zh: '更新时间', en: 'Updated' },
+  'virtualKey.view.emptyValue': { zh: '—', en: '—' },
+  'virtualKey.view.boolean.enabled': { zh: '是', en: 'Yes' },
+  'virtualKey.view.boolean.disabled': { zh: '否', en: 'No' },
   'virtualKey.selected': { zh: '已选 {count} 项', en: '{count} selected' },
   'virtualKey.pagination.pageSize': { zh: '每页条数', en: 'Per page' },
   'virtualKey.pagination.summary': {
@@ -1062,20 +1162,23 @@ export const STRINGS: Dict = {
   },
   'virtualKey.pagination.label': { zh: '令牌分页', en: 'Virtual key pagination' },
   'virtualKey.form.createTitle': { zh: '颁发密钥', en: 'New API Key' },
+  // Clone-modal title. Rendered when the form opens with mode='clone';
+  // sits alongside createTitle (VirtualKeyFormModal picks one based on
+  // the formMode passed by the parent).
+  'virtualKey.form.cloneTitle': { zh: '克隆令牌', en: 'Clone Virtual Key' },
+  // Inline asterisk rendered next to labels of backend-required
+  // fields (密钥名称 / 所属组织 / 模型网关 / 可调用模型 — see
+  // VirtualKeyFormModal template). Mirrors the
+  // `gateway.form.requiredMark` convention so all create-flow
+  // modals in the app share the same red-star UX.
+  'virtualKey.form.requiredMark': { zh: '*', en: '*' },
   'virtualKey.form.name': { zh: '密钥名称', en: 'Key Name' },
   'virtualKey.form.namePlaceholder': {
     zh: '例如 OpenClaw_Robot_Key',
     en: 'e.g. OpenClaw_Robot_Key',
   },
-  'virtualKey.form.agent': { zh: '绑定的智能体', en: 'Bound Agent' },
-  'virtualKey.form.expiresAt': { zh: '过期日期', en: 'Expiration Date' },
   'virtualKey.form.cancel': { zh: '取消', en: 'Cancel' },
-  'virtualKey.form.submit': { zh: '保存', en: 'Save' },
-  'virtualKey.form.organization': { zh: '组织 ID', en: 'Organization ID' },
-  'virtualKey.form.organizationPlaceholder': {
-    zh: '请输入组织 ID',
-    en: 'Enter organization ID',
-  },
+  'virtualKey.form.submit': { zh: '颁发', en: 'Issue' },
   'virtualKey.form.gateway': { zh: '模型网关', en: 'Model Gateway' },
   'virtualKey.form.gatewayPlaceholder': {
     zh: '请选择模型网关',
@@ -1085,23 +1188,46 @@ export const STRINGS: Dict = {
     zh: '请选择模型网关',
     en: 'Please select a model gateway',
   },
-  'virtualKey.form.duration': { zh: '生效时长', en: 'Duration' },
+  'virtualKey.form.duration': { zh: '有效时长', en: 'Duration' },
   'virtualKey.form.durationPlaceholder': {
     zh: '例如 30d',
     en: 'e.g. 30d',
   },
   'virtualKey.form.durationHint': {
-    zh: '与 expiresAt 二选一；同时设置时以 expiresAt 为准',
-    en: 'Either duration or expiresAt; expiresAt wins when both are set',
+    zh: '留空表示永不过期,例如 30d',
+    en: 'Leave empty for no expiry, e.g. 30d',
   },
-  'virtualKey.form.agentNone': { zh: '（暂不绑定）', en: '(no agent)' },
+  'virtualKey.form.durationUnit': { zh: '单位', en: 'Unit' },
+  'virtualKey.form.durationUnitHour': { zh: '小时 (h)', en: 'Hour (h)' },
+  'virtualKey.form.durationUnitDay': { zh: '天 (d)', en: 'Day (d)' },
+  'virtualKey.form.durationUnitWeek': { zh: '周 (w)', en: 'Week (w)' },
+  'virtualKey.form.durationUnitMonth': { zh: '月 (m)', en: 'Month (m)' },
+  'virtualKey.form.rotationIntervalUnit': { zh: '单位', en: 'Unit' },
+  'virtualKey.form.rotationIntervalUnitSecond': {
+    zh: '秒 (s)',
+    en: 'Second (s)',
+  },
+  'virtualKey.form.rotationIntervalUnitMinute': {
+    zh: '分钟 (m)',
+    en: 'Minute (m)',
+  },
+  'virtualKey.form.rotationIntervalUnitHour': { zh: '小时 (h)', en: 'Hour (h)' },
+  'virtualKey.form.rotationIntervalUnitDay': { zh: '天 (d)', en: 'Day (d)' },
   'virtualKey.form.nameRequired': {
     zh: '名称长度应为 2–64 个字符',
     en: 'Name must be 2–64 characters',
   },
-  'virtualKey.form.orgRequired': {
-    zh: '请输入组织 ID',
-    en: 'Please enter an organization ID',
+  // Live duplicate hint shown next to the name input — surfaces a
+  // backend partial-unique-index hit before the user even clicks
+  // submit. Sits below the input as a `warning` status, not `error`,
+  // because the modal's `formValid` already gates submission.
+  'virtualKey.form.nameDuplicate': {
+    zh: '该名称已被使用,请换一个',
+    en: 'Name already in use — pick another',
+  },
+  'virtualKey.form.modelsRequired': {
+    zh: '请至少选择一个可调用模型',
+    en: 'Please select at least one model.',
   },
   'virtualKey.form.modelsHint': {
     zh: '选择网关后加载可用模型',
@@ -1117,7 +1243,99 @@ export const STRINGS: Dict = {
     zh: '确定要删除选中的 {count} 个密钥吗？此操作无法撤销。',
     en: 'Delete the selected {count} keys? This action cannot be undone.',
   },
+  // Purge-path confirm. Title is deliberately *not* day-specific —
+// the operator can edit the cutoff in the dialog's number input
+// before confirming, so we don't bake a value into the title
+// (otherwise a stale "确认清理 90 天前..." would mislead if the
+// operator went on to type 180). Body similarly avoids naming the
+// days; the number input itself is the visible source of truth for
+// the cutoff at confirm time. CN keeps the day-agnostic wording; EN
+// retains "revoked keys" since it's the natural English term.
+'virtualKey.confirm.purgeTitle': {
+    zh: '确认清理已吊销的令牌',
+    en: 'Purge revoked keys',
+  },
+  'virtualKey.confirm.purgeBody': {
+    zh: '将永久删除输入天数之前所有已吊销的令牌,此操作不可恢复。',
+    en: 'Permanently delete every revoked key updated more than the entered number of days ago. This action cannot be undone.',
+  },
+  // Numeric-input labels for the purge confirm dialog. Surfaced as a
+  // separate key (not interpolated into the title/body) so the input
+  // field can render in its own slot without forcing the body text to
+  // mention it twice.
+  'virtualKey.confirm.purgeDaysLabel': {
+    zh: '截止天数(天)',
+    en: 'Cutoff (days)',
+  },
+  'virtualKey.confirm.purgeDaysPlaceholder': {
+    zh: '例如 90',
+    en: 'e.g. 90',
+  },
+  // Type-to-confirm prompt for single-row delete. The operator must
+  // type the key's name exactly before the confirm button enables.
+  // Multi-row deletion skips this step (no single label) and falls
+  // back to a plain cancel/confirm dialog.
+  'virtualKey.confirm.deleteInputLabel': { zh: '密钥名称', en: 'Key Name' },
+  'virtualKey.confirm.deleteInputPlaceholder': {
+    zh: '输入密钥名称以确认',
+    en: 'Type the key name to confirm',
+  },
+  // Type-to-confirm prompt for batch delete. We use a fixed sentinel
+  // `DELETE` (no localization) so the operator always types the same
+  // characters regardless of UI language, and we don't have to fight
+  // pluralization in the placeholder string. The label explains the
+  // sentinel in the operator's UI language.
+  'virtualKey.confirm.batchDeleteInputLabel': {
+    zh: '输入 DELETE 以确认',
+    en: 'Type DELETE to confirm',
+  },
+  'virtualKey.confirm.batchDeleteInputPlaceholder': {
+    zh: '请输入 DELETE（大写）',
+    en: 'Type DELETE (uppercase)',
+  },
+  'virtualKey.confirm.batchDeleteSentinel': { zh: 'DELETE', en: 'DELETE' },
+  // Enable / disable confirm prompts. Single-row wording names the key;
+  // batch wording names the count. Action phrasing tracks the target
+  // state (enable vs disable) so the dialog reads naturally in both
+  // directions.
+  'virtualKey.confirm.enableTitle': { zh: '确认启用密钥', en: 'Enable API Key' },
+  'virtualKey.confirm.enableBody': {
+    zh: '确定要启用密钥“{name}”吗？',
+    en: 'Enable key “{name}”?',
+  },
+  'virtualKey.confirm.disableTitle': { zh: '确认禁用密钥', en: 'Disable API Key' },
+  'virtualKey.confirm.disableBody': {
+    zh: '确定要禁用密钥“{name}”吗？已发出的密钥将立即停止接受请求。',
+    en: 'Disable key “{name}”? Issued credentials will stop accepting requests immediately.',
+  },
+  'virtualKey.confirm.batchEnableTitle': { zh: '确认批量启用', en: 'Enable Selected Keys' },
+  'virtualKey.confirm.batchEnableBody': {
+    zh: '确定要启用选中的 {count} 个密钥吗？',
+    en: 'Enable the selected {count} keys?',
+  },
+  'virtualKey.confirm.batchDisableTitle': { zh: '确认批量禁用', en: 'Disable Selected Keys' },
+  'virtualKey.confirm.batchDisableBody': {
+    zh: '确定要禁用选中的 {count} 个密钥吗？已发出的密钥将立即停止接受请求。',
+    en: 'Disable the selected {count} keys? Issued credentials will stop accepting requests immediately.',
+  },
   'virtualKey.toast.created': { zh: '令牌已创建', en: 'Virtual key created' },
+  // Clone-path toast — surfaces both the source label and the freshly
+  // typed target label so the operator can confirm they didn't paste
+  // into the wrong row. {source} / {target} are substituted by
+  // VirtualKeyView's openClone handler via .replace() — see
+  // ModelGatewayView for the same idiom.
+  'virtualKey.toast.clonedFrom': {
+    zh: '已基于「{source}」克隆出新令牌「{target}」',
+    en: 'Cloned "{source}" into "{target}"',
+  },
+  // Generic clone failure surface — backend errors include things
+  // like "models not available on modelGateway" when the source
+  // referenced models the chosen gateway no longer serves. {reason}
+  // is filled from graphqlErrorMessage().
+  'virtualKey.toast.cloneFailed': {
+    zh: '克隆失败：{reason}',
+    en: 'Clone failed: {reason}',
+  },
   'virtualKey.toast.updated': { zh: '令牌已更新', en: 'Virtual key updated' },
   'virtualKey.toast.enabled': {
     zh: '已启用 {count} 个令牌',
@@ -1131,6 +1349,18 @@ export const STRINGS: Dict = {
     zh: '已删除 {count} 个令牌',
     en: 'Deleted {count} virtual keys',
   },
+  // Purge-path toasts — `{count}` is the number of rows the resolver
+  // physically deleted (NOT the number of revoked keys the operator
+  // saw, which could be different if some rows are newer than the
+  // cutoff).
+  'virtualKey.toast.purged': {
+    zh: '已清除 {count} 条已吊销的令牌',
+    en: 'Purged {count} revoked keys',
+  },
+  'virtualKey.toast.purgeFailed': {
+    zh: '清理失败',
+    en: 'Purge failed',
+  },
   'virtualKey.toast.maskedCopied': { zh: '令牌掩码已复制', en: 'Masked key copied' },
   'virtualKey.toast.keyCopied': { zh: '令牌已复制到剪贴板', en: 'Key copied to clipboard' },
   'virtualKey.toast.agentCopied': { zh: '智能体 ID 已复制', en: 'Agent ID copied' },
@@ -1140,33 +1370,87 @@ export const STRINGS: Dict = {
   'virtualKey.toast.saveFailed': { zh: '保存失败', en: 'Failed to save' },
   'virtualKey.toast.issueFailed': { zh: '签发令牌失败', en: 'Failed to issue key' },
   'virtualKey.toast.revokeFailed': { zh: '吊销令牌失败', en: 'Failed to revoke key' },
-  'virtualKey.toast.regenerated': { zh: '令牌已重新生成', en: 'Key secret regenerated' },
-  'virtualKey.toast.regenerateFailed': { zh: '重新生成令牌失败', en: 'Failed to regenerate key' },
   'virtualKey.status.revoked': { zh: '已吊销', en: 'Revoked' },
-  'virtualKey.form.expiresHint': { zh: '留空表示永不过期', en: 'Leave empty for no expiry' },
-  'virtualKey.form.maxBudget': { zh: '消费上限', en: 'Max Budget' },
-  'virtualKey.form.models': { zh: '可调用模型', en: 'Models' },
+  'virtualKey.form.maxBudget': { zh: '最大预算（maxBudget）', en: 'Max Budget (maxBudget)' },
+  'virtualKey.form.budgetControl': { zh: '预算控制', en: 'Budget Control' },
+  // Master toggle that gates the four TPM/RPM fields below. Mirrors the
+  // design pattern used by `budgetControl` (also a Toggle → conditions
+  // the wire payload). When OFF, the resolver applies LiteLLM's no-cap
+  // default; when ON, the four child fields become editable.
+  'virtualKey.form.rateLimitControl': { zh: '设置限额', en: 'Rate Limits' },
+  'virtualKey.form.models': { zh: '选择可调用模型', en: 'Select Models' },
   'virtualKey.form.modelsEmpty': {
     zh: '暂无可用模型，请先选择网关',
     en: 'No available models yet — select a gateway first',
   },
-  'virtualKey.form.advanced': { zh: '高级风控', en: 'Advanced Risk Control' },
-  'virtualKey.form.tpmLimit': { zh: 'TPM 上限', en: 'TPM Limit' },
-  'virtualKey.form.rpmLimit': { zh: 'RPM 上限', en: 'RPM Limit' },
+  'virtualKey.form.modelsLoading': {
+    zh: '正在加载可用模型…',
+    en: 'Loading available models…',
+  },
+  'virtualKey.form.modelsEmptyAfterPick': {
+    zh: '该网关暂无可用模型',
+    en: 'This gateway has no available models',
+  },
+  'virtualKey.form.advanced': { zh: '高级参数', en: 'Advanced' },
+  'virtualKey.form.tpmLimit': { zh: '每分钟 Tokens（tpm）', en: 'Tokens per Minute (tpm)' },
+  'virtualKey.form.tpmLimitType': { zh: 'TPM 限流模式', en: 'TPM Limit Type' },
+  'virtualKey.form.rpmLimit': { zh: '每分钟 请求（rpm）', en: 'Requests per Minute (rpm)' },
+  'virtualKey.form.rpmLimitType': { zh: 'RPM 限流模式', en: 'RPM Limit Type' },
+  // Shared option titles + descriptions for the rate-limit-type radio
+  // picker (LiteLLM design doc §4.2). Each picker (TPM / RPM) renders
+  // the same three options; only the legend label differs above.
+  'virtualKey.form.rateLimitType.best_effort_throughput.title': {
+    zh: '默认',
+    en: 'Default',
+  },
+  'virtualKey.form.rateLimitType.best_effort_throughput.desc': {
+    zh: '尽力调度,即使超出 TPM 也不报错(超限检查在请求时按 Team/Key 限额执行)。',
+    en:
+      'Best effort throughput - no error if we\'re overallocating tpm ' +
+      '(Team/Key Limits checked at runtime).',
+  },
+  'virtualKey.form.rateLimitType.guaranteed_throughput.title': {
+    zh: '保证吞吐',
+    en: 'Guaranteed throughput',
+  },
+  'virtualKey.form.rateLimitType.guaranteed_throughput.desc': {
+    zh: '保证吞吐,超出 TPM 时报错(同时检查模型自身限额)。',
+    en:
+      'Guaranteed throughput - raise an error if we\'re overallocating ' +
+      'tpm (also checks model-specific limits).',
+  },
+  'virtualKey.form.rateLimitType.dynamic.title': {
+    zh: '动态',
+    en: 'Dynamic',
+  },
+  'virtualKey.form.rateLimitType.dynamic.desc': {
+    zh: '在 429 错误未出现时,可动态超出已设置的 TPM 限额(若设了 TPM)。',
+    en:
+      'If the key has a set TPM (e.g. 2 TPM) and there are no 429 errors, ' +
+      'it can dynamically exceed the limit.',
+  },
   'virtualKey.form.maxParallelRequests': { zh: '最大并发请求', en: 'Max Parallel Requests' },
-  'virtualKey.form.budgetDuration': { zh: '预算周期', en: 'Budget Duration' },
-  'virtualKey.form.budgetDurationPlaceholder': { zh: '例如 30d / 1mo', en: 'e.g. 30d / 1mo' },
-  'virtualKey.form.tags': { zh: 'Tags (逗号分隔)', en: 'Tags (comma-separated)' },
-  'virtualKey.form.tagsPlaceholder': { zh: '例如 prod,priority-high', en: 'e.g. prod,priority-high' },
+  'virtualKey.form.budgetDuration': { zh: '预算周期（budgetDuration）', en: 'Budget Duration (budgetDuration)' },
+  'virtualKey.form.budgetDurationPlaceholder': { zh: '例如 1', en: 'e.g. 1' },
+  'virtualKey.form.budgetDurationUnit': { zh: '单位', en: 'Unit' },
+  'virtualKey.form.budgetDurationUnitSecond': { zh: '秒 (s)', en: 'Second (s)' },
+  'virtualKey.form.budgetDurationUnitMinute': { zh: '分钟 (m)', en: 'Minute (m)' },
+  'virtualKey.form.budgetDurationUnitHour': { zh: '小时 (h)', en: 'Hour (h)' },
+  'virtualKey.form.budgetDurationUnitDay': { zh: '天 (d)', en: 'Day (d)' },
+  'virtualKey.form.budgetDurationUnitMonth': { zh: '月 (mo)', en: 'Month (mo)' },
+  'virtualKey.form.tags': { zh: '模型标签', en: 'Tags' },
+  'virtualKey.form.tagsPlaceholder': {
+    zh: '逗号分隔,例如 prod,priority-high',
+    en: 'comma-separated, e.g. prod,priority-high',
+  },
   'virtualKey.form.rotationInterval': { zh: '自动轮换周期', en: 'Rotation Interval' },
-  'virtualKey.form.rotationIntervalPlaceholder': { zh: '例如 30d', en: 'e.g. 30d' },
-  'virtualKey.form.blocked': { zh: '一键锁定', en: 'Lock this key' },
+  'virtualKey.form.rotationIntervalPlaceholder': { zh: '例如 12h', en: 'e.g. 12h' },
   'virtualKey.form.autoRotate': { zh: '自动轮换', en: 'Auto Rotate' },
   'virtualKey.form.allowedRoutes': { zh: '接口权限', en: 'Route Permissions' },
-  'virtualKey.form.allowAllRoutes': { zh: '允许所有路由', en: 'Allow All Routes' },
+  'virtualKey.form.allowAllRoutes': { zh: '允许所有接口', en: 'Allow All APIs' },
   'virtualKey.form.allowedRoutesError': {
-    zh: '至少选择一个接口或开启"允许所有路由"',
-    en: 'Select at least one route or enable "Allow All Routes"',
+    zh: '至少选择一个接口或开启"允许所有接口"',
+    en: 'Select at least one route or enable "Allow All APIs"',
   },
   'virtualKey.allowedRoutes.CHAT': { zh: '对话 /v1/chat/completions', en: 'Chat /v1/chat/completions' },
   'virtualKey.allowedRoutes.EMBEDDINGS': {
@@ -1196,10 +1480,11 @@ export const STRINGS: Dict = {
   'supplier.sort': { zh: '排序：{column}', en: 'Sort {column}' },
   'supplier.filter': { zh: '过滤：{column}', en: 'Filter {column}' },
   'supplier.filter.clear': { zh: '清除过滤', en: 'Clear filter' },
-  'supplier.filter.namePlaceholder': { zh: '输入策略名称', en: 'Enter policy name' },
+  'supplier.filter.namePlaceholder': { zh: '输入模型名称', en: 'Enter model name' },
   'supplier.filter.status.ALL': { zh: '全部状态', en: 'All statuses' },
   'supplier.filter.status.ENABLED': { zh: '启用', en: 'Enabled' },
   'supplier.filter.status.DISABLED': { zh: '未启用', en: 'Disabled' },
+  'supplier.filter.gateway.ALL': { zh: '全部模型网关', en: 'All gateways' },
   'supplier.action.create': { zh: '新建模型', en: 'New Model' },
   'supplier.action.batch': { zh: '批量操作', en: 'Batch Actions' },
   'supplier.action.refresh': { zh: '刷新', en: 'Refresh' },
@@ -1253,16 +1538,6 @@ export const STRINGS: Dict = {
   'supplier.type.TOKEN': { zh: 'Token 限制', en: 'Token Limit' },
   'supplier.type.REQUEST': { zh: '请求数限制', en: 'Request Limit' },
   'supplier.type.COMBINED': { zh: '组合限制', en: 'Combined Limit' },
-  'supplier.confirm.deleteBody': {
-    zh: '确定要删除策略“{name}”吗？此操作无法撤销。',
-    en: 'Delete policy “{name}”? This action cannot be undone.',
-  },
-  'supplier.confirm.batchDeleteTitle': { zh: '确认批量删除', en: 'Delete Selected Policies' },
-  'supplier.toast.apply': {
-    zh: '正在配置“{name}”的应用范围',
-    en: 'Configuring targets for “{name}”',
-  },
-  'supplier.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
   // ProviderModel-specific (供应商模型) — reuses the supplier.* prefix but
   // everything below the model.* separator is the new form/column copy
   // introduced by the LiteLLM design doc §2.2 refactor. SupplierModelView
@@ -1385,6 +1660,27 @@ export const STRINGS: Dict = {
   'supplier.model.form.review.limits': { zh: '限流', en: 'Limits' },
   'supplier.model.form.review.cost': { zh: '单价(/token)', en: 'Cost (per token)' },
   'supplier.model.form.review.unset': { zh: '(未设置)', en: '(not set)' },
+  // API Key 在 review 步不展示明文,只展示轮换状态。创建模式:已设置新密钥;
+  // 编辑模式:用户清空则保持原值(rotate=false),否则将轮换为新值(rotate=true)。
+  'supplier.model.form.review.apiKey': { zh: 'API Key', en: 'API Key' },
+  'supplier.model.form.review.apiKeySet': {
+    zh: '已设置新密钥',
+    en: 'New key will be set',
+  },
+  'supplier.model.form.review.apiKeyKeep': {
+    zh: '保持原密钥',
+    en: 'Current key kept',
+  },
+  'supplier.model.form.review.apiKeyRotate': {
+    zh: '将轮换为新密钥',
+    en: 'New key will replace current',
+  },
+  // 模型模式在 review 步展示:不指定 / 已知值 / 自定义值。
+  'supplier.model.form.review.mode': { zh: '模型模式', en: 'Model mode' },
+  // 三个独立 toggle(限流 / 单价 已是合并行,这里只补剩下的三个):
+  // 透传模式 / 使用 chat completions 接口 / 合并 reasoning 到 choices。
+  'supplier.model.form.review.toggleOn': { zh: '开', en: 'On' },
+  'supplier.model.form.review.toggleOff': { zh: '关', en: 'Off' },
   'supplier.form.nameLockedHint': {
     zh: '编辑时名称不可更改',
     en: 'Name cannot be changed when editing',

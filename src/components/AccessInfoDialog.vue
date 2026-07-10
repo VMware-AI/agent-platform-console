@@ -148,6 +148,7 @@ async function copyAll() {
                   v-if="apiKeyName"
                   shape="copy"
                   title="复制密钥名称"
+                  aria-label="复制密钥名称"
                   @click="copyText(apiKeyName, '密钥名称')"
                 ></cds-button-action>
               </div>
@@ -180,8 +181,9 @@ async function copyAll() {
                 <cds-button-action
                   v-if="username"
                   shape="copy"
-                  title="复制OS账户"
-                  @click="copyText(username, 'OS账户')"
+                  title="复制运行账户"
+                  aria-label="复制运行账户"
+                  @click="copyText(username, '运行账户')"
                 ></cds-button-action>
               </div>
             </div>
@@ -195,12 +197,14 @@ async function copyAll() {
                   v-if="true"
                   :shape="showPassword ? 'eye-hide' : 'eye'"
                   :title="showPassword ? '隐藏密码' : '显示密码'"
+                  :aria-label="showPassword ? '隐藏密码' : '显示密码'"
                   @click="showPassword = !showPassword"
                 ></cds-button-action>
                 <cds-button-action
                   v-if="true"
                   shape="copy"
                   title="复制密码"
+                  aria-label="复制密码"
                   @click="copyText(passwordHint, '登录密码')"
                 ></cds-button-action>
               </div>
@@ -215,6 +219,7 @@ async function copyAll() {
                   v-if="sshCmd"
                   shape="copy"
                   title="复制 SSH 命令"
+                  aria-label="复制 SSH 命令"
                   @click="copyText(sshCmd, 'SSH 连接')"
                 ></cds-button-action>
               </div>
@@ -229,6 +234,7 @@ async function copyAll() {
                   v-if="ip"
                   shape="copy"
                   title="复制 IP 地址"
+                  aria-label="复制 IP 地址"
                   @click="copyText(ip, 'IP 地址')"
                 ></cds-button-action>
               </div>

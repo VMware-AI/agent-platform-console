@@ -5,10 +5,19 @@
  * view (e.g. the Users tab's delete flow and the Model Gateway view's
  * delete flow).
  *
- * Supports an optional "type-to-confirm" mode used for irreversible
- * destructive actions (e.g. deleting a user). When `expectedInput` is
- * non-empty, the dialog renders an input field and the confirm button stays
- * disabled until the trimmed value matches `expectedInput` exactly.
+ * Supports two opt-in input modes:
+ *   1. "type-to-confirm" (`expectedInput`) — for irreversible destructive
+ *      actions (e.g. deleting a user). Confirm button stays disabled until
+ *      the trimmed input matches `expectedInput` exactly.
+ *   2. "numeric input" (`numericInput`) — for actions that need a value
+ *      from the operator at confirm time, e.g. purge "delete keys older
+ *      than N days". Confirm button is disabled until the trimmed value
+ *      is a positive integer; the integer is emitted on `confirm` as the
+ *      second tuple value (`[confirmed, numericValue]`).
+ *
+ * The two modes are mutually exclusive at the call site; this component
+ * prefers `numericInput` when both are set (the dialog is data-driven —
+ * picking the input that requires the most thinking wins).
  */
 import { computed, ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
@@ -41,39 +50,87 @@ const props = defineProps<{
    * `open` transition from false → true.
    */
   expectedInput?: string
+  /**
+   * Numeric-input mode. When provided, the dialog renders a `<input
+   * type="number">` instead of (not in addition to) the type-to-confirm
+   * field. The confirm button is disabled until the trimmed value is a
+   * positive integer within `[min, max]`; the integer is emitted on
+   * `confirm` as the second tuple value of the event payload so the
+   * caller can use it directly (e.g. as the `beforeTime` offset for
+   * purgeRevokedVirtualKeys).
+   */
+  numericInput?: {
+    label: string
+    placeholder?: string
+    default?: number
+    min?: number
+    max?: number
+  }
 }>()
 
 const emit = defineEmits<{
-  (e: 'confirm'): void
+  (e: 'confirm', numericValue?: number): void
   (e: 'close'): void
 }>()
 
 const locale = useLocaleStore()
 
 const typedInput = ref('')
+// Numeric-input state. Initialised to `numericInput.default` on every
+// open so the operator sees the suggested value up front; cleared on
+// close so the next open gets the default again (avoids a stale "30"
+// from a previous attempt).
+const typedNumeric = ref<number | null>(null)
 
 /* Reset on every (re-)open so the user can't bypass by reusing a previous
    match left in the DOM. */
 watch(
   () => props.open,
   (o) => {
-    if (o) typedInput.value = ''
+    if (o) {
+      typedInput.value = ''
+      typedNumeric.value = props.numericInput?.default ?? null
+    }
   },
 )
 
 const confirmDisabled = computed(() => {
-  if (!props.expectedInput) return false
-  return typedInput.value.trim() !== props.expectedInput
+  if (props.numericInput) {
+    const n = typedNumeric.value
+    if (n == null || !Number.isFinite(n)) return true
+    const { min, max } = props.numericInput
+    if (typeof min === 'number' && n < min) return true
+    if (typeof max === 'number' && n > max) return true
+    return false
+  }
+  if (props.expectedInput) {
+    return typedInput.value.trim() !== props.expectedInput
+  }
+  return false
 })
 
 function close() {
   emit('close')
 }
 function confirm() {
-  emit('confirm')
+  emit('confirm', typedNumeric.value ?? undefined)
 }
 function onBackdropClick(e: MouseEvent) {
   if (e.target === e.currentTarget) close()
+}
+// Numeric-input handler. Extracted as a named function (instead of an
+// inline @input expression) so the template can keep vue-tsc happy —
+// inlining a complex handler that re-assigns `typedNumeric.value`
+// triggered `possibly null` narrowing complaints when the template
+// parser couldn't thread the type through.
+function onNumericInput(event: Event) {
+  const raw = (event.target as HTMLInputElement).value
+  if (raw === '') {
+    typedNumeric.value = null
+    return
+  }
+  const parsed = Number(raw)
+  typedNumeric.value = Number.isFinite(parsed) ? parsed : null
 }
 </script>
 
@@ -109,6 +166,26 @@ function onBackdropClick(e: MouseEvent) {
               :value="typedInput"
               :placeholder="inputPlaceholder"
               @input="(e: Event) => typedInput = (e.target as HTMLInputElement).value"
+            />
+          </div>
+
+          <!-- Numeric-input mode: shows when `numericInput` is provided.
+               Mutually exclusive with the type-to-confirm field above;
+               callers shouldn't set both. We use the native HTML number
+               input rather than the cds-input wrapper because cds-input's
+               internal slot expects a free-text binding that fights with
+               number-type coercion; matching the type-to-confirm path's
+               plain input keeps the styling consistent. -->
+          <div v-else-if="numericInput" class="confirm-input-wrap">
+            <span v-if="numericInput.label" class="confirm-input-label">{{ numericInput.label }}</span>
+            <input
+              type="number"
+              class="app-input"
+              :min="numericInput.min"
+              :max="numericInput.max"
+              :value="typedNumeric ?? ''"
+              :placeholder="numericInput.placeholder"
+              @input="onNumericInput"
             />
           </div>
 
