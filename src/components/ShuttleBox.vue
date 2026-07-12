@@ -241,7 +241,16 @@ function onRightKey(event: KeyboardEvent, id: string) {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  max-height: 280px;
+  /* Pin the list to a fixed height so `overflow-y: auto` actually fires
+     when the candidate pool exceeds the visible area. `max-height` was
+     unreliable here — because the parent .shuttle-col is a flex column
+     with no explicit height, its child .shuttle-list grew to fit the
+     content and the max-height cap was silently ignored (no scroll
+     appeared). A fixed height on .shuttle-list guarantees scroll
+     behavior regardless of how many rows the parent has, while
+     `min-height` (with `min-height: 0` above) keeps the column
+     shrinkable when the list is empty / near-empty. */
+  height: 280px;
 }
 .shuttle-item {
   padding: 6px 10px;

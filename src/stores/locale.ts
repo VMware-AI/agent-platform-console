@@ -864,40 +864,25 @@ export const STRINGS: Dict = {
   'gatewayModel.filter.clear': { zh: '清除过滤', en: 'Clear filter' },
   'gatewayModel.filter.namePlaceholder': { zh: '输入路由名称', en: 'Enter route name' },
   'gatewayModel.filter.modelsPlaceholder': { zh: '输入模型名称', en: 'Enter model name' },
-  'gatewayModel.filter.status.ALL': { zh: '全部状态', en: 'All statuses' },
-  'gatewayModel.filter.status.ENABLED': { zh: '启用', en: 'Enabled' },
-  'gatewayModel.filter.status.DISABLED': { zh: '未启用', en: 'Disabled' },
   'gatewayModel.action.create': { zh: '新建路由', en: 'New Route' },
   'gatewayModel.action.batch': { zh: '批量操作', en: 'Batch Actions' },
   'gatewayModel.action.refresh': { zh: '刷新', en: 'Refresh' },
   'gatewayModel.action.edit': { zh: '编辑', en: 'Edit' },
   'gatewayModel.action.manage': { zh: '管理', en: 'Manage' },
   'gatewayModel.action.delete': { zh: '删除', en: 'Delete' },
-  'gatewayModel.action.enable': { zh: '启用', en: 'Enable' },
-  'gatewayModel.action.disable': { zh: '禁用', en: 'Disable' },
-  'gatewayModel.action.changeStrategy': {
-    zh: '更改 {name} 的路由策略',
-    en: 'Change routing strategy for {name}',
-  },
-  'gatewayModel.batch.enable': { zh: '批量启用', en: 'Enable Selected' },
-  'gatewayModel.batch.disable': { zh: '批量禁用', en: 'Disable Selected' },
   'gatewayModel.batch.delete': { zh: '批量删除', en: 'Delete Selected' },
   'gatewayModel.batch.disabled': { zh: '请先选择路由', en: 'Select routes first' },
   'gatewayModel.col.selectAll': { zh: '选择当前页全部路由', en: 'Select all routes on this page' },
   'gatewayModel.col.selectRoute': { zh: '选择路由 {name}', en: 'Select route {name}' },
   'gatewayModel.col.name': { zh: '路由名称', en: 'Route Name' },
-  'gatewayModel.col.gateway': { zh: '网关', en: 'Gateway' },
+  'gatewayModel.col.gateway': { zh: '模型网关', en: 'Model Gateway' },
   'gatewayModel.col.strategy': { zh: '路由策略', en: 'Routing Strategy' },
-  'gatewayModel.col.models': { zh: '模型', en: 'Models' },
-  'gatewayModel.col.status': { zh: '状态', en: 'Status' },
+  'gatewayModel.col.models': { zh: '网关模型', en: 'Gateway Models' },
   'gatewayModel.col.actions': { zh: '操作', en: 'Actions' },
-  'gatewayModel.status.enabled': { zh: '启用', en: 'Enabled' },
-  'gatewayModel.status.disabled': { zh: '未启用', en: 'Disabled' },
-  'gatewayModel.strategy.ROUND_ROBIN': { zh: '轮询', en: 'Round Robin' },
-  'gatewayModel.strategy.WEIGHTED_ROUND_ROBIN': { zh: '加权轮询', en: 'Weighted Round Robin' },
-  'gatewayModel.strategy.RANDOM': { zh: '随机', en: 'Random' },
+  'gatewayModel.col.createdAt': { zh: '创建时间', en: 'Created At' },
+  'gatewayModel.col.updatedAt': { zh: '更新时间', en: 'Updated At' },
   // LoadBalancingStrategy (LiteLLM wire-level — kebab-case on the wire, UPPER_SNAKE in
-  // the GraphQL enum). Distinct from the friendly ModelRouteStrategy above.
+  // the GraphQL enum).
   'gatewayModel.strategy.SIMPLE_SHUFFLE': { zh: '简单洗牌', en: 'Simple Shuffle' },
   'gatewayModel.strategy.LEAST_BUSY': { zh: '最闲优先', en: 'Least Busy' },
   'gatewayModel.strategy.LATENCY_BASED_ROUTING': {
@@ -905,7 +890,7 @@ export const STRINGS: Dict = {
     en: 'Latency-based Routing',
   },
   'gatewayModel.strategy.USAGE_BASED_ROUTING_V2': {
-    zh: '使用率路由',
+    zh: '使用率优先',
     en: 'Usage-based Routing v2',
   },
   'gatewayModel.strategy.COST_BASED_ROUTING': { zh: '成本优先', en: 'Cost-based Routing' },
@@ -928,17 +913,22 @@ export const STRINGS: Dict = {
     zh: '名称长度应为 2–64 个字符。',
     en: 'Name must be 2–64 characters.',
   },
-  'gatewayModel.form.gateway': { zh: '网关', en: 'Gateway' },
-  'gatewayModel.form.gatewayError': { zh: '请选择网关。', en: 'Select a gateway.' },
+  'gatewayModel.form.gateway': { zh: '模型网关', en: 'Model Gateway' },
+  'gatewayModel.form.gatewayPlaceholder': {
+    zh: '请选择模型网关',
+    en: 'Select a model gateway',
+  },
+  'gatewayModel.form.gatewayError': { zh: '请选择模型网关。', en: 'Select a model gateway.' },
   'gatewayModel.form.strategy': { zh: '路由策略', en: 'Routing Strategy' },
-  'gatewayModel.form.models': { zh: '模型列表', en: 'Models' },
+  'gatewayModel.form.models': { zh: '选择路由的模型', en: 'Models' },
   'gatewayModel.form.modelsPlaceholder': {
     zh: '每行填写一个模型，或使用逗号分隔',
     en: 'Enter one model per line or separate with commas',
   },
   'gatewayModel.form.modelsError': { zh: '请至少填写一个模型。', en: 'Enter at least one model.' },
-  'gatewayModel.form.enabled': { zh: '创建后立即启用', en: 'Enable immediately' },
-  'gatewayModel.form.submit': { zh: '保存', en: 'Save' },
+  'gatewayModel.form.requiredMark': { zh: '*', en: '*' },
+  'gatewayModel.form.submit': { zh: '修改', en: 'Update' },
+  'gatewayModel.form.submitCreate': { zh: '创建', en: 'Create' },
   'gatewayModel.confirm.deleteTitle': { zh: '确认删除网关路由', en: 'Delete Gateway Route' },
   'gatewayModel.confirm.deleteBody': {
     zh: '确定要删除路由“{name}”吗？此操作无法撤销。',
@@ -949,20 +939,25 @@ export const STRINGS: Dict = {
     zh: '确定要删除选中的 {count} 个路由吗？此操作无法撤销。',
     en: 'Delete the selected {count} routes? This action cannot be undone.',
   },
+  // Second-step confirmation (modeled after `gateway.delete.confirm.*`).
+  // After the operator acknowledges the first delete dialog the second
+  // one renders a type-to-confirm input so they have to retype the
+  // route's name verbatim — guards against muscle-memory clicks on a
+  // row other than the one they meant to delete.
+  'gatewayModel.confirm.finalDeleteTitle': {
+    zh: '再次确认删除',
+    en: 'Confirm Delete Again',
+  },
+  'gatewayModel.confirm.finalDeleteBody': {
+    zh: '将永久删除该网关路由且无法恢复。请输入 {{name}} 以确认。',
+    en: 'This gateway route will be permanently deleted. Type {{name}} to confirm.',
+  },
+  'gatewayModel.confirm.finalDeleteInputPlaceholder': {
+    zh: '输入路由名称',
+    en: 'Type the route name',
+  },
   'gatewayModel.toast.created': { zh: '网关路由已创建', en: 'Gateway route created' },
   'gatewayModel.toast.updated': { zh: '网关路由已更新', en: 'Gateway route updated' },
-  'gatewayModel.toast.strategyUpdated': {
-    zh: '“{name}”的路由策略已更新',
-    en: 'Routing strategy updated for “{name}”',
-  },
-  'gatewayModel.toast.enabled': {
-    zh: '已启用 {count} 个网关路由',
-    en: 'Enabled {count} gateway routes',
-  },
-  'gatewayModel.toast.disabled': {
-    zh: '已禁用 {count} 个网关路由',
-    en: 'Disabled {count} gateway routes',
-  },
   'gatewayModel.toast.deleted': {
     zh: '已删除 {count} 个网关路由',
     en: 'Deleted {count} gateway routes',
@@ -980,14 +975,25 @@ export const STRINGS: Dict = {
   'gatewayModel.action.sync': { zh: '同步路由', en: 'Sync Router Settings' },
   'gatewayModel.toast.syncSuccess': { zh: '路由设置已同步', en: 'Router settings synced' },
   'gatewayModel.toast.syncFailed': { zh: '路由设置同步失败', en: 'Failed to sync router settings' },
-  'gatewayModel.form.candidatesLabel': { zh: '可选供应商模型', en: 'Available provider models' },
-  'gatewayModel.form.selectedLabel': { zh: '已绑定模型', en: 'Bound models' },
-  'gatewayModel.form.uiStrategy': { zh: '控制台策略', en: 'UI Strategy' },
+  'gatewayModel.form.candidatesLabel': { zh: '可选模型列表', en: 'Available provider models' },
+  'gatewayModel.form.selectedLabel': { zh: '已选定的模型', en: 'Bound models' },
+  'gatewayModel.form.modelsEmpty': {
+    zh: '暂无可用模型,请先选择模型网关',
+    en: 'No available models yet — select a model gateway first',
+  },
+  'gatewayModel.form.modelsLoading': {
+    zh: '正在加载可用模型…',
+    en: 'Loading available models…',
+  },
+  'gatewayModel.form.modelsEmptyAfterPick': {
+    zh: '该网关暂无可用模型',
+    en: 'This gateway has no available models',
+  },
   'gatewayModel.form.nameHint': {
     zh: '大写字母、数字与中划线,2-64 字符',
     en: 'Uppercase letters, digits, and hyphens, 2-64 chars',
   },
-  'gatewayModel.form.advanced': { zh: '高级(降级链)', en: 'Advanced (Fallbacks)' },
+  'gatewayModel.form.advanced': { zh: '高级参数', en: 'Advanced' },
   'gatewayModel.fallbacks.general': { zh: '常规故障转移', en: 'General Fallbacks' },
   'gatewayModel.fallbacks.generalHint': {
     zh: '任何网络错误或限流时按顺序顺延',

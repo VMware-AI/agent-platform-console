@@ -1,24 +1,25 @@
 import { gql } from '@apollo/client/core'
 
-// Model routes (模型路由). A route maps an outward name to a set of supported
-// models served by a backend gateway, load-balanced by a console-facing strategy
-// (ROUND_ROBIN / WEIGHTED_ROUND_ROBIN / RANDOM). The view shows gatewayName per
-// row, so it is denormalized onto the route. createModelRoute mints a new route by
-// id; updateModelRoute edits one by id; setModelRouteEnabled / deleteModelRoute
-// match the row + batch actions. `uiStrategy` is the friendly strategy enum
-// (distinct from the litellm `strategy`); `supportedModels` aliases the route's
-// upstream model group.
+// Model routes (模型路由). A route maps an outward name to a single
+// supportedModels entry (a litellm model group) hosted by exactly one
+// `modelGateway`. The `modelGateway` field is a resolved nested object
+// (non-null) — the backend holds the FK and exposes it through the
+// gateway row. `gatewayName` was previously a denormalized string on
+// the route; that field is gone now that the route carries the gateway
+// object directly (the view reads `modelGateway.name` instead).
+// `strategy` is the wire-level LoadBalancingStrategy the resolver POSTs
+// in router_settings; no separate "uiStrategy" abstraction anymore.
 
 const MODEL_ROUTE_FIELDS = gql`
   fragment ModelRouteFields on ModelRoute {
     id
     name
-    backendGatewayId
-    gatewayName
+    modelGateway {
+      id
+      name
+    }
     supportedModels
     strategy
-    uiStrategy
-    enabled
     fallbacks
     contextWindowFallbacks
     contentPolicyFallbacks
@@ -54,15 +55,6 @@ export const UPDATE_MODEL_ROUTE = gql`
   ${MODEL_ROUTE_FIELDS}
 `
 
-export const SET_MODEL_ROUTE_ENABLED = gql`
-  mutation SetModelRouteEnabled($id: ID!, $enabled: Boolean!) {
-    setModelRouteEnabled(id: $id, enabled: $enabled) {
-      ...ModelRouteFields
-    }
-  }
-  ${MODEL_ROUTE_FIELDS}
-`
-
 export const DELETE_MODEL_ROUTE = gql`
   mutation DeleteModelRoute($id: ID!) {
     deleteModelRoute(id: $id)
@@ -83,9 +75,10 @@ export const SYNC_ROUTER_SETTINGS = gql`
 
 // LoadBalancingStrategy — LiteLLM's wire-level routing strategy (kebab-case
 // on the wire; rendered UPPER_SNAKE on this side by the GraphQL enum).
-// Distinct from `uiStrategy` (the friendly, gateway-agnostic console
-// strategy). Mapped to kebab-case in internal/gateway.ToLitellmRoutingStrategy
-// when the resolver POSTs /config/update.
+// Mapped to kebab-case in internal/gateway.ToLitellmRoutingStrategy when
+// the resolver POSTs /config/update. The previous ModelRouteStrategy
+// (ROUND_ROBIN / WEIGHTED_ROUND_ROBIN / RANDOM) console-level abstraction
+// was removed; LoadBalancingStrategy is the only strategy field on a route.
 export type LoadBalancingStrategy =
   | 'SIMPLE_SHUFFLE'
   | 'LEAST_BUSY'
@@ -101,17 +94,15 @@ export const LOAD_BALANCING_STRATEGIES: LoadBalancingStrategy[] = [
   'COST_BASED_ROUTING',
 ]
 
-export type ModelRouteStrategy = 'ROUND_ROBIN' | 'WEIGHTED_ROUND_ROBIN' | 'RANDOM'
-
 export interface ModelRouteNode {
   id: string
   name: string
-  backendGatewayId: string | null
-  gatewayName: string
+  // Resolved gateway row (non-null on the schema). The console-side
+  // shape is just { id, name } — matches what callers need to render
+  // the row and to send back as `modelGatewayId` on update.
+  modelGateway: { id: string; name: string }
   supportedModels: string[]
   strategy: LoadBalancingStrategy
-  uiStrategy: ModelRouteStrategy
-  enabled: boolean
   // Fallback chains surfaced to litellm via /config/update (design doc §3.2).
   // Each list is an ordered set of model_aliases (other routes' names).
   fallbacks: string[]
@@ -125,13 +116,15 @@ export interface ModelRoutesResult {
   modelRoutes: ModelRouteNode[]
 }
 
+// CreateModelRouteInput wire shape — `modelGatewayId` is REQUIRED on
+// create; the backend rejects a route that has no gateway to host on.
+// `gatewayName` is gone (the resolver resolves the gateway by id; the
+// previous denormalized string dropped with it).
 export interface CreateModelRouteInputVars {
   name: string
-  backendGatewayId?: string | null
-  gatewayName?: string | null
-  supportedModels?: string[] | null
-  uiStrategy?: ModelRouteStrategy | null
-  enabled?: boolean | null
+  modelGatewayId: string
+  supportedModels: string[]
+  strategy?: LoadBalancingStrategy | null
   fallbacks?: string[] | null
   contextWindowFallbacks?: string[] | null
   contentPolicyFallbacks?: string[] | null
@@ -145,13 +138,14 @@ export interface CreateModelRouteResult {
   createModelRoute: ModelRouteNode
 }
 
+// UpdateModelRouteInput wire shape — every field optional, partial
+// updates only. `modelGatewayId` is still validated against live
+// gateways when present.
 export interface UpdateModelRouteInputVars {
   name?: string | null
-  backendGatewayId?: string | null
-  gatewayName?: string | null
+  modelGatewayId?: string | null
   supportedModels?: string[] | null
-  uiStrategy?: ModelRouteStrategy | null
-  enabled?: boolean | null
+  strategy?: LoadBalancingStrategy | null
   fallbacks?: string[] | null
   contextWindowFallbacks?: string[] | null
   contentPolicyFallbacks?: string[] | null
@@ -164,15 +158,6 @@ export interface UpdateModelRouteVars {
 
 export interface UpdateModelRouteResult {
   updateModelRoute: ModelRouteNode
-}
-
-export interface SetModelRouteEnabledVars {
-  id: string
-  enabled: boolean
-}
-
-export interface SetModelRouteEnabledResult {
-  setModelRouteEnabled: ModelRouteNode
 }
 
 export interface DeleteModelRouteVars {
