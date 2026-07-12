@@ -156,16 +156,24 @@ export const STRINGS: Dict = {
   'agents.action.rotateKey': { zh: '密码更新', en: 'Rotate Key' },
   'agents.action.restart': { zh: '重启', en: 'Restart' },
   'agents.action.stop': { zh: '停止', en: 'Stop' },
+  'agents.action.start': { zh: '启动', en: 'Start' },
   'agents.action.update': { zh: '版本更新', en: 'Version Update' },
   'agents.action.delete': { zh: '删除', en: 'Delete' },
   'agents.action.copyAccess': { zh: '访问信息', en: 'Access info' },
   'agents.action.copyKey': { zh: '复制密钥', en: 'Copy key' },
   'agents.action.copyKeyOk': { zh: '已复制 "{name}"', en: 'Copied "{name}"' },
   'agents.action.copyKeyFail': { zh: '复制失败', en: 'Copy failed' },
-  'agents.action.notReady': { zh: '该操作暂未开放（后端接口开发中）', en: 'This action is not available yet (backend API in progress)' },
-  'agents.action.noEndpoint': { zh: '该智能体未配置访问端点', en: 'This agent has no endpoint configured' },
+  'agents.action.notReady': {
+    zh: '该操作暂未开放（后端接口开发中）',
+    en: 'This action is not available yet (backend API in progress)',
+  },
+  'agents.action.noEndpoint': {
+    zh: '该智能体未配置访问端点',
+    en: 'This agent has no endpoint configured',
+  },
   'agents.action.stoppedOk': { zh: '已停止 "{name}"', en: 'Stopped "{name}"' },
   'agents.action.restartedOk': { zh: '已重启 "{name}"', en: 'Restarted "{name}"' },
+  'agents.action.startedOk': { zh: '已启动 "{name}"', en: 'Started "{name}"' },
   'agents.action.deletedOk': { zh: '已删除 "{name}"', en: 'Deleted "{name}"' },
   'agents.action.failed': { zh: '操作失败', en: 'Action failed' },
   'agents.confirm.deleteTitle': { zh: '删除智能体', en: 'Delete agent' },
@@ -173,9 +181,30 @@ export const STRINGS: Dict = {
     zh: '确定删除智能体 "{name}"？其 VM 资源将被回收，此操作不可撤销。',
     en: 'Delete agent "{name}"? Its VM resources will be recycled. This cannot be undone.',
   },
+  // Hard-delete is admin-only and PHYSICALLY removes the agent row (distinct from
+  // "delete" which is recycle). Mirrors ModelGatewayView's two-step type-to-confirm.
+  'agents.action.hardDelete': { zh: '彻底删除', en: 'Hard Delete' },
+  'agents.action.hardDeletedOk': { zh: '已彻底删除 "{name}"', en: 'Hard-deleted "{name}"' },
+  'agents.action.hardDeleteFailed': { zh: '彻底删除失败', en: 'Hard delete failed' },
+  'agents.confirm.hardDeleteTitle': { zh: '彻底删除智能体', en: 'Hard Delete Agent' },
+  'agents.confirm.hardDeleteBody': {
+    zh: '将永久删除智能体 "{name}" 及其所有数据，此操作不可撤销。请输入 {{name}} 以确认。',
+    en: 'Permanently delete agent "{name}". This cannot be undone. Type {{name}} to confirm.',
+  },
+  'agents.confirm.hardDeleteInputPlaceholder': { zh: '输入智能体名称', en: 'Type the agent name' },
   'agents.confirm.batchDeleteBody': {
     zh: '确定删除选中的 {count} 个智能体？其 VM 资源将被回收，此操作不可撤销。',
     en: 'Delete the {count} selected agents? Their VM resources will be recycled. This cannot be undone.',
+  },
+  // Batch hard-delete mirrors single hardDelete but shows the full name list and
+  // requires ALL names typed (one per line) to confirm. Admin-only.
+  'agents.confirm.hardDeleteBatchTitle': {
+    zh: '批量彻底删除 {count} 个智能体',
+    en: 'Hard-Delete {count} Selected Agents',
+  },
+  'agents.confirm.hardDeleteBatchBody': {
+    zh: '将永久删除以下 {count} 个智能体及其所有数据，此操作不可撤销。请输入各智能体名称（空格或换行分隔）以确认。\n{{names}}',
+    en: 'Permanently delete the following {count} agents. This cannot be undone. Type each agent name separated by spaces or newlines to confirm.\n{{names}}',
   },
   'agents.action.sortAsc': { zh: '升序', en: 'Ascending' },
   'agents.action.sortDesc': { zh: '降序', en: 'Descending' },
@@ -183,8 +212,13 @@ export const STRINGS: Dict = {
   'agents.batch.stop': { zh: '批量停止', en: 'Stop Selected' },
   'agents.batch.update': { zh: '批量更新', en: 'Update Selected' },
   'agents.batch.delete': { zh: '批量删除', en: 'Delete Selected' },
+  // Batch hard-delete mirrors the row-action flow at admin-only scope.
+  'agents.batch.hardDelete': { zh: '批量彻底删除', en: 'Hard Delete Selected' },
   'agents.batch.disabled': { zh: '请先选择智能体', en: 'Select agents first' },
-  'agents.batch.done': { zh: '批量操作完成：成功 {ok} 个，失败 {fail} 个', en: 'Batch finished: {ok} succeeded, {fail} failed' },
+  'agents.batch.done': {
+    zh: '批量操作完成：成功 {ok} 个，失败 {fail} 个',
+    en: 'Batch finished: {ok} succeeded, {fail} failed',
+  },
   'agents.upgrade.title': { zh: '升级智能体版本', en: 'Upgrade agent version' },
   'agents.upgrade.single': {
     zh: '将为「{name}」下发升级命令，VM 内 agent-manager 会在下次心跳时拉取安装。',
@@ -240,7 +274,10 @@ export const STRINGS: Dict = {
 
   // Page-level
   'users.title': { zh: '用户与权限', en: 'Users & Permissions' },
-  'users.description': { zh: '管理平台用户、角色与权限分配，支持密码重置与角色绑定。', en: 'Manage platform users, roles, and permission assignments with password reset and role binding.' },
+  'users.description': {
+    zh: '管理平台用户、角色与权限分配，支持密码重置与角色绑定。',
+    en: 'Manage platform users, roles, and permission assignments with password reset and role binding.',
+  },
   'users.tabs.users': { zh: '用户管理', en: 'User Management' },
   'users.tabs.roles': { zh: '角色与权限', en: 'Roles & Permissions' },
 
@@ -249,15 +286,15 @@ export const STRINGS: Dict = {
   'roles.toolbar.refresh': { zh: '刷新', en: 'Refresh' },
 
   // Users table columns
-  'users.col.username':       { zh: '用户名',            en: 'Username' },
-  'users.col.role':           { zh: '角色',              en: 'Role' },
-  'users.col.email':          { zh: '邮箱',              en: 'Email' },
-  'users.col.enabled':        { zh: '启用状态',          en: 'Status' },
-  'users.col.connection':     { zh: '连接状态',          en: 'Connection Status' },
-  'users.col.lastLogin':      { zh: '上次登录',          en: 'Last Login' },
-  'users.col.createdAt':      { zh: '创建时间',          en: 'Created At' },
-  'users.col.updatedAt':      { zh: '更新时间',          en: 'Updated At' },
-  'users.col.actions':        { zh: '操作',              en: 'Actions' },
+  'users.col.username': { zh: '用户名', en: 'Username' },
+  'users.col.role': { zh: '角色', en: 'Role' },
+  'users.col.email': { zh: '邮箱', en: 'Email' },
+  'users.col.enabled': { zh: '启用状态', en: 'Status' },
+  'users.col.connection': { zh: '连接状态', en: 'Connection Status' },
+  'users.col.lastLogin': { zh: '上次登录', en: 'Last Login' },
+  'users.col.createdAt': { zh: '创建时间', en: 'Created At' },
+  'users.col.updatedAt': { zh: '更新时间', en: 'Updated At' },
+  'users.col.actions': { zh: '操作', en: 'Actions' },
 
   // Column filter dropdowns
   'users.col.filter.usernamePlaceholder': { zh: '输入关键字筛选用户名', en: 'Filter by username' },
@@ -272,45 +309,54 @@ export const STRINGS: Dict = {
   'users.col.filter': { zh: '过滤', en: 'Filter' },
 
   // Connection-status badges
-  'users.status.online':      { zh: '在线',              en: 'Online' },
-  'users.status.offline':     { zh: '离线',              en: 'Offline' },
+  'users.status.online': { zh: '在线', en: 'Online' },
+  'users.status.offline': { zh: '离线', en: 'Offline' },
   // Enabled-state badge in the Users table "启用状态" column.
-  'users.status.enabled':     { zh: '已启用',            en: 'Enabled' },
-  'users.status.disabled':    { zh: '已禁用',            en: 'Disabled' },
+  'users.status.enabled': { zh: '已启用', en: 'Enabled' },
+  'users.status.disabled': { zh: '已禁用', en: 'Disabled' },
 
   // Per-row actions
-  'users.action.changeRole': { zh: '更换角色',          en: 'Change Role' },
-  'users.action.resetPwd':    { zh: '重置密码',          en: 'Reset Password' },
-  'users.action.disable':     { zh: '禁用',              en: 'Disable' },
-  'users.action.enable':      { zh: '启用',              en: 'Enable' },
-  'users.action.delete':      { zh: '删除',              en: 'Delete' },
+  'users.action.changeRole': { zh: '更换角色', en: 'Change Role' },
+  'users.action.resetPwd': { zh: '重置密码', en: 'Reset Password' },
+  'users.action.disable': { zh: '禁用', en: 'Disable' },
+  'users.action.enable': { zh: '启用', en: 'Enable' },
+  'users.action.delete': { zh: '删除', en: 'Delete' },
 
   // User form (create only)
-  'users.form.title.create':  { zh: '新建用户',          en: 'Create User' },
-  'users.form.title.changeRole': { zh: '更换角色',       en: 'Change Role' },
-  'users.form.username':      { zh: '用户名',            en: 'Username' },
-  'users.form.displayName':   { zh: '显示名',            en: 'Display Name' },
-  'users.form.email':         { zh: '邮箱',              en: 'Email' },
-  'users.form.role':          { zh: '角色',              en: 'Role' },
-  'users.form.enabled':       { zh: '启用账户',          en: 'Enable Account' },
-  'users.form.passwordMode':  { zh: '密码',              en: 'Password' },
-  'users.form.passwordMode.label':   { zh: '密码类型',    en: 'Password Type' },
-  'users.form.passwordMode.auto':    { zh: '自动生成',    en: 'Auto-generate' },
-  'users.form.passwordMode.custom':  { zh: '自定义',      en: 'Custom' },
-  'users.form.passwordMode.autoHint': { zh: '自动生成后通过一次性弹窗显示,注意复制保存!', en: 'The generated password will be shown once in a dialog — copy and save it immediately!' },
-  'users.form.customPassword':      { zh: '密码',          en: 'Password' },
-  'users.form.confirmPassword':    { zh: '确认密码',      en: 'Confirm Password' },
-  'users.form.passwordMismatch':    { zh: '两次输入的密码不一致', en: 'Passwords do not match.' },
-  'users.form.passwordHint':        { zh: '密码须包含大小写字母、数字,长度 ≥ 12', en: 'Password must contain uppercase, lowercase, and digits, and be at least 12 characters.' },
-  'users.form.requiredMark':       { zh: '*',                en: '*' },
-  'users.form.submit':              { zh: '创建',          en: 'Create' },
-  'users.form.submitEdit':          { zh: '保存',          en: 'Save' },
-  'users.form.cancel':              { zh: '取消',          en: 'Cancel' },
-  'users.form.username.required':   { zh: '请输入用户名',  en: 'Username is required.' },
-  'users.form.username.taken':      { zh: '该用户名已被使用', en: 'This username is already taken.' },
-  'users.form.email.taken':         { zh: '该邮箱已被使用',   en: 'This email is already in use.' },
-  'users.form.username.checking':   { zh: '正在检查用户名可用性…', en: 'Checking username availability…' },
-  'users.form.email.checking':      { zh: '正在检查邮箱可用性…',   en: 'Checking email availability…' },
+  'users.form.title.create': { zh: '新建用户', en: 'Create User' },
+  'users.form.title.changeRole': { zh: '更换角色', en: 'Change Role' },
+  'users.form.username': { zh: '用户名', en: 'Username' },
+  'users.form.displayName': { zh: '显示名', en: 'Display Name' },
+  'users.form.email': { zh: '邮箱', en: 'Email' },
+  'users.form.role': { zh: '角色', en: 'Role' },
+  'users.form.enabled': { zh: '启用账户', en: 'Enable Account' },
+  'users.form.passwordMode': { zh: '密码', en: 'Password' },
+  'users.form.passwordMode.label': { zh: '密码类型', en: 'Password Type' },
+  'users.form.passwordMode.auto': { zh: '自动生成', en: 'Auto-generate' },
+  'users.form.passwordMode.custom': { zh: '自定义', en: 'Custom' },
+  'users.form.passwordMode.autoHint': {
+    zh: '自动生成后通过一次性弹窗显示,注意复制保存!',
+    en: 'The generated password will be shown once in a dialog — copy and save it immediately!',
+  },
+  'users.form.customPassword': { zh: '密码', en: 'Password' },
+  'users.form.confirmPassword': { zh: '确认密码', en: 'Confirm Password' },
+  'users.form.passwordMismatch': { zh: '两次输入的密码不一致', en: 'Passwords do not match.' },
+  'users.form.passwordHint': {
+    zh: '密码须包含大小写字母、数字,长度 ≥ 12',
+    en: 'Password must contain uppercase, lowercase, and digits, and be at least 12 characters.',
+  },
+  'users.form.requiredMark': { zh: '*', en: '*' },
+  'users.form.submit': { zh: '创建', en: 'Create' },
+  'users.form.submitEdit': { zh: '保存', en: 'Save' },
+  'users.form.cancel': { zh: '取消', en: 'Cancel' },
+  'users.form.username.required': { zh: '请输入用户名', en: 'Username is required.' },
+  'users.form.username.taken': { zh: '该用户名已被使用', en: 'This username is already taken.' },
+  'users.form.email.taken': { zh: '该邮箱已被使用', en: 'This email is already in use.' },
+  'users.form.username.checking': {
+    zh: '正在检查用户名可用性…',
+    en: 'Checking username availability…',
+  },
+  'users.form.email.checking': { zh: '正在检查邮箱可用性…', en: 'Checking email availability…' },
 
   // Page-level empty / loading / error
   'users.empty': { zh: '暂无用户', en: 'No users' },
@@ -318,32 +364,47 @@ export const STRINGS: Dict = {
   'users.error': { zh: '加载失败', en: 'Failed to load' },
 
   // Toasts
-  'users.toast.createOk':     { zh: '已创建用户 {name}', en: 'User {name} created.' },
-  'users.toast.createFail':   { zh: '创建失败',          en: 'Failed to create user.' },
-  'users.toast.updateOk':     { zh: '已更新用户 {name}', en: 'User {name} updated.' },
-  'users.toast.updateFail':   { zh: '更新失败',          en: 'Failed to update user.' },
-  'users.toast.deleteOk':     { zh: '已删除用户 {name}', en: 'User {name} deleted.' },
-  'users.toast.deleteFail':   { zh: '删除失败',          en: 'Failed to delete user.' },
-  'users.toast.resetPwdOk':   { zh: '密码已重置:新密码已生成并显示', en: 'Password reset. The new password has been generated and displayed.' },
-  'users.toast.resetPwdFail': { zh: '密码重置失败',      en: 'Failed to reset password.' },
-  'users.toast.disableOk':    { zh: '已禁用 {name}',     en: '{name} has been disabled.' },
-  'users.toast.enableOk':     { zh: '已启用 {name}',     en: '{name} has been enabled.' },
-  'users.toast.toggleFail':   { zh: '操作失败',          en: 'Operation failed.' },
-  'users.toast.duplicateUsername': { zh: '用户名已存在',  en: 'Username already exists.' },
-  'users.toast.duplicateEmail':    { zh: '邮箱已被使用',  en: 'Email is already in use.' },
-  'users.toast.passwordCopied':    { zh: '已复制到剪贴板', en: 'Copied to clipboard.' },
-  'users.toast.copyFailed':       { zh: '复制失败',         en: 'Copy failed.' },
+  'users.toast.createOk': { zh: '已创建用户 {name}', en: 'User {name} created.' },
+  'users.toast.createFail': { zh: '创建失败', en: 'Failed to create user.' },
+  'users.toast.updateOk': { zh: '已更新用户 {name}', en: 'User {name} updated.' },
+  'users.toast.updateFail': { zh: '更新失败', en: 'Failed to update user.' },
+  'users.toast.deleteOk': { zh: '已删除用户 {name}', en: 'User {name} deleted.' },
+  'users.toast.deleteFail': { zh: '删除失败', en: 'Failed to delete user.' },
+  'users.toast.resetPwdOk': {
+    zh: '密码已重置:新密码已生成并显示',
+    en: 'Password reset. The new password has been generated and displayed.',
+  },
+  'users.toast.resetPwdFail': { zh: '密码重置失败', en: 'Failed to reset password.' },
+  'users.toast.disableOk': { zh: '已禁用 {name}', en: '{name} has been disabled.' },
+  'users.toast.enableOk': { zh: '已启用 {name}', en: '{name} has been enabled.' },
+  'users.toast.toggleFail': { zh: '操作失败', en: 'Operation failed.' },
+  'users.toast.duplicateUsername': { zh: '用户名已存在', en: 'Username already exists.' },
+  'users.toast.duplicateEmail': { zh: '邮箱已被使用', en: 'Email is already in use.' },
+  'users.toast.passwordCopied': { zh: '已复制到剪贴板', en: 'Copied to clipboard.' },
+  'users.toast.copyFailed': { zh: '复制失败', en: 'Copy failed.' },
 
   // Confirm dialogs
-  'users.confirm.delete.title':       { zh: '确认删除用户',    en: 'Confirm Delete User' },
-  'users.confirm.delete.body':        { zh: '确定要删除用户 {name} 吗?此操作不可撤销。', en: 'Are you sure you want to delete user {name}? This action cannot be undone.' },
+  'users.confirm.delete.title': { zh: '确认删除用户', en: 'Confirm Delete User' },
+  'users.confirm.delete.body': {
+    zh: '确定要删除用户 {name} 吗?此操作不可撤销。',
+    en: 'Are you sure you want to delete user {name}? This action cannot be undone.',
+  },
   'users.confirm.delete.final.title': { zh: '确认删除', en: 'Confirm Delete' },
-  'users.confirm.delete.final.body':  { zh: '将永久删除用户且无法恢复。请输入 {{name}} 以确认。', en: 'This user will be permanently deleted and cannot be recovered. Type {{name}} to confirm.' },
+  'users.confirm.delete.final.body': {
+    zh: '将永久删除用户且无法恢复。请输入 {{name}} 以确认。',
+    en: 'This user will be permanently deleted and cannot be recovered. Type {{name}} to confirm.',
+  },
   'users.confirm.delete.inputPlaceholder': { zh: '输入用户名', en: 'Type the username' },
-  'users.confirm.reset.title':        { zh: '确认重置密码',    en: 'Confirm Password Reset' },
-  'users.confirm.reset.body':    { zh: '将为 {name} 生成新的随机密码,确认继续?', en: 'A new random password will be generated for {name}. Continue?' },
-  'users.confirm.disable.title': { zh: '确认禁用用户',    en: 'Confirm Disable User' },
-  'users.confirm.disable.body':  { zh: '禁用后,{name} 将无法登录。是否继续?', en: 'After disabling, {name} will not be able to sign in. Continue?' },
+  'users.confirm.reset.title': { zh: '确认重置密码', en: 'Confirm Password Reset' },
+  'users.confirm.reset.body': {
+    zh: '将为 {name} 生成新的随机密码,确认继续?',
+    en: 'A new random password will be generated for {name}. Continue?',
+  },
+  'users.confirm.disable.title': { zh: '确认禁用用户', en: 'Confirm Disable User' },
+  'users.confirm.disable.body': {
+    zh: '禁用后,{name} 将无法登录。是否继续?',
+    en: 'After disabling, {name} will not be able to sign in. Continue?',
+  },
 
   // Password reveal dialog (one-shot)
   'users.passwordReveal.title': { zh: '{name} 的初始密码', en: 'Initial Password for {name}' },
@@ -355,24 +416,24 @@ export const STRINGS: Dict = {
   'users.passwordReveal.close': { zh: '我已保存,关闭', en: 'I have saved it, close' },
 
   // Role-users dialog (read-only)
-  'users.roleUsers.title':       { zh: '{name} 的用户',  en: 'Users in {name}' },
-  'users.roleUsers.col.name':    { zh: '用户名',          en: 'Username' },
-  'users.roleUsers.col.email':   { zh: '邮箱',            en: 'Email' },
-  'users.roleUsers.col.enabled': { zh: '状态',            en: 'Status' },
-  'users.roleUsers.status.enabled':  { zh: '已启用',       en: 'Enabled' },
-  'users.roleUsers.status.disabled': { zh: '已禁用',       en: 'Disabled' },
-  'users.roleUsers.empty':       { zh: '该角色下暂无用户', en: 'No users in this role' },
-  'users.roleUsers.loading':     { zh: '加载中…',          en: 'Loading…' },
-  'users.roleUsers.close':       { zh: '关闭',            en: 'Close' },
+  'users.roleUsers.title': { zh: '{name} 的用户', en: 'Users in {name}' },
+  'users.roleUsers.col.name': { zh: '用户名', en: 'Username' },
+  'users.roleUsers.col.email': { zh: '邮箱', en: 'Email' },
+  'users.roleUsers.col.enabled': { zh: '状态', en: 'Status' },
+  'users.roleUsers.status.enabled': { zh: '已启用', en: 'Enabled' },
+  'users.roleUsers.status.disabled': { zh: '已禁用', en: 'Disabled' },
+  'users.roleUsers.empty': { zh: '该角色下暂无用户', en: 'No users in this role' },
+  'users.roleUsers.loading': { zh: '加载中…', en: 'Loading…' },
+  'users.roleUsers.close': { zh: '关闭', en: 'Close' },
   'users.toast.loadRoleUsersFail': { zh: '加载角色用户失败', en: 'Failed to load role users.' },
 
   // Roles tab
-  'roles.col.name':             { zh: '角色名称',        en: 'Role Name' },
-  'roles.col.description':      { zh: '描述',            en: 'Description' },
-  'roles.col.userCount':        { zh: '用户数',          en: 'Users' },
-  'roles.empty':                { zh: '暂无角色',        en: 'No roles' },
-  'roles.loading':              { zh: '加载中…',          en: 'Loading…' },
-  'roles.error':                { zh: '加载失败',        en: 'Failed to load' },
+  'roles.col.name': { zh: '角色名称', en: 'Role Name' },
+  'roles.col.description': { zh: '描述', en: 'Description' },
+  'roles.col.userCount': { zh: '用户数', en: 'Users' },
+  'roles.empty': { zh: '暂无角色', en: 'No roles' },
+  'roles.loading': { zh: '加载中…', en: 'Loading…' },
+  'roles.error': { zh: '加载失败', en: 'Failed to load' },
 
   // Generic
   'common.confirm': { zh: '确认', en: 'Confirm' },
@@ -384,9 +445,15 @@ export const STRINGS: Dict = {
    * zh-only per project rule.
    * ============================================================ */
   'resources.title': { zh: '资源池接入管理', en: 'Resource Pool Management' },
-  'resources.description': { zh: '接入并管理可调度的算力资源池，是智能体运行的物理底座。', en: 'Connect and manage schedulable compute resource pools — the infrastructure foundation for running agents.' },
+  'resources.description': {
+    zh: '接入并管理可调度的算力资源池，是智能体运行的物理底座。',
+    en: 'Connect and manage schedulable compute resource pools — the infrastructure foundation for running agents.',
+  },
   'resources.toolbar.create': { zh: '接入资源池', en: 'Connect Resource Pool' },
-  'resources.toolbar.search': { zh: '搜索资源池名称或 VC 地址', en: 'Search pool name or VC address' },
+  'resources.toolbar.search': {
+    zh: '搜索资源池名称或 VC 地址',
+    en: 'Search pool name or VC address',
+  },
 
   'resources.col.name': { zh: '资源池名称', en: 'Resource Pool Name' },
   'resources.col.endpoint': { zh: 'VC 地址', en: 'VC Address' },
@@ -441,11 +508,20 @@ export const STRINGS: Dict = {
   'resources.form.name': { zh: '资源池名称', en: 'Resource Pool Name' },
   'resources.form.endpoint': { zh: 'VC 地址', en: 'VC Address' },
   'resources.form.contentLibrary': { zh: '内容库', en: 'Content Library' },
-  'resources.form.contentLibrarySelect': { zh: '请先测试连接以加载内容库列表', en: 'Test the connection first to load content libraries.' },
+  'resources.form.contentLibrarySelect': {
+    zh: '请先测试连接以加载内容库列表',
+    en: 'Test the connection first to load content libraries.',
+  },
   'resources.form.username': { zh: 'vCenter 账号', en: 'vCenter Account' },
-  'resources.form.usernamePlaceholder': { zh: 'administrator@vsphere.local', en: 'administrator@vsphere.local' },
+  'resources.form.usernamePlaceholder': {
+    zh: 'administrator@vsphere.local',
+    en: 'administrator@vsphere.local',
+  },
   'resources.form.password': { zh: 'vCenter 密码', en: 'vCenter Password' },
-  'resources.form.passwordEditHint': { zh: '留空则不修改已保存的凭据', en: 'Leave blank to keep the saved credentials.' },
+  'resources.form.passwordEditHint': {
+    zh: '留空则不修改已保存的凭据',
+    en: 'Leave blank to keep the saved credentials.',
+  },
   'resources.form.requiredMark': { zh: '*', en: '*' },
   'resources.form.insecure': { zh: '跳过 TLS 验证', en: 'Skip TLS Verification' },
   'resources.form.insecureHint': {
@@ -455,18 +531,27 @@ export const STRINGS: Dict = {
   'resources.form.testConnection': { zh: '测试连接', en: 'Test Connection' },
   'resources.form.testConnection.success': { zh: '连接成功', en: 'Connection succeeded' },
   'resources.form.testConnection.failure': { zh: '连接失败', en: 'Connection failed' },
-  'resources.testConnection.error.empty': { zh: '请先填写名称、VC 地址与内容库名称', en: 'Please fill in the name, VC address, and content library name first.' },
+  'resources.testConnection.error.empty': {
+    zh: '请先填写名称、VC 地址与内容库名称',
+    en: 'Please fill in the name, VC address, and content library name first.',
+  },
   'resources.form.submit': { zh: '保存', en: 'Save' },
 
   // Confirm dialog
   'resources.confirm.delete.title': { zh: '确认删除资源池', en: 'Confirm Delete Resource Pool' },
-  'resources.confirm.delete.body': { zh: '确定要删除资源池 {name} 吗?此操作不可撤销。', en: 'Are you sure you want to delete resource pool {name}? This action cannot be undone.' },
+  'resources.confirm.delete.body': {
+    zh: '确定要删除资源池 {name} 吗?此操作不可撤销。',
+    en: 'Are you sure you want to delete resource pool {name}? This action cannot be undone.',
+  },
   'resources.confirm.finalDelete.title': { zh: '再次确认删除', en: 'Confirm Deletion' },
   'resources.confirm.finalDelete.body': {
     zh: '将永久删除该资源池接入且无法恢复。请输入 {{name}} 以确认。',
     en: 'This resource pool integration will be permanently deleted. Type {{name}} to confirm.',
   },
-  'resources.confirm.finalDelete.inputPlaceholder': { zh: '输入资源池名称', en: 'Type the resource pool name' },
+  'resources.confirm.finalDelete.inputPlaceholder': {
+    zh: '输入资源池名称',
+    en: 'Type the resource pool name',
+  },
 
   // Inventory viewer (asset tree) modal — opened from the "资产" column's
   // "查看" link. Lazy-loaded via RESOURCE_POOL_QUERY (single-pool variant
@@ -475,9 +560,18 @@ export const STRINGS: Dict = {
   'resources.action.view': { zh: '查看', en: 'View' },
   'resources.inventory.title': { zh: '资源池资产', en: 'Resource Pool Inventory' },
   'resources.inventory.viewTitle': { zh: '查看资源池资产', en: 'View Resource Pool Inventory' },
-  'resources.inventory.viewDisabledTitle': { zh: '资源池尚未同步,无法查看资产', en: 'Not synced yet; inventory unavailable' },
-  'resources.inventory.loadFail': { zh: '加载资源池资产失败', en: 'Failed to load resource pool inventory' },
-  'resources.inventory.empty': { zh: '尚未同步,无资产数据', en: 'Not synced yet; no inventory data' },
+  'resources.inventory.viewDisabledTitle': {
+    zh: '资源池尚未同步,无法查看资产',
+    en: 'Not synced yet; inventory unavailable',
+  },
+  'resources.inventory.loadFail': {
+    zh: '加载资源池资产失败',
+    en: 'Failed to load resource pool inventory',
+  },
+  'resources.inventory.empty': {
+    zh: '尚未同步,无资产数据',
+    en: 'Not synced yet; no inventory data',
+  },
   'resources.inventory.close': { zh: '关闭', en: 'Close' },
   'resources.inventory.group.clusters': { zh: '集群', en: 'Clusters' },
   'resources.inventory.group.datastores': { zh: '数据存储', en: 'Datastores' },
@@ -810,7 +904,10 @@ export const STRINGS: Dict = {
   'marketplace.deploy.hostname': { zh: '主机名（可选）', en: 'Hostname (optional)' },
   'marketplace.deploy.hostnamePlaceholder': { zh: '如 agent-vm-01', en: 'e.g. agent-vm-01' },
   'marketplace.deploy.notes': { zh: '部署说明（可选）', en: 'Deploy notes (optional)' },
-  'marketplace.deploy.notesPlaceholder': { zh: '如 用于生产环境 Web 服务', en: 'e.g. production web service' },
+  'marketplace.deploy.notesPlaceholder': {
+    zh: '如 用于生产环境 Web 服务',
+    en: 'e.g. production web service',
+  },
   'marketplace.deploy.targetPool': { zh: 'vSphere 放置资源池', en: 'vSphere placement pool' },
   'marketplace.deploy.targetPoolPlaceholder': {
     zh: '请选择放置资源池',
@@ -856,7 +953,10 @@ export const STRINGS: Dict = {
   // Model routing
   'gatewayModel.title': { zh: '网关路由配置', en: 'Gateway Route Configuration' },
   'gatewayModel.toast.actionFailed': { zh: '操作失败', en: 'Action failed' },
-  'gatewayModel.description': { zh: '管理网关上的路由清单（关联网关、路由策略、底层供应商模型与降级链），按策略将请求分派到不同后端模型。', en: 'Manage the gateway route catalogue (linked gateway, routing strategy, underlying provider models, and fallback chains); dispatch requests to backend models by strategy.' },
+  'gatewayModel.description': {
+    zh: '管理网关上的路由清单（关联网关、路由策略、底层供应商模型与降级链），按策略将请求分派到不同后端模型。',
+    en: 'Manage the gateway route catalogue (linked gateway, routing strategy, underlying provider models, and fallback chains); dispatch requests to backend models by strategy.',
+  },
   'gatewayModel.table.label': { zh: '网关路由列表', en: 'Gateway routes' },
   'gatewayModel.sort': { zh: '排序：{column}', en: 'Sort {column}' },
   'gatewayModel.filter': { zh: '过滤：{column}', en: 'Filter {column}' },
@@ -1076,7 +1176,10 @@ export const STRINGS: Dict = {
   // needing the popover open. `modelsMoreAria` is the longer screen-reader
   // label because the visible `+N` alone reads ambiguously to AT.
   'virtualKey.col.modelsMore': { zh: '再显示 {count} 个', en: '+{count} more' },
-  'virtualKey.col.modelsMoreAria': { zh: '展开剩余 {count} 个模型', en: 'Show remaining {count} models' },
+  'virtualKey.col.modelsMoreAria': {
+    zh: '展开剩余 {count} 个模型',
+    en: 'Show remaining {count} models',
+  },
   'virtualKey.col.maskedKey': { zh: '密钥', en: 'Key' },
   'virtualKey.col.status': { zh: '状态', en: 'Status' },
   'virtualKey.col.expiresAt': { zh: '过期时间', en: 'Expires At' },
@@ -1250,14 +1353,14 @@ export const STRINGS: Dict = {
     en: 'Delete the selected {count} keys? This action cannot be undone.',
   },
   // Purge-path confirm. Title is deliberately *not* day-specific —
-// the operator can edit the cutoff in the dialog's number input
-// before confirming, so we don't bake a value into the title
-// (otherwise a stale "确认清理 90 天前..." would mislead if the
-// operator went on to type 180). Body similarly avoids naming the
-// days; the number input itself is the visible source of truth for
-// the cutoff at confirm time. CN keeps the day-agnostic wording; EN
-// retains "revoked keys" since it's the natural English term.
-'virtualKey.confirm.purgeTitle': {
+  // the operator can edit the cutoff in the dialog's number input
+  // before confirming, so we don't bake a value into the title
+  // (otherwise a stale "确认清理 90 天前..." would mislead if the
+  // operator went on to type 180). Body similarly avoids naming the
+  // days; the number input itself is the visible source of truth for
+  // the cutoff at confirm time. CN keeps the day-agnostic wording; EN
+  // retains "revoked keys" since it's the natural English term.
+  'virtualKey.confirm.purgeTitle': {
     zh: '确认清理已吊销的令牌',
     en: 'Purge revoked keys',
   },
@@ -1412,7 +1515,7 @@ export const STRINGS: Dict = {
   'virtualKey.form.rateLimitType.best_effort_throughput.desc': {
     zh: '尽力调度,即使超出 TPM 也不报错(超限检查在请求时按 Team/Key 限额执行)。',
     en:
-      'Best effort throughput - no error if we\'re overallocating tpm ' +
+      "Best effort throughput - no error if we're overallocating tpm " +
       '(Team/Key Limits checked at runtime).',
   },
   'virtualKey.form.rateLimitType.guaranteed_throughput.title': {
@@ -1422,7 +1525,7 @@ export const STRINGS: Dict = {
   'virtualKey.form.rateLimitType.guaranteed_throughput.desc': {
     zh: '保证吞吐,超出 TPM 时报错(同时检查模型自身限额)。',
     en:
-      'Guaranteed throughput - raise an error if we\'re overallocating ' +
+      "Guaranteed throughput - raise an error if we're overallocating " +
       'tpm (also checks model-specific limits).',
   },
   'virtualKey.form.rateLimitType.dynamic.title': {
@@ -1436,7 +1539,10 @@ export const STRINGS: Dict = {
       'it can dynamically exceed the limit.',
   },
   'virtualKey.form.maxParallelRequests': { zh: '最大并发请求', en: 'Max Parallel Requests' },
-  'virtualKey.form.budgetDuration': { zh: '预算周期（budgetDuration）', en: 'Budget Duration (budgetDuration)' },
+  'virtualKey.form.budgetDuration': {
+    zh: '预算周期（budgetDuration）',
+    en: 'Budget Duration (budgetDuration)',
+  },
   'virtualKey.form.budgetDurationPlaceholder': { zh: '例如 1', en: 'e.g. 1' },
   'virtualKey.form.budgetDurationUnit': { zh: '单位', en: 'Unit' },
   'virtualKey.form.budgetDurationUnitSecond': { zh: '秒 (s)', en: 'Second (s)' },
@@ -1458,7 +1564,10 @@ export const STRINGS: Dict = {
     zh: '至少选择一个接口或开启"允许所有接口"',
     en: 'Select at least one route or enable "Allow All APIs"',
   },
-  'virtualKey.allowedRoutes.CHAT': { zh: '对话 /v1/chat/completions', en: 'Chat /v1/chat/completions' },
+  'virtualKey.allowedRoutes.CHAT': {
+    zh: '对话 /v1/chat/completions',
+    en: 'Chat /v1/chat/completions',
+  },
   'virtualKey.allowedRoutes.EMBEDDINGS': {
     zh: '向量 /v1/embeddings',
     en: 'Embeddings /v1/embeddings',
@@ -1591,8 +1700,14 @@ export const STRINGS: Dict = {
   },
   'supplier.model.form.modelError': { zh: '上游模型原名不可为空', en: 'Model name is required' },
   'supplier.model.form.apiKey': { zh: 'API Key', en: 'API Key' },
-  'supplier.model.form.apiKeyPlaceholder': { zh: '明文只用于本次提交', en: 'Plaintext used only for this submission' },
-  'supplier.model.form.apiKeyError': { zh: '新增时 API Key 必填', en: 'API Key is required when creating' },
+  'supplier.model.form.apiKeyPlaceholder': {
+    zh: '明文只用于本次提交',
+    en: 'Plaintext used only for this submission',
+  },
+  'supplier.model.form.apiKeyError': {
+    zh: '新增时 API Key 必填',
+    en: 'API Key is required when creating',
+  },
   'supplier.model.form.apiKeyHint': {
     zh: '后端加密入库,前端不再显示',
     en: 'Encrypted at rest, never displayed again',
@@ -1611,7 +1726,10 @@ export const STRINGS: Dict = {
   'supplier.model.form.advanced': { zh: '模型高级参数', en: 'Advanced' },
   'supplier.model.form.specAdvanced': { zh: '供应商模型高级参数', en: 'Model Advanced' },
   'supplier.model.form.apiBase': { zh: 'API Base', en: 'API Base' },
-  'supplier.model.form.apiBasePlaceholder': { zh: 'https://api.openai.com/v1', en: 'https://api.openai.com/v1' },
+  'supplier.model.form.apiBasePlaceholder': {
+    zh: 'https://api.openai.com/v1',
+    en: 'https://api.openai.com/v1',
+  },
   'supplier.model.form.apiBaseHint': {
     zh: '编辑时暂只读;后续支持从 litellm_params 同步',
     en: 'Read-only here for now; syncs with litellm_params',
@@ -1627,7 +1745,10 @@ export const STRINGS: Dict = {
     en: 'Organization is required',
   },
   'supplier.model.form.tags': { zh: 'Tags (逗号分隔)', en: 'Tags (comma-separated)' },
-  'supplier.model.form.tagsPlaceholder': { zh: '例如 prod,priority-high', en: 'e.g. prod,priority-high' },
+  'supplier.model.form.tagsPlaceholder': {
+    zh: '例如 prod,priority-high',
+    en: 'e.g. prod,priority-high',
+  },
   'supplier.model.form.cancel': { zh: '取消', en: 'Cancel' },
   'supplier.model.form.submit': { zh: '保存', en: 'Save' },
   'supplier.model.form.step.basic': { zh: '基本', en: 'Basic' },
@@ -1770,8 +1891,14 @@ export const STRINGS: Dict = {
   'supplier.model.toast.refreshFailed': { zh: '刷新失败', en: 'Failed to refresh' },
   'supplier.model.toast.deleteFailed': { zh: '删除失败', en: 'Failed to delete model' },
   'supplier.model.toast.deleted': { zh: '供应商模型已删除', en: 'Provider model deleted' },
-  'supplier.model.toast.batchEnabled': { zh: '已启用 {count} 个模型', en: 'Enabled {count} models' },
-  'supplier.model.toast.batchDisabled': { zh: '已禁用 {count} 个模型', en: 'Disabled {count} models' },
+  'supplier.model.toast.batchEnabled': {
+    zh: '已启用 {count} 个模型',
+    en: 'Enabled {count} models',
+  },
+  'supplier.model.toast.batchDisabled': {
+    zh: '已禁用 {count} 个模型',
+    en: 'Disabled {count} models',
+  },
   'supplier.model.confirm.deleteTitle': {
     zh: '删除供应商模型',
     en: 'Delete Provider Model',
@@ -1821,8 +1948,14 @@ export const STRINGS: Dict = {
   'supplier.viewModal.col.cost': { zh: '模型定价', en: 'Cost' },
   'supplier.viewModal.col.limits': { zh: '模型限额', en: 'Limits' },
   'supplier.viewModal.col.passThrough': { zh: '透传模式', en: 'Pass-through' },
-  'supplier.viewModal.col.chatApi': { zh: '使用 chat completions 接口', en: 'Use chat completions API' },
-  'supplier.viewModal.col.mergeReasoning': { zh: '合并 reasoning 到 choices', en: 'Merge reasoning into choices' },
+  'supplier.viewModal.col.chatApi': {
+    zh: '使用 chat completions 接口',
+    en: 'Use chat completions API',
+  },
+  'supplier.viewModal.col.mergeReasoning': {
+    zh: '合并 reasoning 到 choices',
+    en: 'Merge reasoning into choices',
+  },
   'supplier.viewModal.yes': { zh: '是', en: 'Yes' },
   'supplier.viewModal.no': { zh: '否', en: 'No' },
   'supplier.action.view': { zh: '查看', en: 'View' },
@@ -2196,7 +2329,10 @@ export const STRINGS: Dict = {
   'auditLog.filter.to': { zh: '止', en: 'To' },
   'auditLog.filter.result': { zh: '结果', en: 'Result' },
   'auditLog.filter.allResults': { zh: '全部结果', en: 'All results' },
-  'auditLog.filter.resourceTypePlaceholder': { zh: '资源类型（如 user）', en: 'Resource type (e.g. user)' },
+  'auditLog.filter.resourceTypePlaceholder': {
+    zh: '资源类型（如 user）',
+    en: 'Resource type (e.g. user)',
+  },
   'auditLog.action.export': { zh: '导出 CSV', en: 'Export CSV' },
   'auditLog.export.empty': { zh: '当前无数据可导出', en: 'Nothing to export' },
   'auditLog.export.inProgress': { zh: '导出中…', en: 'Exporting…' },
@@ -2268,7 +2404,10 @@ export const STRINGS: Dict = {
   'monitor.kpi.errors': { zh: '错误数', en: 'Errors' },
   'monitor.health.title': { zh: '上游健康（各网关）', en: 'Upstream health (per gateway)' },
   'monitor.health.unreachable': { zh: '网关不可达', en: 'Gateway unreachable' },
-  'monitor.health.counts': { zh: '健康 {healthy} · 异常 {unhealthy}', en: '{healthy} healthy · {unhealthy} down' },
+  'monitor.health.counts': {
+    zh: '健康 {healthy} · 异常 {unhealthy}',
+    en: '{healthy} healthy · {unhealthy} down',
+  },
   'monitor.health.status.up': { zh: '健康', en: 'Healthy' },
   'monitor.health.status.partial': { zh: '部分异常', en: 'Partially degraded' },
   'monitor.health.status.down': { zh: '不可达', en: 'Unreachable' },
@@ -2428,44 +2567,50 @@ export const STRINGS: Dict = {
     zh: '为了您的账户安全，请设置一个新的登录密码。',
     en: 'For your account security, please set a new password.',
   },
-  'changePassword.current':       { zh: '当前密码',                     en: 'Current Password' },
-  'changePassword.new':           { zh: '新密码',                       en: 'New Password' },
-  'changePassword.confirm':       { zh: '确认新密码',                   en: 'Confirm New Password' },
-  'changePassword.submit':        { zh: '提交',                         en: 'Submit' },
-  'changePassword.submitUser':    { zh: '修改',                         en: 'Save' },
-  'changePassword.mismatch':      {
+  'changePassword.current': { zh: '当前密码', en: 'Current Password' },
+  'changePassword.new': { zh: '新密码', en: 'New Password' },
+  'changePassword.confirm': { zh: '确认新密码', en: 'Confirm New Password' },
+  'changePassword.submit': { zh: '提交', en: 'Submit' },
+  'changePassword.submitUser': { zh: '修改', en: 'Save' },
+  'changePassword.mismatch': {
     zh: '两次输入的新密码不一致',
     en: 'New passwords do not match.',
   },
-  'changePassword.toast.ok':      { zh: '密码已更新',                   en: 'Password updated' },
-  'changePassword.toast.fail':    { zh: '修改失败',                     en: 'Failed to update password' },
-  'changePassword.error.required':{ zh: '请填写所有字段',               en: 'All fields are required.' },
-  'changePassword.action.showPwd': { zh: '显示密码',                   en: 'Show password' },
-  'changePassword.action.hidePwd': { zh: '隐藏密码',                   en: 'Hide password' },
+  'changePassword.toast.ok': { zh: '密码已更新', en: 'Password updated' },
+  'changePassword.toast.fail': { zh: '修改失败', en: 'Failed to update password' },
+  'changePassword.error.required': { zh: '请填写所有字段', en: 'All fields are required.' },
+  'changePassword.action.showPwd': { zh: '显示密码', en: 'Show password' },
+  'changePassword.action.hidePwd': { zh: '隐藏密码', en: 'Hide password' },
 
   // Profile page (read-only identity + change password button)
-  'profile.title':               { zh: '个人资料',                     en: 'Profile' },
-  'profile.description':         { zh: '查看当前登录账户的基本信息与账号元数据。', en: 'View your current account identity and metadata.' },
-  'profile.section.identity':    { zh: '账户身份',                     en: 'Identity' },
-  'profile.section.metadata':    { zh: '账号元数据',                   en: 'Metadata' },
-  'profile.field.username':      { zh: '用户名',                       en: 'Username' },
-  'profile.field.displayName':   { zh: '显示名',                       en: 'Display Name' },
-  'profile.field.email':         { zh: '邮箱',                         en: 'Email' },
-  'profile.field.role':          { zh: '角色',                         en: 'Role' },
-  'profile.field.createdAt':     { zh: '账户创建时间',                 en: 'Created At' },
-  'profile.field.lastLogin':     { zh: '最后登录时间',                 en: 'Last Login' },
-  'profile.field.status':        { zh: '连接状态',                     en: 'Connection Status' },
-  'profile.field.mustChange':    { zh: '是否需要修改密码',             en: 'Forced Password Change' },
-  'profile.status.online':       { zh: '在线',                         en: 'Online' },
-  'profile.status.offline':      { zh: '离线',                         en: 'Offline' },
-  'profile.mustChange.yes':      { zh: '是',                           en: 'Yes' },
-  'profile.mustChange.no':       { zh: '否',                           en: 'No' },
-  'profile.action.changePassword': { zh: '修改密码',                   en: 'Change Password' },
-  'profile.unavailable':         { zh: '暂未提供',                     en: 'Not provided' },
+  'profile.title': { zh: '个人资料', en: 'Profile' },
+  'profile.description': {
+    zh: '查看当前登录账户的基本信息与账号元数据。',
+    en: 'View your current account identity and metadata.',
+  },
+  'profile.section.identity': { zh: '账户身份', en: 'Identity' },
+  'profile.section.metadata': { zh: '账号元数据', en: 'Metadata' },
+  'profile.field.username': { zh: '用户名', en: 'Username' },
+  'profile.field.displayName': { zh: '显示名', en: 'Display Name' },
+  'profile.field.email': { zh: '邮箱', en: 'Email' },
+  'profile.field.role': { zh: '角色', en: 'Role' },
+  'profile.field.createdAt': { zh: '账户创建时间', en: 'Created At' },
+  'profile.field.lastLogin': { zh: '最后登录时间', en: 'Last Login' },
+  'profile.field.status': { zh: '连接状态', en: 'Connection Status' },
+  'profile.field.mustChange': { zh: '是否需要修改密码', en: 'Forced Password Change' },
+  'profile.status.online': { zh: '在线', en: 'Online' },
+  'profile.status.offline': { zh: '离线', en: 'Offline' },
+  'profile.mustChange.yes': { zh: '是', en: 'Yes' },
+  'profile.mustChange.no': { zh: '否', en: 'No' },
+  'profile.action.changePassword': { zh: '修改密码', en: 'Change Password' },
+  'profile.unavailable': { zh: '暂未提供', en: 'Not provided' },
 
   // --- Added for i18n/dark-mode fix pass ---
   'common.close': { zh: '关闭', en: 'Close' },
-  'common.noPermission': { zh: '你没有权限执行此操作', en: 'You do not have permission to perform this action' },
+  'common.noPermission': {
+    zh: '你没有权限执行此操作',
+    en: 'You do not have permission to perform this action',
+  },
   'common.time.justNow': { zh: '刚刚', en: 'Just now' },
   'common.time.minutesAgo': { zh: '{n} 分钟前', en: '{n} min ago' },
   'common.time.hoursAgo': { zh: '{n} 小时前', en: '{n} h ago' },
@@ -2483,14 +2628,26 @@ export const STRINGS: Dict = {
   'marketplace.form.error.scenarios': { zh: '请填写场景', en: 'Scenarios are required' },
   'marketplace.form.error.skills': { zh: '请填写技能', en: 'Skills are required' },
   'marketplace.deploy.versionCount': { zh: '{n} 个版本可选', en: '{n} versions available' },
-  'marketplace.card.latestVersionAria': { zh: '最新版本 {version}', en: 'Latest version {version}' },
+  'marketplace.card.latestVersionAria': {
+    zh: '最新版本 {version}',
+    en: 'Latest version {version}',
+  },
   'auditLog.value.user': { zh: '用户 {id}', en: 'User {id}' },
   'monitor.series.cpu': { zh: 'CPU 使用率', en: 'CPU Usage' },
   'gateway.sort': { zh: '排序：{column}', en: 'Sort {column}' },
   'gateway.filter': { zh: '过滤：{column}', en: 'Filter {column}' },
-  'resources.form.testConnectionFail': { zh: '请求失败，请重试', en: 'Request failed, please retry' },
-  'resources.form.testDetail': { zh: 'vSphere {version} · {count} 个内容库', en: 'vSphere {version} · {count} content libraries' },
-  'resources.form.endpointPlaceholder': { zh: 'https://vc.example.local/sdk', en: 'https://vc.example.local/sdk' },
+  'resources.form.testConnectionFail': {
+    zh: '请求失败，请重试',
+    en: 'Request failed, please retry',
+  },
+  'resources.form.testDetail': {
+    zh: 'vSphere {version} · {count} 个内容库',
+    en: 'vSphere {version} · {count} content libraries',
+  },
+  'resources.form.endpointPlaceholder': {
+    zh: 'https://vc.example.local/sdk',
+    en: 'https://vc.example.local/sdk',
+  },
 
   // Platform Settings (PlatformSettingsView) — agent OS user + agent-package mirror (LLD-16).
   'platformSettings.title': { zh: '平台设置', en: 'Platform Settings' },
@@ -2540,9 +2697,15 @@ export const STRINGS: Dict = {
     en: 'Do not embed credentials in the URL — use the username / password fields below',
   },
   'platformSettings.pkg.userLabel': { zh: '用户名', en: 'Username' },
-  'platformSettings.pkg.userPlaceholder': { zh: '只读账户，可留空', en: 'Read-only account, optional' },
+  'platformSettings.pkg.userPlaceholder': {
+    zh: '只读账户，可留空',
+    en: 'Read-only account, optional',
+  },
   'platformSettings.pkg.passwordLabel': { zh: '密码', en: 'Password' },
-  'platformSettings.pkg.passwordPlaceholder': { zh: '●●●● 留空则不修改', en: '●●●● Leave blank to keep unchanged' },
+  'platformSettings.pkg.passwordPlaceholder': {
+    zh: '●●●● 留空则不修改',
+    en: '●●●● Leave blank to keep unchanged',
+  },
   'platformSettings.pkg.passwordHint': {
     zh: '写入后不回显；留空表示沿用已保存的密码。',
     en: 'Write-only, never displayed. Leave blank to keep the stored password.',

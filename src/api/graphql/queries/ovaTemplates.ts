@@ -16,22 +16,7 @@ const FAMILY_FIELDS = /* GraphQL */ `
     updatedAt
     versions {
       id
-      familyId
       version
-      ovaIdentifier
-      notes
-      createdAt
-      ovfProperties {
-        key
-        label
-        type
-        defaultValue
-        description
-        required
-        password
-        values
-        category
-      }
     }
   }
 `

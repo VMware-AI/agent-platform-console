@@ -178,3 +178,21 @@ export interface RecycleAgentVars {
 export interface RecycleAgentResult {
   recycleAgent: Pick<Agent, 'id' | 'status' | 'updatedAt'>
 }
+
+export interface HardDeleteAgentVars {
+  input: {
+    agentId: string
+    /** Destructive op double-confirm — the backend rejects false. */
+    confirm: boolean
+  }
+}
+export interface HardDeleteAgentResult {
+  hardDeleteAgent: boolean
+}
+
+export interface RestartAgentVars {
+  id: string
+}
+export interface RestartAgentResult {
+  restartAgent: Pick<Agent, 'id' | 'status' | 'updatedAt'>
+}
