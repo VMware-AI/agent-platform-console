@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import { apolloClient } from '@/api/graphql/client'
 import AppDropdown from '@/components/AppDropdown.vue'
@@ -9,26 +9,20 @@ import { useLocaleStore } from '@/stores/locale'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
-import type { ModelRouteGatewayOption, ModelRouteStrategy } from '@/types/model-route'
-import { MODEL_ROUTE_STRATEGIES } from '@/types/model-route'
+import type { ModelRouteGatewayOption } from '@/types/model-route'
 import {
   MODEL_ROUTES_QUERY,
   CREATE_MODEL_ROUTE,
   UPDATE_MODEL_ROUTE,
-  SET_MODEL_ROUTE_ENABLED,
   DELETE_MODEL_ROUTE,
-  SYNC_ROUTER_SETTINGS,
   type ModelRoutesResult,
   type ModelRouteNode,
   type CreateModelRouteResult,
   type CreateModelRouteVars,
   type UpdateModelRouteResult,
   type UpdateModelRouteVars,
-  type SetModelRouteEnabledResult,
-  type SetModelRouteEnabledVars,
   type DeleteModelRouteResult,
   type DeleteModelRouteVars,
-  type SyncRouterSettingsResult,
 } from '@/api/graphql/queries/model-routes'
 import { MODEL_GATEWAYS_QUERY } from '@/api/graphql/queries/model-gateways'
 import {
@@ -50,12 +44,22 @@ function toRoute(node: ModelRouteNode): ModelRouteNode {
 }
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const
-const STATUS_FILTER_OPTIONS = ['ALL', 'ENABLED', 'DISABLED'] as const
 type PageSize = (typeof PAGE_SIZE_OPTIONS)[number]
-type BatchAction = 'enable' | 'disable' | 'delete'
-type RouteSortField = 'NAME' | 'GATEWAY' | 'STRATEGY' | 'MODELS' | 'STATUS'
+type BatchAction = 'delete'
+// Inline badge budget before we fall back to "+N overflow" — matches
+// VirtualKeyView's MODELS_VISIBLE_LIMIT so the two surfaces read as the
+// same chip treatment. 3 was picked because at the 20% MODELS column
+// width that's the longest list that fits on one line without wrapping
+// for typical model names.
+const MODELS_VISIBLE_LIMIT = 3
+// STATUS was previously a sortable + filterable column driven by the now-removed
+// `enabled` field; STRATEGY / MODELS were dropped from the sortable set
+// (their sort affordances were removed from the table header — the rows
+// still render the values, just without a clickable sort caret). NAME /
+// GATEWAY remain sortable.
+type RouteSortField = 'NAME' | 'GATEWAY'
 type SortDirection = 'ASC' | 'DESC'
-type RouteFilterKey = RouteSortField
+type RouteFilterKey = RouteSortField | 'STRATEGY' | 'MODELS'
 
 const { result, loading, refetch } = useQuery<ModelRoutesResult>(MODEL_ROUTES_QUERY)
 const routes = computed<ModelRouteNode[]>(() => (result.value?.modelRoutes ?? []).map(toRoute))
@@ -65,12 +69,46 @@ const routes = computed<ModelRouteNode[]>(() => (result.value?.modelRoutes ?? []
 // provider / status` shape; provider now derives from the first spec's
 // customLlmProvider (top-level `provider` is gone), and we no longer
 // filter by `enabled` (top-level `enabled` is also gone).
-const { result: providerResult } = useQuery<ProviderModelInfoResult>(
+//
+// Filtered by the form's currently selected model gateway. Empty when no
+// gateway is picked yet, so the shuttle stays empty until the operator
+// chooses a gateway — matches the 「颁发密钥」 page (where the model list
+// only loads after a gateway is selected) and prevents the operator from
+// pre-picking models against a gateway they then change.
+const formGatewayId = ref<string>('')
+// useQuery vars are reactive — pass a getter so the query re-fires when
+// `formGatewayId` changes. Passing `null` for `filter.modelGatewayId`
+// when no gateway is selected skips the server-side filter entirely.
+const providerResult = useQuery<ProviderModelInfoResult>(
   PROVIDER_MODELS_QUERY,
-  { page: { limit: 1000, offset: 0 } },
+  () => ({
+    page: { limit: 1000, offset: 0 },
+    filter: formGatewayId.value ? { modelGatewayId: formGatewayId.value } : null,
+  }),
+  () => ({
+    enabled: Boolean(formGatewayId.value),
+  }),
 )
-const providerModels = computed<ProviderModelNode[]>(
-  () => providerResult.value?.providerModelInfo?.data ?? [],
+// Local mirror of the gateway-scoped provider-model list. Apollo's
+// `result.value` keeps its previous payload after the query is disabled
+// (it doesn't auto-clear), so reading it directly would leak the last
+// gateway's model list into the shuttle when the form reopens or the
+// operator picks "请先选择模型网关". `providerModels` only mirrors the
+// Apollo result when (a) a gateway is currently selected and (b) the
+// fetch isn't mid-flight — that way clearing `formGatewayId` on
+// `closeForm` actually empties the shuttle, even if Apollo hasn't
+// observed the disabled state yet.
+const providerModels = ref<ProviderModelNode[]>([])
+watch(
+  [() => formGatewayId.value, () => providerResult.result.value, () => providerResult.loading.value],
+  ([gateway, result, loading]) => {
+    if (!gateway || loading) {
+      providerModels.value = []
+      return
+    }
+    providerModels.value = result?.providerModelInfo?.data ?? []
+  },
+  { immediate: true },
 )
 
 // Gateway picker options come from the real model-gateway list (so a route can be
@@ -90,15 +128,30 @@ const GATEWAYS = computed<ModelRouteGatewayOption[]>(() =>
 // shape (ModelRouteFormModal's SlotItem is structural; the form only reads
 // id / name / provider / status). The form filters further by
 // !selectedIds internally.
+//
+// Excludes models whose health probe hasn't reported the model usable:
+//   - `full_outage`: every spec is failing — the route would 100% fail over
+//     to its fallback chain. Not a viable primary, only a fallback — and
+//     even then only useful when a caller wants the route to be a "dead
+//     branch" by design, which the form does not model.
+//   - `unknown`: probe hasn't run yet; litellm returns no verdict. Same
+//     rationale as full_outage — picking it as a primary silently risks
+//     runtime failures the operator can't see.
+//
+// `partial_outage` is intentionally kept: at least one spec is healthy,
+// and the route's strategy decides how to distribute across them — that's
+// the whole point of the strategy picker.
 const shuttleCandidates = computed(() =>
-  providerModels.value.map((m) => ({
-    id: m.id,
-    name: m.name,
-    provider: m.modelSpecs[0]?.litellmParams.customLlmProvider ?? '—',
-    status: m.status,
-    gatewayName: m.modelGateway?.name,
-    specCount: m.modelSpecs.length,
-  })),
+  providerModels.value
+    .filter((m) => m.status !== 'full_outage' && m.status !== 'unknown')
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      provider: m.modelSpecs[0]?.litellmParams.customLlmProvider ?? '—',
+      status: m.status,
+      gatewayName: m.modelGateway?.name,
+      specCount: m.modelSpecs.length,
+    })),
 )
 
 // allRoutesForFallback — every route in the system is a candidate to be
@@ -115,15 +168,16 @@ const formOpen = ref(false)
 const editingRoute = ref<ModelRouteNode | null>(null)
 const saving = ref(false)
 const pendingDeleteIds = ref<string[]>([])
-const strategyMenuAnchor = ref<HTMLElement | null>(null)
-const strategyMenuTarget = ref<ModelRouteNode | null>(null)
+// Single-route second-step confirm target. Set after the first delete
+// dialog acknowledges; null until the operator starts a new flow.
+// Only ever holds one id (batch deletes skip the type-to-confirm step
+// — see onFirstConfirm).
+const finalDeleteId = ref<string | null>(null)
 const sortField = ref<RouteSortField | null>(null)
 const sortDirection = ref<SortDirection>('ASC')
 const nameFilter = ref('')
 const gatewayFilter = ref('ALL')
-const strategyFilter = ref<'ALL' | ModelRouteStrategy>('ALL')
 const modelsFilter = ref('')
-const statusFilter = ref<'ALL' | 'ENABLED' | 'DISABLED'>('ALL')
 const filterMenuAnchor = ref<HTMLElement | null>(null)
 const filterMenuKey = ref<RouteFilterKey | null>(null)
 
@@ -132,16 +186,13 @@ const filteredRoutes = computed(() => {
   const modelsKeyword = modelsFilter.value.trim().toLocaleLowerCase()
   const filtered = routes.value.filter((route) => {
     if (nameKeyword && !route.name.toLocaleLowerCase().includes(nameKeyword)) return false
-    if (gatewayFilter.value !== 'ALL' && route.backendGatewayId !== gatewayFilter.value) return false
-    if (strategyFilter.value !== 'ALL' && route.uiStrategy !== strategyFilter.value) return false
+    if (gatewayFilter.value !== 'ALL' && route.modelGateway.id !== gatewayFilter.value) return false
     if (
       modelsKeyword &&
       !route.supportedModels.some((model) => model.toLocaleLowerCase().includes(modelsKeyword))
     ) {
       return false
     }
-    if (statusFilter.value === 'ENABLED' && !route.enabled) return false
-    if (statusFilter.value === 'DISABLED' && route.enabled) return false
     return true
   })
 
@@ -150,10 +201,7 @@ const filteredRoutes = computed(() => {
   return [...filtered].sort((left, right) => {
     const valueFor = (route: ModelRouteNode): string | number => {
       if (sortField.value === 'NAME') return route.name
-      if (sortField.value === 'GATEWAY') return route.gatewayName
-      if (sortField.value === 'STRATEGY') return route.strategy
-      if (sortField.value === 'MODELS') return route.supportedModels.join(' ')
-      return route.enabled ? 1 : 0
+      return route.modelGateway.name
     }
     const leftValue = valueFor(left)
     const rightValue = valueFor(right)
@@ -199,6 +247,37 @@ const deleteDialogBody = computed(() => {
   const target = routes.value.find((route) => route.id === pendingDeleteIds.value[0])
   return locale.t('gatewayModel.confirm.deleteBody').replace('{name}', target?.name ?? '')
 })
+// Single-route final-confirm data. Pre-resolves the route's name so
+// ConfirmDialog can lock its confirm button until the operator
+// re-types the exact value — guards against "clicked the row above /
+// below by mistake" deleting the wrong route. The body renders the
+// route name in `<strong>` (bodySegments.`-bold`) so the value the
+// user is asked to type matches the value they see highlighted.
+const finalDeleteTarget = computed(() =>
+  finalDeleteId.value
+    ? routes.value.find((route) => route.id === finalDeleteId.value) ?? null
+    : null,
+)
+const finalDeleteBodySegments = computed(() => {
+  const name = finalDeleteTarget.value?.name ?? ''
+  const template = locale.t('gatewayModel.confirm.finalDeleteBody')
+  // Split on the {{name}} placeholder — keeps the highlighted name in
+  // a separate <strong> segment so it's visually distinct. The pattern
+  // in `gatewayModel.confirm.finalDeleteBody` uses double-braces around
+  // {{name}} to make the token easy to find via split('{{name}}').
+  const parts = template.split('{{name}}')
+  return [
+    { text: parts[0] ?? '' },
+    { text: name, bold: true },
+    { text: parts[1] ?? '' },
+  ]
+})
+const finalDeleteExpectedInput = computed(
+  () => finalDeleteTarget.value?.name ?? '',
+)
+const finalDeleteInputPlaceholder = computed(() =>
+  locale.t('gatewayModel.confirm.finalDeleteInputPlaceholder'),
+)
 
 function toggleSelect(id: string, checked: boolean) {
   const next = new Set(selectedIds.value)
@@ -218,11 +297,16 @@ function toggleSelectAll(checked: boolean) {
 
 function openCreate() {
   editingRoute.value = null
+  // Pre-fill with the route's existing gateway so its model list loads
+  // when the form opens. For new routes, leave empty so the shuttle
+  // waits for the operator's gateway pick.
+  formGatewayId.value = ''
   formOpen.value = true
 }
 
 function openEdit(route: ModelRouteNode) {
   editingRoute.value = route
+  formGatewayId.value = route.modelGateway.id
   formOpen.value = true
 }
 
@@ -230,6 +314,13 @@ function closeForm() {
   if (saving.value) return
   formOpen.value = false
   editingRoute.value = null
+  // Reset the upstream filter so the next open starts with no
+  // pre-fetched provider-model list — reopens the form clean.
+  formGatewayId.value = ''
+}
+
+function onGatewayChanged(gatewayId: string) {
+  formGatewayId.value = gatewayId
 }
 
 async function submitRoute(
@@ -263,40 +354,6 @@ async function submitRoute(
   }
 }
 
-async function changeStrategy(route: ModelRouteNode, value: string) {
-  const strategy = value as ModelRouteStrategy
-  if (!MODEL_ROUTE_STRATEGIES.includes(strategy)) return
-  if (strategy === route.uiStrategy) return
-  try {
-    await apolloClient.mutate<UpdateModelRouteResult, UpdateModelRouteVars>({
-      mutation: UPDATE_MODEL_ROUTE,
-      variables: { id: route.id, input: { uiStrategy: strategy } },
-    })
-    toast.success(locale.t('gatewayModel.toast.strategyUpdated').replace('{name}', route.name))
-    await refetch()
-  } catch (error) {
-    toast.error(graphqlErrorMessage(error, locale.t('gatewayModel.toast.actionFailed')))
-  }
-}
-
-function openStrategyMenu(route: ModelRouteNode, event: MouseEvent) {
-  closeFilterMenu()
-  strategyMenuTarget.value = route
-  strategyMenuAnchor.value = event.currentTarget as HTMLElement
-}
-
-function closeStrategyMenu() {
-  strategyMenuAnchor.value = null
-  strategyMenuTarget.value = null
-}
-
-function chooseStrategy(strategy: ModelRouteStrategy) {
-  const target = strategyMenuTarget.value
-  if (!target) return
-  closeStrategyMenu()
-  void changeStrategy(target, strategy)
-}
-
 function sortStateFor(field: RouteSortField): 'none' | 'ascending' | 'descending' {
   if (sortField.value !== field) return 'none'
   return sortDirection.value === 'ASC' ? 'ascending' : 'descending'
@@ -317,7 +374,6 @@ function toggleSort(field: RouteSortField) {
 }
 
 function openFilterMenu(key: RouteFilterKey, event: MouseEvent) {
-  closeStrategyMenu()
   filterMenuKey.value = key
   filterMenuAnchor.value = event.currentTarget as HTMLElement
 }
@@ -330,9 +386,7 @@ function closeFilterMenu() {
 function hasFilter(key: RouteFilterKey): boolean {
   if (key === 'NAME') return Boolean(nameFilter.value.trim())
   if (key === 'GATEWAY') return gatewayFilter.value !== 'ALL'
-  if (key === 'STRATEGY') return strategyFilter.value !== 'ALL'
-  if (key === 'MODELS') return Boolean(modelsFilter.value.trim())
-  return statusFilter.value !== 'ALL'
+  return Boolean(modelsFilter.value.trim())
 }
 
 function setTextFilter(key: 'NAME' | 'MODELS', value: string) {
@@ -347,70 +401,21 @@ function setGatewayFilter(value: string) {
   closeFilterMenu()
 }
 
-function setStrategyFilter(value: 'ALL' | ModelRouteStrategy) {
-  strategyFilter.value = value
-  currentPage.value = 1
-  closeFilterMenu()
-}
-
-function setStatusFilter(value: 'ALL' | 'ENABLED' | 'DISABLED') {
-  statusFilter.value = value
-  currentPage.value = 1
-  closeFilterMenu()
-}
-
 function clearActiveFilter() {
   if (filterMenuKey.value === 'NAME') nameFilter.value = ''
   else if (filterMenuKey.value === 'GATEWAY') gatewayFilter.value = 'ALL'
-  else if (filterMenuKey.value === 'STRATEGY') strategyFilter.value = 'ALL'
   else if (filterMenuKey.value === 'MODELS') modelsFilter.value = ''
-  else if (filterMenuKey.value === 'STATUS') statusFilter.value = 'ALL'
   currentPage.value = 1
   closeFilterMenu()
-}
-
-async function setEnabled(ids: string[], enabled: boolean) {
-  if (ids.length === 0) return
-  const outcomes = await Promise.allSettled(
-    ids.map((id) =>
-      apolloClient.mutate<SetModelRouteEnabledResult, SetModelRouteEnabledVars>({
-        mutation: SET_MODEL_ROUTE_ENABLED,
-        variables: { id, enabled },
-      }),
-    ),
-  )
-  const ok = outcomes.filter((outcome) => outcome.status === 'fulfilled').length
-  const failure = outcomes.find(
-    (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected',
-  )
-  if (ok > 0) {
-    toast.success(
-      locale
-        .t(enabled ? 'gatewayModel.toast.enabled' : 'gatewayModel.toast.disabled')
-        .replace('{count}', String(ok)),
-    )
-  }
-  if (failure) {
-    toast.error(graphqlErrorMessage(failure.reason, locale.t('gatewayModel.toast.actionFailed')))
-  }
-  await refetch()
-}
-
-function toggleEnabled(route: ModelRouteNode) {
-  void setEnabled([route.id], !route.enabled)
 }
 
 function performBatch(action: BatchAction, close: () => void) {
   const ids = [...selectedIds.value]
   close()
   if (ids.length === 0) return
-  if (action === 'delete') {
-    pendingDeleteIds.value = ids
-    return
-  }
-  void setEnabled(ids, action === 'enable').then(() => {
-    selectedIds.value = new Set()
-  })
+  // Only `delete` remains — `enable` / `disable` were removed when the
+  // `enabled` field and setModelRouteEnabled mutation were dropped.
+  pendingDeleteIds.value = ids
 }
 
 function requestDelete(route: ModelRouteNode) {
@@ -421,9 +426,34 @@ function closeDelete() {
   pendingDeleteIds.value = []
 }
 
-async function confirmDelete() {
+// First-step "confirm" handler: routes the operator into either the
+// type-to-confirm dialog (single delete) or straight through to the
+// mutation (batch delete — the "click again on a row you didn't
+// intend" risk is much lower with N>1 selected, and asking the
+// operator to type the names of every route would be hostile UX).
+//
+// Mirrors the two-step delete flow on the Model Gateway page
+// (ModelGatewayView.vue showDeleteConfirm → showDeleteFinalConfirm).
+function onFirstConfirm() {
   const ids = [...pendingDeleteIds.value]
+  if (ids.length !== 1) {
+    void confirmDelete()
+    return
+  }
   pendingDeleteIds.value = []
+  finalDeleteId.value = ids[0]
+}
+
+function closeFinalDelete() {
+  finalDeleteId.value = null
+}
+
+async function confirmDelete() {
+  const ids = finalDeleteId.value
+    ? [finalDeleteId.value]
+    : [...pendingDeleteIds.value]
+  pendingDeleteIds.value = []
+  finalDeleteId.value = null
   if (ids.length === 0) return
   const outcomes = await Promise.allSettled(
     ids.map((id) =>
@@ -448,9 +478,10 @@ async function confirmDelete() {
   if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
 }
 
-function manageGateway(route: ModelRouteNode) {
-  toast.info(locale.t('gatewayModel.toast.manageGateway').replace('{name}', route.gatewayName))
-}
+// manageGateway was removed along with the row's manage button — the
+// toast-only "open the gateway manager" hint no longer has a caller.
+// If a future view needs the same action, reintroduce a function that
+// does it instead of just emitting a toast.
 
 async function refreshRoutes() {
   if (loading.value) return
@@ -462,31 +493,28 @@ async function refreshRoutes() {
   }
 }
 
-// syncRouterSettings — atomic 全量聚合覆盖刷新 (design doc §3.2). Re-aggregates
-// every active route + tier and POSTs /config/update. Per-route save already
-// triggers this server-side; this manual button is for impatient operators
-// or transient /config/update failure recovery.
-async function syncRouterSettings() {
-  if (loading.value) return
-  try {
-    const result = await apolloClient.mutate<SyncRouterSettingsResult>({
-      mutation: SYNC_ROUTER_SETTINGS,
-    })
-    if (result.data?.syncRouterSettings) {
-      toast.success(locale.t('gatewayModel.toast.syncSuccess'))
-    } else {
-      toast.error(locale.t('gatewayModel.toast.syncFailed'))
-    }
-  } catch (error) {
-    toast.error(graphqlErrorMessage(error, locale.t('gatewayModel.toast.syncFailed')))
-  }
-}
-
 function onPageSizeChange(event: Event) {
   const next = Number((event.target as HTMLSelectElement).value)
   if (!PAGE_SIZE_OPTIONS.includes(next as PageSize)) return
   pageSize.value = next as PageSize
   currentPage.value = 1
+}
+
+// Render an ISO timestamp as `YYYY/MM/DD HH:MM` in the operator's local
+// timezone (the `time-zone` of a `Date` instance is always the runtime
+// locale). Mirrors `formatGatewayTime` in ModelGatewayView.vue so the
+// two pages read timestamps the same way. Returns the literal em-dash
+// for null/undefined/invalid — the table cell needs a non-empty
+// placeholder so the column width doesn't collapse on missing rows.
+function formatTimestamp(value: string | null | undefined): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return (
+    `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  )
 }
 
 function goToPage(page: number) {
@@ -521,31 +549,12 @@ function goToPage(page: number) {
           </cds-button>
         </template>
         <template #default="{ close }">
-          <button class="menu-option" type="button" @click="performBatch('enable', close)">
-            <cds-icon shape="check-circle" size="sm" aria-hidden="true"></cds-icon>
-            {{ locale.t('gatewayModel.batch.enable') }}
-          </button>
-          <button class="menu-option" type="button" @click="performBatch('disable', close)">
-            <cds-icon shape="ban" size="sm" aria-hidden="true"></cds-icon>
-            {{ locale.t('gatewayModel.batch.disable') }}
-          </button>
           <button class="menu-option danger" type="button" @click="performBatch('delete', close)">
             <cds-icon shape="trash" size="sm" aria-hidden="true"></cds-icon>
             {{ locale.t('gatewayModel.batch.delete') }}
           </button>
         </template>
       </AppDropdown>
-
-      <cds-button
-        v-if="auth.role === 'admin'"
-        action="outline"
-        :disabled="loading"
-        :title="locale.t('gatewayModel.action.sync')"
-        @click="syncRouterSettings"
-      >
-        <cds-icon shape="sync" size="sm" aria-hidden="true"></cds-icon>
-        {{ locale.t('gatewayModel.action.sync') }}
-      </cds-button>
 
       <button
         type="button"
@@ -580,7 +589,7 @@ function goToPage(page: number) {
           @change="toggleSelectAll(($event.target as HTMLInputElement).checked)"
         />
       </cds-grid-column>
-      <cds-grid-column width="18%">
+      <cds-grid-column width="16%">
         <div class="column-head">
           <span>{{ locale.t('gatewayModel.col.name') }}</span>
           <span class="column-head-actions">
@@ -615,32 +624,10 @@ function goToPage(page: number) {
           </span>
         </div>
       </cds-grid-column>
-      <cds-grid-column width="18%">
+      <cds-grid-column width="16%">
         <div class="column-head">
           <span>{{ locale.t('gatewayModel.col.gateway') }}</span>
           <span class="column-head-actions">
-            <cds-button-action
-              :aria-label="
-                locale
-                  .t('gatewayModel.sort')
-                  .replace('{column}', locale.t('gatewayModel.col.gateway'))
-              "
-              @click="toggleSort('GATEWAY')"
-            >
-              <cds-icon
-                v-if="sortStateFor('GATEWAY') === 'ascending'"
-                shape="angle"
-                direction="up"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else-if="sortStateFor('GATEWAY') === 'descending'"
-                shape="angle"
-                direction="down"
-                size="sm"
-              ></cds-icon>
-              <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-            </cds-button-action>
             <cds-button-action
               shape="filter"
               :expanded="hasFilter('GATEWAY')"
@@ -654,69 +641,10 @@ function goToPage(page: number) {
           </span>
         </div>
       </cds-grid-column>
-      <cds-grid-column width="17%">
-        <div class="column-head">
-          <span>{{ locale.t('gatewayModel.col.strategy') }}</span>
-          <span class="column-head-actions">
-            <cds-button-action
-              :aria-label="
-                locale
-                  .t('gatewayModel.sort')
-                  .replace('{column}', locale.t('gatewayModel.col.strategy'))
-              "
-              @click="toggleSort('STRATEGY')"
-            >
-              <cds-icon
-                v-if="sortStateFor('STRATEGY') === 'ascending'"
-                shape="angle"
-                direction="up"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else-if="sortStateFor('STRATEGY') === 'descending'"
-                shape="angle"
-                direction="down"
-                size="sm"
-              ></cds-icon>
-              <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-            </cds-button-action>
-            <cds-button-action
-              shape="filter"
-              :expanded="hasFilter('STRATEGY')"
-              :aria-label="
-                locale
-                  .t('gatewayModel.filter')
-                  .replace('{column}', locale.t('gatewayModel.col.strategy'))
-              "
-              @click="(event: MouseEvent) => openFilterMenu('STRATEGY', event)"
-            ></cds-button-action>
-          </span>
-        </div>
-      </cds-grid-column>
       <cds-grid-column width="20%">
         <div class="column-head">
           <span>{{ locale.t('gatewayModel.col.models') }}</span>
           <span class="column-head-actions">
-            <cds-button-action
-              :aria-label="
-                locale.t('gatewayModel.sort').replace('{column}', locale.t('gatewayModel.col.models'))
-              "
-              @click="toggleSort('MODELS')"
-            >
-              <cds-icon
-                v-if="sortStateFor('MODELS') === 'ascending'"
-                shape="angle"
-                direction="up"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else-if="sortStateFor('MODELS') === 'descending'"
-                shape="angle"
-                direction="down"
-                size="sm"
-              ></cds-icon>
-              <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-            </cds-button-action>
             <cds-button-action
               shape="filter"
               :expanded="hasFilter('MODELS')"
@@ -730,44 +658,22 @@ function goToPage(page: number) {
           </span>
         </div>
       </cds-grid-column>
-      <cds-grid-column width="9%">
+      <cds-grid-column width="13%">
         <div class="column-head">
-          <span>{{ locale.t('gatewayModel.col.status') }}</span>
-          <span class="column-head-actions">
-            <cds-button-action
-              :aria-label="
-                locale.t('gatewayModel.sort').replace('{column}', locale.t('gatewayModel.col.status'))
-              "
-              @click="toggleSort('STATUS')"
-            >
-              <cds-icon
-                v-if="sortStateFor('STATUS') === 'ascending'"
-                shape="angle"
-                direction="up"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else-if="sortStateFor('STATUS') === 'descending'"
-                shape="angle"
-                direction="down"
-                size="sm"
-              ></cds-icon>
-              <cds-icon v-else shape="two-way-arrows" class="sort-idle" size="sm"></cds-icon>
-            </cds-button-action>
-            <cds-button-action
-              shape="filter"
-              :expanded="hasFilter('STATUS')"
-              :aria-label="
-                locale
-                  .t('gatewayModel.filter')
-                  .replace('{column}', locale.t('gatewayModel.col.status'))
-              "
-              @click="(event: MouseEvent) => openFilterMenu('STATUS', event)"
-            ></cds-button-action>
-          </span>
+          <span>{{ locale.t('gatewayModel.col.strategy') }}</span>
         </div>
       </cds-grid-column>
-      <cds-grid-column width="18%">{{ locale.t('gatewayModel.col.actions') }}</cds-grid-column>
+      <cds-grid-column width="12%">
+        <div class="column-head">
+          <span>{{ locale.t('gatewayModel.col.createdAt') }}</span>
+        </div>
+      </cds-grid-column>
+      <cds-grid-column width="12%">
+        <div class="column-head">
+          <span>{{ locale.t('gatewayModel.col.updatedAt') }}</span>
+        </div>
+      </cds-grid-column>
+      <cds-grid-column width="13%">{{ locale.t('gatewayModel.col.actions') }}</cds-grid-column>
 
       <cds-grid-row v-for="route in visibleRoutes" :key="route.id">
         <cds-grid-cell>
@@ -783,64 +689,49 @@ function goToPage(page: number) {
           <strong class="route-name" :title="route.name">{{ route.name }}</strong>
         </cds-grid-cell>
         <cds-grid-cell>
-          <button type="button" class="gateway-link" @click="manageGateway(route)">
-            {{ route.gatewayName }}
-            <cds-icon shape="pop-out" size="sm" aria-hidden="true"></cds-icon>
-          </button>
+          <span class="gateway-name" :title="route.modelGateway.name">
+            {{ route.modelGateway.name }}
+          </span>
         </cds-grid-cell>
         <cds-grid-cell>
-          <button
-            type="button"
-            class="strategy-trigger"
-            aria-haspopup="menu"
-            :aria-expanded="strategyMenuTarget?.id === route.id"
-            :aria-label="
-              locale.t('gatewayModel.action.changeStrategy').replace('{name}', route.name)
-            "
-            @click="(event: MouseEvent) => openStrategyMenu(route, event)"
-          >
-            <span>{{ locale.t(`gatewayModel.strategy.${route.strategy}`) }}</span>
-            <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
-          </button>
-        </cds-grid-cell>
-        <cds-grid-cell>
-          <div class="model-list" :title="route.supportedModels.join(', ')">
-            <span v-for="model in route.supportedModels.slice(0, 3)" :key="model">{{
-              model
-            }}</span>
-            <span v-if="route.supportedModels.length > 3" class="more-models">
-              +{{ route.supportedModels.length - 3 }}
-            </span>
+          <div class="models-cell" :title="route.supportedModels.join(', ')">
+            <cds-badge
+              v-for="model in route.supportedModels.slice(0, MODELS_VISIBLE_LIMIT)"
+              :key="model"
+              status="neutral"
+              class="model-badge"
+            >
+              {{ model }}
+            </cds-badge>
+            <button
+              v-if="route.supportedModels.length > MODELS_VISIBLE_LIMIT"
+              type="button"
+              class="model-overflow"
+              :aria-label="`${locale.t('gatewayModel.col.models')}: +${
+                route.supportedModels.length - MODELS_VISIBLE_LIMIT
+              }`"
+            >
+              +{{ route.supportedModels.length - MODELS_VISIBLE_LIMIT }}
+            </button>
           </div>
         </cds-grid-cell>
         <cds-grid-cell>
-          <cds-badge :status="route.enabled ? 'success' : 'neutral'" class="status-badge">
-            <cds-icon
-              :shape="route.enabled ? 'check-circle' : 'ban'"
-              size="sm"
-              aria-hidden="true"
-            ></cds-icon>
-            {{
-              locale.t(route.enabled ? 'gatewayModel.status.enabled' : 'gatewayModel.status.disabled')
-            }}
-          </cds-badge>
+          <span class="strategy-cell">{{
+            locale.t(`gatewayModel.strategy.${route.strategy}`)
+          }}</span>
+        </cds-grid-cell>
+        <cds-grid-cell>
+          <span class="time-cell" :title="route.createdAt">
+            {{ formatTimestamp(route.createdAt) }}
+          </span>
+        </cds-grid-cell>
+        <cds-grid-cell>
+          <span class="time-cell" :title="route.updatedAt">
+            {{ formatTimestamp(route.updatedAt) }}
+          </span>
         </cds-grid-cell>
         <cds-grid-cell>
           <div class="row-actions">
-            <button
-              v-if="auth.role === 'admin'"
-              type="button"
-              class="row-action"
-              :title="
-                locale.t(route.enabled ? 'gatewayModel.action.disable' : 'gatewayModel.action.enable')
-              "
-              @click="toggleEnabled(route)"
-            >
-              <cds-icon :shape="route.enabled ? 'ban' : 'check-circle'" size="sm"></cds-icon>
-              <span>{{
-                locale.t(route.enabled ? 'gatewayModel.action.disable' : 'gatewayModel.action.enable')
-              }}</span>
-            </button>
             <button
               v-if="auth.role === 'admin'"
               type="button"
@@ -850,15 +741,6 @@ function goToPage(page: number) {
             >
               <cds-icon shape="pencil" size="sm"></cds-icon>
               <span>{{ locale.t('gatewayModel.action.edit') }}</span>
-            </button>
-            <button
-              type="button"
-              class="row-action"
-              :title="locale.t('gatewayModel.action.manage')"
-              @click="manageGateway(route)"
-            >
-              <cds-icon shape="cog" size="sm"></cds-icon>
-              <span>{{ locale.t('gatewayModel.action.manage') }}</span>
             </button>
             <button
               v-if="auth.role === 'admin'"
@@ -941,35 +823,6 @@ function goToPage(page: number) {
     </cds-grid>
 
     <cds-dropdown
-      v-if="strategyMenuAnchor && strategyMenuTarget"
-      :hidden="false"
-      :anchor="strategyMenuAnchor"
-      closable
-      @closeChange="closeStrategyMenu"
-    >
-      <div class="strategy-menu" role="menu">
-        <button
-          v-for="strategy in MODEL_ROUTE_STRATEGIES"
-          :key="strategy"
-          type="button"
-          class="strategy-menu-option"
-          :class="{ active: strategyMenuTarget.uiStrategy === strategy }"
-          role="menuitemradio"
-          :aria-checked="strategyMenuTarget.uiStrategy === strategy"
-          @click="chooseStrategy(strategy)"
-        >
-          <span>{{ locale.t(`gatewayModel.strategy.${strategy}`) }}</span>
-          <cds-icon
-            v-if="strategyMenuTarget.uiStrategy === strategy"
-            shape="check"
-            size="sm"
-            aria-hidden="true"
-          ></cds-icon>
-        </button>
-      </div>
-    </cds-dropdown>
-
-    <cds-dropdown
       v-if="filterMenuAnchor && filterMenuKey"
       :hidden="false"
       :anchor="filterMenuAnchor"
@@ -1020,43 +873,6 @@ function goToPage(page: number) {
           </button>
         </div>
 
-        <div v-else-if="filterMenuKey === 'STRATEGY'" class="filter-options">
-          <button
-            type="button"
-            class="filter-option"
-            :class="{ active: strategyFilter === 'ALL' }"
-            @click="setStrategyFilter('ALL')"
-          >
-            <span>{{ locale.t('gatewayModel.filter.all') }}</span>
-            <cds-icon v-if="strategyFilter === 'ALL'" shape="check" size="sm"></cds-icon>
-          </button>
-          <button
-            v-for="strategy in MODEL_ROUTE_STRATEGIES"
-            :key="strategy"
-            type="button"
-            class="filter-option"
-            :class="{ active: strategyFilter === strategy }"
-            @click="setStrategyFilter(strategy)"
-          >
-            <span>{{ locale.t(`gatewayModel.strategy.${strategy}`) }}</span>
-            <cds-icon v-if="strategyFilter === strategy" shape="check" size="sm"></cds-icon>
-          </button>
-        </div>
-
-        <div v-else-if="filterMenuKey === 'STATUS'" class="filter-options">
-          <button
-            v-for="status in STATUS_FILTER_OPTIONS"
-            :key="status"
-            type="button"
-            class="filter-option"
-            :class="{ active: statusFilter === status }"
-            @click="setStatusFilter(status)"
-          >
-            <span>{{ locale.t(`gatewayModel.filter.status.${status}`) }}</span>
-            <cds-icon v-if="statusFilter === status" shape="check" size="sm"></cds-icon>
-          </button>
-        </div>
-
         <div v-if="hasFilter(filterMenuKey)" class="filter-footer">
           <cds-button action="outline" size="sm" @click="clearActiveFilter">
             {{ locale.t('gatewayModel.filter.clear') }}
@@ -1071,10 +887,12 @@ function goToPage(page: number) {
       :route="editingRoute"
       :gateways="GATEWAYS"
       :candidates="shuttleCandidates"
+      :candidates-loading="providerResult.loading.value"
       :all-routes="allRoutesForFallback"
       :saving="saving"
       @close="closeForm"
       @submit="submitRoute"
+      @gateway-changed="onGatewayChanged"
     />
 
     <ConfirmDialog
@@ -1083,6 +901,17 @@ function goToPage(page: number) {
       :body="deleteDialogBody"
       danger
       @close="closeDelete"
+      @confirm="onFirstConfirm"
+    />
+
+    <ConfirmDialog
+      :open="!!finalDeleteId"
+      :title="locale.t('gatewayModel.confirm.finalDeleteTitle')"
+      :body-segments="finalDeleteBodySegments"
+      :input-placeholder="finalDeleteInputPlaceholder"
+      :expected-input="finalDeleteExpectedInput"
+      danger
+      @close="closeFinalDelete"
       @confirm="confirmDelete"
     />
   </section>
@@ -1224,71 +1053,25 @@ function goToPage(page: number) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.gateway-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-  padding: 0;
+/* Static text cell for the gateway column. The previous `.gateway-link`
+   button-with-popout-icon was removed when the manageGateway action
+   left the row menu — read here as plain label text with the same
+   overflow ellipsis treatment as the name cell. */
+.gateway-name {
+  display: block;
   overflow: hidden;
-  border: 0;
-  background: transparent;
-  color: var(--cds-alias-object-interaction-color, #0072a3);
-  font: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: pointer;
 }
-.gateway-link:hover {
-  text-decoration: underline;
-}
-.strategy-trigger {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  min-width: 0;
-  min-height: 28px;
+/* Static strategy cell — the inline dropdown editor was removed when
+   the uiStrategy field was dropped; the cell now just renders the
+   gateway-level strategy as text, matching the visual weight of
+   other passive cells in the row. */
+.strategy-cell {
+  display: inline-block;
   padding: 3px 8px;
-  border: 0;
-  border-bottom: 1px solid var(--cds-alias-object-border-color, #9a9a9a);
-  background: transparent;
+  min-height: 28px;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.strategy-trigger:hover,
-.strategy-trigger[aria-expanded='true'] {
-  border-bottom-color: var(--cds-alias-object-interaction-color, #0072a3);
-  background: var(--cds-alias-object-app-background, #f4f4f4);
-}
-.strategy-trigger:focus-visible {
-  outline: 2px solid var(--cds-alias-status-info, #0079ad);
-  outline-offset: 1px;
-}
-.strategy-menu {
-  min-width: 180px;
-  padding: 4px 0;
-}
-.strategy-menu-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  width: 100%;
-  padding: 8px 12px;
-  border: 0;
-  background: transparent;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.strategy-menu-option:hover,
-.strategy-menu-option.active {
-  background: var(--cds-alias-object-app-background, #f4f4f4);
 }
 .filter-panel {
   min-width: 240px;
@@ -1324,31 +1107,65 @@ function goToPage(page: number) {
   padding-top: 8px;
   border-top: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
 }
-.model-list {
+/* Created / updated timestamp cells. Mirrors the same `.time-cell`
+   treatment used in ModelGatewayView.vue:743-747 — tabular-nums so the
+   digits don't jitter between rows (the column will otherwise reflow
+   as digit widths differ), and a slightly muted color so the timestamp
+   reads as secondary metadata relative to the route's name and gateway. */
+.time-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 12px;
+}
+/* Model badges cell — same info-blue chip treatment as
+   VirtualKeyView's `.model-badge` (VirtualKeyView.vue:2132-2160): a
+   soft blue-50 fill with info-blue border + text, replacing the prior
+   cds-badge neutral slate (#3a4d55) which clashed with the row's white
+   background. Padding bumped from the cds default (~0px inline) to
+   14px inline so the text breathes inside the border.
+
+   The cell stays single-row tall (no max-height cap) — the route page
+   treats the model list as primary content rather than a per-key
+   attribute, so we let rows grow vertically rather than clipping into
+   the "+N overflow" affordance unnecessarily. */
+.models-cell {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  max-height: 48px;
-  overflow: hidden;
+  align-items: center;
 }
-.model-list > span {
-  padding: 2px 6px;
-  border-radius: 3px;
-  background: var(--cds-alias-object-app-background, #f3f6f8);
-  color: var(--cds-alias-typography-color-400, #313131);
+.model-badge {
+  --background: var(--cds-alias-object-app-blue-50, rgba(0, 114, 163, 0.08));
+  --border-color: var(--cds-alias-status-info, #0079ad);
+  --color: var(--cds-alias-status-info, #0079ad);
+  --padding: 0 14px;
   font-size: 11px;
-  line-height: 1.4;
-  white-space: nowrap;
 }
-.model-list .more-models {
-  color: var(--cds-alias-object-interaction-color, #0072a3);
-}
-.status-badge {
+/* +N overflow trigger — visual sibling to .model-badge so the two read
+   as a continuous treatment. Solid-fill hover so the click affordance
+   is obvious. font-weight: 600 keeps the `+N` glyph deliberate. */
+.model-overflow {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  min-width: 64px;
-  white-space: nowrap;
+  gap: 2px;
+  padding: 1px 8px;
+  border: 1px solid var(--cds-alias-status-info, #0079ad);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--cds-alias-status-info, #0079ad);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.model-overflow:hover {
+  background: var(--cds-alias-status-info, #0079ad);
+  color: #fff;
+}
+.model-overflow:focus-visible {
+  outline: 2px solid var(--cds-alias-status-info, #0079ad);
+  outline-offset: 1px;
 }
 .row-actions {
   display: flex;
@@ -1375,11 +1192,7 @@ function goToPage(page: number) {
   font: inherit;
   cursor: pointer;
 }
-.row-action:hover {
-  background: var(--cds-alias-object-app-background, #f4f4f4);
-}
-.row-action:focus-visible,
-.gateway-link:focus-visible {
+.row-action:focus-visible {
   outline: 2px solid var(--cds-alias-status-info, #0079ad);
   outline-offset: 1px;
 }
