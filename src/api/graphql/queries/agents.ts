@@ -133,6 +133,27 @@ export const RECYCLE_AGENT_MUTATION = gql`
   }
 `
 
+// Admin-only destructive action: physically drops the agent row. Distinct from
+// RecycleAgent which only marks status=stopped + clears vmRef. Frontend also
+// gates by auth.role === 'admin' on top of the server-side @hasRole directive.
+export const HARD_DELETE_AGENT_MUTATION = gql`
+  mutation HardDeleteAgent($input: HardDeleteAgentInput!) {
+    hardDeleteAgent(input: $input)
+  }
+`
+
+// Graceful guest reboot via VMware Tools (LLD-03 §4 开关机). Calls restartAgent
+// on the backend which issues RebootGuest to the VM and sets status=running.
+export const RESTART_AGENT_MUTATION = gql`
+  mutation RestartAgent($id: ID!) {
+    restartAgent(id: $id) {
+      id
+      status
+      updatedAt
+    }
+  }
+`
+
 // LLD-16 §4: platform pull upgrade. Enqueues an upgrade command the in-VM daemon
 // executes on its next heartbeat. requestAgentUpgrade returns true (no-op) when one
 // is already in flight; upgradeAgents (fleet) returns the count actually enqueued.

@@ -6,12 +6,20 @@ import { useToast } from '@/composables/useToast'
 import { useAgentExport } from '@/composables/useAgentExport'
 import { useMutation, useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
+import { useAuthStore } from '@/stores/auth'
 import AppDropdown from '@/components/AppDropdown.vue'
 import AccessInfoDialog from '@/components/AccessInfoDialog.vue'
 import ConfigureAgentDialog from '@/components/ConfigureAgentDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
-import { AGENTS_QUERY, AGENT_QUERY, SET_AGENT_STATUS_MUTATION, RECYCLE_AGENT_MUTATION } from '@/api/graphql/queries/agents'
+import {
+  AGENTS_QUERY,
+  AGENT_QUERY,
+  SET_AGENT_STATUS_MUTATION,
+  RECYCLE_AGENT_MUTATION,
+  HARD_DELETE_AGENT_MUTATION,
+  RESTART_AGENT_MUTATION,
+} from '@/api/graphql/queries/agents'
 import { apolloClient } from '@/api/graphql/client'
 import type {
   Agent,
@@ -264,27 +272,32 @@ function onPageSizeSelect(e: Event) {
 
 /* ---------- Row actions ---------- */
 
-type RowActionKey = 'rotateKey' | 'restart' | 'stop' | 'update' | 'delete' | 'copyAccess'
+type RowActionKey = 'rotateKey' | 'restart' | 'stop' | 'start' | 'update' | 'delete' | 'hardDelete' | 'copyAccess'
 
-// Order is fixed by the product spec:
-//   密码更新 → 版本更新 → 重启 → 停止 → 删除
-// All five items are exposed for every status so the "更多" menu reads the
-// same regardless of the agent's current state.
- 
+// Actions vary by status so the menu never shows a no-op (e.g. "stop" on
+// an already-stopped agent or "start" on a running one).
 const ACTIONS_BY_STATUS: Partial<Record<StatusKey, RowActionKey[]>> = {
-  running: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
-  stopped: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
-  exception: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'copyAccess'],
+  running:   ['rotateKey', 'update', 'restart', 'stop', 'delete', 'hardDelete', 'copyAccess'],
+  stopped:   ['rotateKey', 'update', 'start', 'delete', 'hardDelete', 'copyAccess'],
+  exception: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'hardDelete', 'copyAccess'],
 }
 
 const ICON_FOR_ACTION: Record<RowActionKey, string> = {
   rotateKey: 'key',
   restart: 'sync',
   stop: 'stop',
+  // 'play' — visually maps to "power on / start" (VCSA convention).
+  start: 'play',
   update: 'update',
   delete: 'trash',
+  // 'ban' icon: stronger than 'trash', signals destructive / blocklisting flavor.
+  // The Carbon cds-icon shape set includes 'ban'; ConfirmDialog also uses 'danger'
+  // styling so the differentiation is mostly the type-to-confirm dialog itself.
+  hardDelete: 'ban',
   copyAccess: 'eye',
 }
+
+const auth = useAuthStore()
 
 function badgeStatusFor(status: Agent['status']): 'success' | 'neutral' | 'danger' {
   if (status === 'running') return 'success'
@@ -296,12 +309,14 @@ function badgeStatusFor(status: Agent['status']): 'success' | 'neutral' | 'dange
 /* Row action handlers — wired to real backend mutations. */
 const actionTarget = ref<Agent | null>(null)
 const actionConfirmOpen = ref(false)
-const actionConfirmMode = ref<'stop' | 'restart' | 'delete'>('stop')
+const actionConfirmMode = ref<'stop' | 'restart' | 'start' | 'delete' | 'hardDelete'>('stop')
 
 const { mutate: setStatusMutate } = useMutation(SET_AGENT_STATUS_MUTATION)
 const { mutate: recycleMutate } = useMutation(RECYCLE_AGENT_MUTATION)
+const { mutate: hardDeleteMutate } = useMutation(HARD_DELETE_AGENT_MUTATION)
+const { mutate: restartMutate } = useMutation(RESTART_AGENT_MUTATION)
 
-function openActionConfirm(agent: Agent, mode: 'stop' | 'restart' | 'delete') {
+function openActionConfirm(agent: Agent, mode: 'stop' | 'restart' | 'start' | 'delete' | 'hardDelete') {
   actionTarget.value = agent
   actionConfirmMode.value = mode
   actionConfirmOpen.value = true
@@ -312,24 +327,59 @@ function closeActionConfirm() {
   actionTarget.value = null
 }
 
+// Mirror the bodySegments helper in ModelGatewayView.vue: convert the i18n body
+// into [{text: ...}, {text: <name>, bold: true}, ...] so {{name}} renders with
+// emphasis. Required because the agency uses type-to-confirm in the dialog.
+const hardDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() => {
+  if (actionConfirmMode.value !== 'hardDelete' || !actionTarget.value) {
+    return []
+  }
+  const template = locale.t('agents.confirm.hardDeleteBody')
+  const name = actionTarget.value.name
+  const idx = template.indexOf('{{name}}')
+  if (idx < 0) return [{ text: template }]
+  return [
+    { text: template.slice(0, idx) },
+    { text: name, bold: true },
+    { text: template.slice(idx + '{{name}}'.length) },
+  ]
+})
+
 async function confirmAction() {
   const agent = actionTarget.value
   if (!agent) return
   const mode = actionConfirmMode.value
   closeActionConfirm()
   try {
-    if (mode === 'delete') {
+    if (mode === 'hardDelete') {
+      // hardDeleteAgent PHYSICALLY removes the agent row. confirm: true required
+      // server-side; the type-to-confirm dialog (ConfirmDialog bodySegments +
+      // expected-input) already enforces the user typed the agent name verbatim.
+      await hardDeleteMutate({ input: { agentId: agent.id, confirm: true } })
+      toast.success(locale.t('agents.action.hardDeletedOk').replace('{name}', agent.name))
+    } else if (mode === 'delete') {
       await recycleMutate({ input: { agentId: agent.id, confirm: true } })
-      toast.success(`已删除 ${agent.name}`)
+      toast.success(locale.t('agents.action.deletedOk').replace('{name}', agent.name))
+    } else if (mode === 'restart') {
+      // Graceful guest reboot via VMware Tools → backend restartAgent mutation.
+      await restartMutate({ id: agent.id })
+      toast.success(locale.t('agents.action.restartedOk').replace('{name}', agent.name))
+    } else if (mode === 'stop') {
+      await setStatusMutate({ id: agent.id, status: 'stopped' })
+      toast.success(locale.t('agents.action.stoppedOk').replace('{name}', agent.name))
     } else {
-      const status = mode === 'stop' ? 'stopped' : 'running'
-      await setStatusMutate({ id: agent.id, status })
-      toast.success(mode === 'stop' ? `已停止 ${agent.name}` : `已重启 ${agent.name}`)
+      // mode === 'start'
+      await setStatusMutate({ id: agent.id, status: 'running' })
+      toast.success(locale.t('agents.action.startedOk').replace('{name}', agent.name))
     }
     await refetch()
   } catch (err: unknown) {
     console.error(`[agents] ${mode} failed`, err)
-    toast.error(`${mode === 'stop' ? '停止' : mode === 'restart' ? '重启' : '删除'}失败`)
+    if (mode === 'hardDelete') {
+      toast.error(locale.t('agents.action.hardDeleteFailed'))
+    } else {
+      toast.error(locale.t('agents.action.failed'))
+    }
   }
 }
 
@@ -362,8 +412,12 @@ function onRowAction(agent: Agent, key: RowActionKey) {
     openActionConfirm(agent, 'restart')
   } else if (key === 'stop') {
     openActionConfirm(agent, 'stop')
+  } else if (key === 'start') {
+    openActionConfirm(agent, 'start')
   } else if (key === 'delete') {
     openActionConfirm(agent, 'delete')
+  } else if (key === 'hardDelete') {
+    openActionConfirm(agent, 'hardDelete')
   } else {
     console.log(`[agents] row:${key}`, { id: agent.id })
   }
@@ -493,7 +547,7 @@ function retryAccessInfo() {
 }
 
 
-const BATCH_KEYS = ['start', 'stop', 'update', 'delete'] as const
+const BATCH_KEYS = ['start', 'stop', 'update', 'delete', 'hardDelete'] as const
 
 /** Map a batch-menu key → its sibling row-action key in `ICON_FOR_ACTION`,
  *  so "批量启动 / 批量停止 / 批量更新" share the same glyph as the
@@ -503,17 +557,129 @@ const BATCH_ICON_FOR_KEY: Record<(typeof BATCH_KEYS)[number], string> = {
   stop: ICON_FOR_ACTION.stop,    // stop
   update: ICON_FOR_ACTION.update, // update
   delete: 'trash',                // matches the more-menu `delete` icon
+  hardDelete: ICON_FOR_ACTION.hardDelete, // ban — matches the more-menu hardDelete
 }
 type BatchKey = (typeof BATCH_KEYS)[number]
 
+/* Batch confirm dialog state. Currently only the destructive pairs (delete and
+ * hardDelete) go through a confirmation flow; start/stop/update handlers stay
+ * placeholder for now since the matching single-row behaviors are also stub.
+ * Destructive dialog state has its own ref-set so the existing per-row confirm
+ * flow stays untouched. */
+const batchConfirmOpen = ref(false)
+const batchConfirmMode = ref<'delete' | 'hardDelete'>('delete')
+
+/** Resolve selectedIds → list of Agent objects (filtered to currently-loaded
+ * rows so the confirm dialog can show names). Agents not visible in the
+ * current page are silently dropped — admin selection-cap is "what's on
+ * screen". */
+const selectedAgents = computed<Agent[]>(() => {
+  const idSet = selectedIds.value
+  if (idSet.size === 0) return []
+  return agents.value.filter((a) => idSet.has(a.id))
+})
+
+/** Names for the confirm dialog body. Each on its own line; type-to-confirm
+ * requires the user to re-enter each name exactly. */
+/** Space-separated list — the operator can type (or paste) agent names with
+ *  any whitespace separator and ConfirmDialog's trimmed compare will match as
+ *  long as the names themselves are exact. We use spaces rather than newlines
+ *  because a single-line paste from the agent list column is the most common
+ *  path; typing newlines in a single-line input is awkward. */
+const batchNamesText = computed(() => selectedAgents.value.map((a) => a.name).join(' '))
+
+/** expected-input for the per-name confirmation: newline-separated list of the
+ * selected agent names. ConfirmDialog compares typed (trimmed) input against
+ * this verbatim — refuse the mutation if anything is missing/extra. */
+const batchExpectedInput = computed(() => batchNamesText.value)
+
+/** Title + body for the batch hard-delete confirm dialog. Body uses
+ * bodySegments so {{names}} is rendered as a bold block. */
+const batchHardDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() => {
+  if (batchConfirmMode.value !== 'hardDelete') return []
+  const tpl = locale.t('agents.confirm.hardDeleteBatchBody')
+  const count = selectedAgents.value.length
+  const idx = tpl.indexOf('{{names}}')
+  const filled = tpl.replace('{count}', String(count)).replace('{{names}}', batchNamesText.value)
+  if (idx < 0) return [{ text: filled }]
+  // Pre-block (with {count} replaced) + bold name list + post-block.
+  const preBlock = filled.slice(0, filled.indexOf(batchNamesText.value))
+  const postBlock = filled.slice(filled.indexOf(batchNamesText.value) + batchNamesText.value.length)
+  return [
+    { text: preBlock },
+    { text: batchNamesText.value, bold: true },
+    { text: postBlock },
+  ]
+})
+
 function onBatch(key: BatchKey, close: () => void) {
   if (selectedIds.value.size === 0) {
-    return
     close()
     return
   }
-  console.log(`[agents] batch:${key}`, { ids: [...selectedIds.value] })
+  // Only the destructive keys reach the dialog. start/stop/update remain TODO
+  // — they would loop setAgentStatus / batch updater mutations that aren't
+  // part of this PR.
+  if (key === 'delete') {
+    batchConfirmMode.value = 'delete'
+    batchConfirmOpen.value = true
+    close()
+    return
+  }
+  if (key === 'hardDelete') {
+    // Front-end gate matches the row-action guard: hardDelete is admin-only.
+    if (auth.role !== 'admin') {
+      toast.error(locale.t('agents.action.hardDeleteFailed'))
+      close()
+      return
+    }
+    batchConfirmMode.value = 'hardDelete'
+    batchConfirmOpen.value = true
+    close()
+    return
+  }
+  // start/stop/update: not implemented in this PR — keep no-op for now so
+  // the menu still works visually. (Use the per-row actions for these until
+  // we wire them up.)
+  console.log(`[agents] batch:${key} (not implemented): selected ${selectedIds.value.size}`)
   close()
+}
+
+function closeBatchConfirm() {
+  batchConfirmOpen.value = false
+  selectedIds.value = new Set()
+}
+
+async function confirmBatchAction() {
+  const list = selectedAgents.value
+  const mode = batchConfirmMode.value
+  closeBatchConfirm()
+  if (list.length === 0) return
+
+  let ok = 0
+  let fail = 0
+  for (const ag of list) {
+    try {
+      if (mode === 'hardDelete') {
+        await hardDeleteMutate({ input: { agentId: ag.id, confirm: true } })
+      } else {
+        await recycleMutate({ input: { agentId: ag.id, confirm: true } })
+      }
+      ok++
+    } catch (err) {
+      // continue with the rest of the batch — per-row isolation so a single
+      // failure (e.g. one agent's resource pool is unreachable) does not
+      // block the rest from being deleted.
+      console.error(`[agents] batch ${mode} failed for ${ag.id} (${ag.name})`, err)
+      fail++
+    }
+  }
+  await refetch()
+  toast.success(
+    locale.t('agents.batch.done')
+      .replace('{ok}', String(ok))
+      .replace('{fail}', String(fail)),
+  )
 }
 
 function onExport() {
@@ -666,9 +832,10 @@ const summaryText = computed(() => {
           <button
             v-for="key in BATCH_KEYS"
             :key="key"
+            v-show="key !== 'hardDelete' || auth.role === 'admin'"
             type="button"
             class="menu-opt"
-            :class="{ danger: key === 'delete' }"
+            :class="{ danger: key === 'delete' || key === 'hardDelete' }"
             :aria-label="locale.t(`agents.batch.${key}`)"
             @click="onBatch(key, close)"
           >
@@ -1285,9 +1452,10 @@ const summaryText = computed(() => {
         <button
           v-for="key in (rowActionsTarget ? ACTIONS_BY_STATUS[STATUS_FROM_GQL[rowActionsTarget.status]] : [])"
           :key="key"
+          v-show="key !== 'hardDelete' || auth.role === 'admin'"
           type="button"
           class="menu-opt"
-          :class="{ danger: key === 'delete' }"
+          :class="{ danger: key === 'delete' || key === 'hardDelete' }"
           :aria-label="locale.t(`agents.action.${key}`)"
           @click="rowActionsTarget && onRowAction(rowActionsTarget, key)"
         >
@@ -1299,13 +1467,52 @@ const summaryText = computed(() => {
   </section>
   <!-- Action confirm dialog (stop/restart/delete) -->
   <ConfirmDialog
-    :open="actionConfirmOpen"
-    :title="actionConfirmMode === 'stop' ? '停止智能体' : actionConfirmMode === 'restart' ? '重启智能体' : '删除智能体'"
-    :body="actionConfirmMode === 'stop' ? `确定停止 ${actionTarget?.name ?? ''} 吗？` : actionConfirmMode === 'restart' ? `确定重启 ${actionTarget?.name ?? ''} 吗？` : `确定删除 ${actionTarget?.name ?? ''} 吗？此操作不可撤销。`"
+    :open="actionConfirmOpen && actionConfirmMode !== 'hardDelete'"
+    :title="actionConfirmMode === 'stop' ? '停止智能体' : actionConfirmMode === 'start' ? '启动智能体' : actionConfirmMode === 'restart' ? '重启智能体' : '删除智能体'"
+    :body="actionConfirmMode === 'stop' ? `确定停止 ${actionTarget?.name ?? ''} 吗？` : actionConfirmMode === 'start' ? `确定启动 ${actionTarget?.name ?? ''} 吗？` : actionConfirmMode === 'restart' ? `确定重启 ${actionTarget?.name ?? ''} 吗？` : `确定删除 ${actionTarget?.name ?? ''} 吗？此操作不可撤销。`"
     confirm-text="确认"
     cancel-text="取消"
     @confirm="confirmAction"
     @cancel="closeActionConfirm"
+  />
+
+  <!-- Hard-delete confirm dialog: type-to-confirm, agent name must match exactly.
+       Pre-existing ConfirmDialog supports bodySegments + expected-input (see
+       ModelGatewayView.vue:618 for the canonical usage). -->
+  <ConfirmDialog
+    :open="actionConfirmOpen && actionConfirmMode === 'hardDelete'"
+    :title="locale.t('agents.confirm.hardDeleteTitle')"
+    :body-segments="hardDeleteBodySegments"
+    :input-placeholder="locale.t('agents.confirm.hardDeleteInputPlaceholder')"
+    :expected-input="actionTarget?.name ?? ''"
+    danger
+    @confirm="confirmAction"
+    @cancel="closeActionConfirm"
+  />
+
+  <!-- Batch soft-delete (recycle): single-step confirm listing the count. -->
+  <ConfirmDialog
+    :open="batchConfirmOpen && batchConfirmMode === 'delete'"
+    :title="locale.t('agents.confirm.deleteTitle')"
+    :body="locale.t('agents.confirm.batchDeleteBody').replace('{count}', String(selectedAgents.length))"
+    confirm-text="确认"
+    cancel-text="取消"
+    @confirm="confirmBatchAction"
+    @cancel="closeBatchConfirm"
+  />
+
+  <!-- Batch hard-delete (admin only): type-to-confirm with the full name list
+       (newline-separated). Accepts any ordering since ConfirmDialog compares
+       text. Operator must type every selected agent's name. -->
+  <ConfirmDialog
+    :open="batchConfirmOpen && batchConfirmMode === 'hardDelete'"
+    :title="locale.t('agents.confirm.hardDeleteBatchTitle').replace('{count}', String(selectedAgents.length))"
+    :body-segments="batchHardDeleteBodySegments"
+    :input-placeholder="locale.t('agents.confirm.hardDeleteInputPlaceholder')"
+    :expected-input="batchExpectedInput"
+    danger
+    @confirm="confirmBatchAction"
+    @cancel="closeBatchConfirm"
   />
 </template>
 
