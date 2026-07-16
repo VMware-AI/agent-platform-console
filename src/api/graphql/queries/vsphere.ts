@@ -58,7 +58,7 @@ export const UNBOUND_KEYS_QUERY = gql`
   query UnboundKeys {
     unboundKeys {
       id
-      alias
+      name
       status
     }
   }
