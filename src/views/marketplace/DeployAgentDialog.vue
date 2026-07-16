@@ -105,7 +105,7 @@ const errors = computed(() => {
   if (!globalForm.versionId) e.version = '请选择版本'
   if (!globalForm.resourcePoolId) e.pool = '请选择资源池'
   if (securityForm.password && securityForm.password !== securityForm.confirmPassword) e.pw = '两次密码不一致'
-  if (deployMode === 'single') { if (!instanceList[0]?.hostname.trim()) e.host = '请输入名称'; if (deployPolicy.ipMode === 'static' && !instanceList[0]?.ip) e.ip0 = 'IP 必填' }
+  if (deployMode.value === 'single') { if (!instanceList[0]?.hostname.trim()) e.host = '请输入名称'; if (deployPolicy.ipMode === 'static' && !instanceList[0]?.ip) e.ip0 = 'IP 必填' }
   else {
     const names = instanceList.map(r => r.hostname.trim()).filter(Boolean)
     if (new Set(names).size !== names.length) e.ndup = '主机名不可重复'
