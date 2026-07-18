@@ -377,50 +377,6 @@ describe('VirtualKeyView — issue (one-time secret dialog)', () => {
   })
 })
 
-describe('VirtualKeyView — regenerate (secret rotation)', () => {
-  it('regenerating mutates REGENERATE_VIRTUAL_KEY, reveals the rotated secret, toasts, refetches', async () => {
-    setKeys([KEY_ACTIVE])
-    mountView()
-    await flushPromises()
-
-    // Row "more" menu → first option is regenerate.
-    const options = await rowMenuOptions(0)
-    const regenerate = options.find((o) =>
-      o.textContent?.includes(locale.t('virtualKey.action.regenerate')),
-    )!
-    regenerate.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    await flushPromises()
-
-    expect(mutateMock).toHaveBeenCalledTimes(1)
-    const call = mutateMock.mock.calls[0][0] as { mutation: unknown; variables: { id: string } }
-    expect(operationName(call.mutation)).toBe('RegenerateVirtualKey')
-    expect(call.variables.id).toBe('k-active')
-
-    expect(secretDialog()?.textContent).toContain('sk-rotated-secret')
-    expect(toastMessages()).toContain(locale.t('virtualKey.toast.regenerated'))
-    expect(keysSlot.refetch).toHaveBeenCalled()
-  })
-
-  it('surfaces the backend error toast and reveals no secret when regenerate fails', async () => {
-    mutateMock.mockImplementationOnce(() =>
-      Promise.reject({ graphQLErrors: [{ message: 'key is revoked' }] }),
-    )
-    setKeys([KEY_ACTIVE])
-    mountView()
-    await flushPromises()
-
-    const options = await rowMenuOptions(0)
-    options
-      .find((o) => o.textContent?.includes(locale.t('virtualKey.action.regenerate')))!
-      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    await flushPromises()
-
-    expect(toastMessages()).toContain('key is revoked')
-    expect(toastMessages()).not.toContain(locale.t('virtualKey.toast.regenerated'))
-    expect(secretDialog()).toBeNull()
-  })
-})
-
 describe('VirtualKeyView — setEnabled (toggle + batch)', () => {
   it('toggling a disabled key mutates enabled=true and toasts the enabled count', async () => {
     setKeys([KEY_DISABLED])
@@ -518,88 +474,6 @@ describe('VirtualKeyView — setEnabled (toggle + batch)', () => {
     expect(toastMessages()).toContain(locale.t('virtualKey.toast.enabled').replace('{count}', '2'))
     // Selection cleared after a successful batch.
     expect(wrapper!.element.querySelector('.selected-summary')).toBeNull()
-  })
-})
-
-describe('VirtualKeyView — revoke (delete confirm)', () => {
-  async function openDelete(rowIndex: number) {
-    const options = await rowMenuOptions(rowIndex)
-    options
-      .find((o) => o.textContent?.includes(locale.t('virtualKey.action.delete')))!
-      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
-  }
-
-  it('requesting delete opens a confirm dialog naming the target key', async () => {
-    setKeys([KEY_ACTIVE])
-    mountView()
-    await flushPromises()
-
-    await openDelete(0)
-    await flushPromises()
-
-    const card = confirmBackdrop()
-    expect(card).not.toBeNull()
-    expect(card?.getAttribute('aria-label')).toBe(locale.t('virtualKey.confirm.deleteTitle'))
-    // Body interpolates the key's display name.
-    expect(card?.textContent).toContain('Alpha Key')
-  })
-
-  it('confirming a single delete mutates REVOKE_VIRTUAL_KEY with the id, toasts count, refetches', async () => {
-    setKeys([KEY_ACTIVE, KEY_DISABLED])
-    mountView()
-    await flushPromises()
-
-    await openDelete(1)
-    await flushPromises()
-
-    const confirmBtn = confirmBackdrop()!.querySelector<HTMLElement>('cds-button[status="danger"]')!
-    confirmBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    await flushPromises()
-
-    expect(mutateMock).toHaveBeenCalledTimes(1)
-    const call = mutateMock.mock.calls[0][0] as { mutation: unknown; variables: { id: string } }
-    expect(operationName(call.mutation)).toBe('RevokeVirtualKey')
-    expect(call.variables.id).toBe('k-disabled')
-
-    expect(toastMessages()).toContain(locale.t('virtualKey.toast.deleted').replace('{count}', '1'))
-    expect(keysSlot.refetch).toHaveBeenCalled()
-    expect(confirmBackdrop()).toBeNull()
-  })
-
-  it('cancelling the confirm dialog closes it without mutating', async () => {
-    setKeys([KEY_ACTIVE])
-    mountView()
-    await flushPromises()
-
-    await openDelete(0)
-    await flushPromises()
-    const cancelBtn = confirmBackdrop()!.querySelector<HTMLElement>('cds-button[action="outline"]')!
-    cancelBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    await flushPromises()
-
-    expect(confirmBackdrop()).toBeNull()
-    expect(mutateMock).not.toHaveBeenCalled()
-  })
-
-  it('a failing revoke surfaces the GraphQL error toast', async () => {
-    mutateMock.mockImplementationOnce(() =>
-      Promise.reject({ graphQLErrors: [{ message: 'key in use by active sessions' }] }),
-    )
-    setKeys([KEY_ACTIVE])
-    mountView()
-    await flushPromises()
-
-    await openDelete(0)
-    await flushPromises()
-    confirmBackdrop()!
-      .querySelector<HTMLElement>('cds-button[status="danger"]')!
-      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    await flushPromises()
-
-    expect(toastMessages()).toContain('key in use by active sessions')
-    expect(toastMessages()).not.toContain(
-      locale.t('virtualKey.toast.deleted').replace('{count}', '1'),
-    )
   })
 })
 

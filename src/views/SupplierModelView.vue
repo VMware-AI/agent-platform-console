@@ -448,10 +448,6 @@ function healthBadgeStatus(
   return 'neutral'
 }
 
-function requestDelete(m: ProviderModelNode) {
-  pendingDeleteIds.value = [m.id]
-}
-
 function requestBatchDelete() {
   pendingDeleteIds.value = [...selectedIds.value]
 }
@@ -740,15 +736,6 @@ async function confirmDelete() {
               >
                 <cds-icon shape="pencil" size="sm"></cds-icon>
                 <span>{{ locale.t('supplier.action.edit') }}</span>
-              </button>
-              <button
-                v-if="auth.role === 'admin'"
-                type="button"
-                class="row-action danger"
-                @click="requestDelete(m)"
-              >
-                <cds-icon shape="trash" size="sm"></cds-icon>
-                <span>{{ locale.t('supplier.action.delete') }}</span>
               </button>
             </div>
           </cds-grid-cell>
@@ -1053,9 +1040,6 @@ async function confirmDelete() {
 .row-action:disabled,
 .row-action.disabled {
   opacity: 0.55;
-}
-.row-action.danger {
-  color: var(--cds-alias-status-danger, #c92100);
 }
 /* Outer pill — wraps an inner count badge + the icon + label as one
    segmented button. Info-blue chrome so the whole pill reads as the
