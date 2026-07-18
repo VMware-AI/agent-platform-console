@@ -1256,23 +1256,22 @@ const summaryText = computed(() => {
             <label class="pager-page-size-label" for="agents-page-size">
               {{ locale.t('agents.pager.pageSize') }}
             </label>
-            <cds-select control-width="shrink">
-              <select
-                id="agents-page-size"
-                :value="pageSize"
-                :aria-label="locale.t('agents.pager.pageSize')"
-                @change="onPageSizeSelect"
+            <select
+              id="agents-page-size"
+              :value="pageSize"
+              :aria-label="locale.t('agents.pager.pageSize')"
+              class="pager-page-size-select"
+              @change="onPageSizeSelect"
+            >
+              <option
+                v-for="opt in PAGE_SIZE_OPTIONS"
+                :key="opt"
+                :value="opt"
+                :selected="opt === pageSize"
               >
-                <option
-                  v-for="opt in PAGE_SIZE_OPTIONS"
-                  :key="opt"
-                  :value="opt"
-                  :selected="opt === pageSize"
-                >
-                  {{ PAGE_SIZE_LABELS[opt] }}
-                </option>
-              </select>
-            </cds-select>
+                {{ PAGE_SIZE_LABELS[opt] }}
+              </option>
+            </select>
 
             <span class="pager-summary" cds-text="body">{{ summaryText }}</span>
 
@@ -1752,13 +1751,16 @@ const summaryText = computed(() => {
   user-select: none;
 }
 
-/* Allow page-size dropdown to overflow the grid footer (cds-grid clamps
-   overflow, clipping select options near the bottom of the viewport). */
-cds-grid-footer {
-  overflow: visible;
-}
-.pager cds-select {
-  overflow: visible;
+/* Replace cds-select with native <select> so the dropdown renders in a
+   native OS layer — immune to cds-grid overflow:hidden clipping. */
+.pager-page-size-select {
+  height: 24px;
+  border: 1px solid var(--cds-alias-status-neutral-tint, #ccc);
+  border-radius: 3px;
+  background: var(--cds-alias-object-app-background, #fff);
+  color: var(--cds-alias-typography-color-400, #333);
+  font-size: 13px;
+  cursor: pointer;
 }
 
 /* Status column badge: cds-badge's default `min-width` is 16px, so the pill
