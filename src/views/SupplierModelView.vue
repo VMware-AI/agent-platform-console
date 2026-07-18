@@ -85,7 +85,14 @@ const filterMenuKey = ref<SortColumnKey | null>(null)
 const formOpen = ref(false)
 const editingModel = ref<ProviderModelNode | null>(null)
 const saving = ref(false)
-const specsDrawerModel = ref<ProviderModelNode | null>(null)
+// Specs drawer is bound to a *current* model object, not a snapshot —
+// if we cached the model object reference directly, deleting a spec
+// would only mutate the backend; the drawer would keep rendering the
+// pre-delete `modelSpecs` array until the user closed and re-opened it.
+// Storing just the ID and deriving the model from the latest `models`
+// (which is itself derived from the live `result` ref) makes the drawer
+// re-render automatically every time the parent refetches.
+const specsDrawerModelId = ref<string | null>(null)
 const specsViewModel = ref<ProviderModelNode | null>(null)
 const pendingDeleteIds = ref<string[]>([])
 
@@ -110,6 +117,20 @@ const { result, loading, refetch } = useQuery<ProviderModelInfoResult>(
 const models = computed<ProviderModelNode[]>(
   () => result.value?.providerModelInfo?.data ?? [],
 )
+// Live lookup of the model currently displayed in the specs drawer.
+// Pulled from `models` on every refetch so spec add/delete inside the
+// drawer is reflected without the user having to close + re-open.
+// Returns null when no drawer is open OR when the model the drawer was
+// opened against has been removed from the query result (e.g. deleted
+// via the batch path) — the parent template's `v-if="specsDrawerModel"`
+// auto-unmounts the drawer in that case, so the user lands back on the
+// refreshed list view instead of stranded on a drawer pointing at a
+// non-existent row.
+const specsDrawerModel = computed<ProviderModelNode | null>(() => {
+  const id = specsDrawerModelId.value
+  if (!id) return null
+  return models.value.find((m) => m.id === id) ?? null
+})
 const totalCount = computed<number>(
   () => result.value?.providerModelInfo?.total_count ?? 0,
 )
@@ -268,13 +289,13 @@ function clearActiveFilter() {
 function openCreate() {
   editingModel.value = null
   formOpen.value = true
-  specsDrawerModel.value = null
+  specsDrawerModelId.value = null
 }
 
 function openEdit(m: ProviderModelNode) {
   editingModel.value = m
   formOpen.value = true
-  specsDrawerModel.value = null
+  specsDrawerModelId.value = null
 }
 
 function closeForm() {
@@ -316,12 +337,12 @@ async function submitModel(
 }
 
 function openSpecsDrawer(m: ProviderModelNode) {
-  specsDrawerModel.value = m
+  specsDrawerModelId.value = m.id
   formOpen.value = false
 }
 
 function closeSpecsDrawer() {
-  specsDrawerModel.value = null
+  specsDrawerModelId.value = null
 }
 
 function openSpecsView(m: ProviderModelNode) {
@@ -470,6 +491,27 @@ async function confirmDelete() {
   selectedIds.value = new Set(
     [...selectedIds.value].filter((id) => !deletedIds.includes(id)),
   )
+  // If the model currently held by an open surface (edit form / specs
+  // drawer / view modal) was among the deleted IDs, that surface is now
+  // pointing at a non-existent row. Close it so the user lands back on
+  // the refreshed list view instead of stranded on a stale form. Most
+  // noticeable when the only remaining model is deleted while its edit
+  // modal is open — without this the toast appears but the modal sits
+  // there showing the just-deleted row.
+  if (editingModel.value && deletedIds.includes(editingModel.value.id)) {
+    formOpen.value = false
+    editingModel.value = null
+  }
+  // Clear the drawer's tracked ID — the `specsDrawerModel` computed
+  // would return null on its own once refetch drops the row, but
+  // setting it here closes the drawer synchronously instead of waiting
+  // for the next tick.
+  if (specsDrawerModelId.value && deletedIds.includes(specsDrawerModelId.value)) {
+    specsDrawerModelId.value = null
+  }
+  if (specsViewModel.value && deletedIds.includes(specsViewModel.value.id)) {
+    specsViewModel.value = null
+  }
   await refetch()
   if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
 }
