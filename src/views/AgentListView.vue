@@ -1752,6 +1752,15 @@ const summaryText = computed(() => {
   user-select: none;
 }
 
+/* Allow page-size dropdown to overflow the grid footer (cds-grid clamps
+   overflow, clipping select options near the bottom of the viewport). */
+cds-grid-footer {
+  overflow: visible;
+}
+.pager cds-select {
+  overflow: visible;
+}
+
 /* Status column badge: cds-badge's default `min-width` is 16px, so the pill
    width follows the label text — "异常" (2 chars) ends up narrower than
    "运行中" / "已停止" (3 chars). Force a uniform 48px so all three pills look
