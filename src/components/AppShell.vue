@@ -152,7 +152,8 @@ watch(() => locale.locale, syncTitle)
      scrollbar — pages like the agent list own their own internal scrolling
      only when the user opts in (e.g. via `cds-grid` `height="..."`). */
   min-width: 0;
-  overflow: hidden;
+  min-height: 0;
+  overflow-y: auto;
 }
 /* When the user must change their password, the content area renders as a
    calm empty surface so the modal reads as the only "real" content. The
