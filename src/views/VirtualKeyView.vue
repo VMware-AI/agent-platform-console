@@ -1095,10 +1095,6 @@ function performBatch(action: BatchAction, close: () => void) {
   else if (action === 'delete') pendingDeleteIds.value = ids
 }
 
-function requestDelete(keyNode: VirtualKeyNode) {
-  pendingDeleteIds.value = [keyNode.id]
-}
-
 function closeDelete() {
   pendingDeleteIds.value = []
 }
@@ -1499,9 +1495,11 @@ function goToPage(page: number) {
             Actions are rendered inline (no AppDropdown) to match the
             supplier-model "操作" column pattern. Revoked keys collapse to
             a single status note — the per-row mutations don't apply to a
-            terminal state. Delete stays admin-only; view / clone /
-            enable / disable are available to any operator so the common
-            audit / toggle flow doesn't require admin elevation.
+            terminal state. View / clone / enable / disable are available
+            to any operator; per-row delete was removed in favour of the
+            toolbar batch action (which is admin-only). The common
+            audit / toggle flow therefore no longer requires admin
+            elevation.
 
             Order rationale:
               1. 查看 (view) — read-only, always available, opens an
@@ -1512,10 +1510,8 @@ function goToPage(page: number) {
                  toggle so the non-destructive options cluster at the
                  left and the state-changing ones sit at the right.
               3. 启用 / 禁用 (toggle) — flips the active flag. State-
-                 changing but non-destructive; sits in the middle.
-              4. 删除 (delete) — admin-only, destructive; placed at
-                 the right edge so it stays physically farthest from
-                 the safe "查看" affordance.
+                 changing but non-destructive; sits at the right as the
+                 only remaining per-row mutation.
           -->
           <div v-if="keyItem.status !== 'revoked'" class="row-actions">
             <button
@@ -1544,16 +1540,6 @@ function goToPage(page: number) {
             >
               <cds-icon :shape="keyItem.status === 'active' ? 'ban' : 'check-circle'" size="sm"></cds-icon>
               <span>{{ locale.t(keyItem.status === 'active' ? 'virtualKey.action.disable' : 'virtualKey.action.enable') }}</span>
-            </button>
-            <button
-              v-if="auth.role === 'admin'"
-              type="button"
-              class="row-action danger"
-              :title="locale.t('virtualKey.action.delete')"
-              @click="requestDelete(keyItem)"
-            >
-              <cds-icon shape="trash" size="sm"></cds-icon>
-              <span>{{ locale.t('virtualKey.action.delete') }}</span>
             </button>
           </div>
           <span v-else class="revoked-note">{{ locale.t('virtualKey.status.revoked') }}</span>
@@ -2270,9 +2256,6 @@ function goToPage(page: number) {
 .row-action:disabled,
 .row-action.disabled {
   opacity: 0.55;
-}
-.row-action.danger {
-  color: var(--cds-alias-status-danger, #c92100);
 }
 .revoked-note {
   color: var(--cds-alias-typography-color-300, #565656);

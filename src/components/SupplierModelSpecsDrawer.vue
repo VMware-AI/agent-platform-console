@@ -172,6 +172,15 @@ async function confirmDeleteSpec() {
   const spec = pendingDeleteSpec.value
   pendingDeleteSpec.value = null
   if (!spec) return
+  // Snapshot whether the about-to-be-deleted spec is the last one BEFORE
+  // the mutation lands. props.model.modelSpecs still reflects the
+  // pre-delete list at this point — Apollo's useQuery result updates
+  // asynchronously via the parent's @changed refetch, so we can't read
+  // the post-delete state here. If the model had exactly one spec, the
+  // drawer will be empty after refetch and there is nothing left to
+  // manage in-place; close it so the user lands back on the list view
+  // instead of stranded on an empty drawer for a row with zero specs.
+  const wasLastSpec = props.model ? props.model.modelSpecs.length === 1 : false
   try {
     await apolloClient.mutate<DeleteProviderModelSpecResult, DeleteProviderModelSpecVars>({
       mutation: DELETE_PROVIDER_MODEL_SPEC,
@@ -179,6 +188,7 @@ async function confirmDeleteSpec() {
     })
     toast.success(locale.t('supplier.specs.toast.deleted'))
     emit('changed')
+    if (wasLastSpec) close()
   } catch (error) {
     toast.error(graphqlErrorMessage(error, locale.t('supplier.model.toast.deleteFailed')))
   }
