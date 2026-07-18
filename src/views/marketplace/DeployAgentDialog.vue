@@ -39,14 +39,30 @@ function validatePassword() {
   return true
 }
 
-/* ════════════ 区块 3: 部署与网络策略 ════════════ */
-const deployPolicy = reactive({ deployMode: 'single' as 'single' | 'batch', ipMode: 'dhcp' as 'dhcp' | 'static', netmask: '255.255.255.0', gateway: '172.16.85.1', dns: '172.16.85.1' })
+/* ════════════ 区块 2.5: 部署模式 (单台/批量) ════════════════════════════ */
+const deployMode = ref<'single' | 'batch'>('single')
+
+/* ════════════ 区块 3: 网络策略 ════════════ */
+const deployPolicy = reactive({ ipMode: 'dhcp' as 'dhcp' | 'static', netmask: '255.255.255.0', gateway: '172.16.85.1', dns: '172.16.85.1' })
 
 /* ════════════ 区块 4: 实例清单 ════════════ */
 interface InstanceRow { hostname: string; ip: string; keyBinding: string }
 const instanceList = reactive<InstanceRow[]>([{ hostname: '', ip: '', keyBinding: '' }])
 const batchCount = ref(3); const batchPrefix = ref(''); const batchStartIP = ref('')
 const attempted = ref(false)
+
+// ─── Wizard state machine ──────────────────────────────────────────────
+// Five steps: 基础环境 → 部署模式 (单台/批量) → 安全认证 → 网络策略 → 实例清单
+type StepId = 'env' | 'mode' | 'security' | 'network' | 'instances'
+const STEPS: readonly StepId[] = ['env', 'mode', 'security', 'network', 'instances'] as const
+const currentStep = ref<StepId>('env')
+
+function stepIndex(s: StepId): number { return STEPS.indexOf(s) }
+function stepLabel(s: StepId): string {
+  return { env: '基础环境', mode: '部署模式', security: '安全认证', network: '网络策略', instances: '实例清单' }[s]
+}
+function goNext() { const i = stepIndex(currentStep.value); if (i < STEPS.length - 1) currentStep.value = STEPS[i + 1] }
+function goPrev() { const i = stepIndex(currentStep.value); if (i > 0) currentStep.value = STEPS[i - 1] }
 
 /* ---- vSphere 查询 ---- */
 const vVars = computed<VsphereResourcePoolsQueryVars>(() => ({ resourcePoolId: globalForm.resourcePoolId }))
@@ -89,7 +105,7 @@ const errors = computed(() => {
   if (!globalForm.versionId) e.version = '请选择版本'
   if (!globalForm.resourcePoolId) e.pool = '请选择资源池'
   if (securityForm.password && securityForm.password !== securityForm.confirmPassword) e.pw = '两次密码不一致'
-  if (deployPolicy.deployMode === 'single') { if (!instanceList[0]?.hostname.trim()) e.host = '请输入名称'; if (deployPolicy.ipMode === 'static' && !instanceList[0]?.ip) e.ip0 = 'IP 必填' }
+  if (deployMode.value === 'single') { if (!instanceList[0]?.hostname.trim()) e.host = '请输入名称'; if (deployPolicy.ipMode === 'static' && !instanceList[0]?.ip) e.ip0 = 'IP 必填' }
   else {
     const names = instanceList.map(r => r.hostname.trim()).filter(Boolean)
     if (new Set(names).size !== names.length) e.ndup = '主机名不可重复'
@@ -106,6 +122,8 @@ const valid = computed(() => Object.keys(errors.value).length === 0)
 /* ---- 提交 ---- */
 function submit() {
   attempted.value = true; validatePassword(); if (!valid.value || pwErr.value || cpwErr.value) return
+  // Final step: collect the right instance rows based on deploy mode
+  const rows: InstanceRow[] = deployMode.value === 'single' ? [instanceList[0]] : instanceList
   const mk = (r: InstanceRow): DeployAgentInput => {
     const ovf: Array<{ key: string; value: string }> = []
     if (securityForm.runAsUser) ovf.push({ key: 'guestinfo.run_as_user', value: securityForm.runAsUser })
@@ -122,13 +140,14 @@ function submit() {
       name: r.hostname.trim(), templateFamilyId: props.template?.id ?? '', templateVersionId: globalForm.versionId,
       resourcePoolId: globalForm.resourcePoolId, targetResourcePool: globalForm.placementPool || null,
       targetNetwork: globalForm.targetNetwork || null, hostname: r.hostname.trim() || null,
-      keySource: 'new', cloneMode: globalForm.cloneMode,
+      keySource: (r.keyBinding ? 'existing' : 'new') as 'new' | 'existing',
+      existingKeyId: r.keyBinding || null, cloneMode: globalForm.cloneMode,
       instantCloneParent: globalForm.cloneMode === 'instant' && globalForm.parentSource === 'existing' ? globalForm.instantCloneParent || null : null,
       _createParents: globalForm.cloneMode === 'instant' && globalForm.parentSource === 'create' ? globalForm.newParents.filter(p => p.name.trim() && p.ip.trim()).map(p => ({ name: p.name.trim(), ip: p.ip.trim() })) : null,
       ovfProperties: ovf.length > 0 ? ovf : null,
     } as any
   }
-  if (deployPolicy.deployMode === 'single') emit('submit', mk(instanceList[0]))
+  if (deployMode.value === 'single') emit('submit', mk(instanceList[0]))
   else instanceList.forEach(r => emit('submit', mk(r)))
 }
 
@@ -138,7 +157,9 @@ watch(() => props.open, (o) => {
     const v = props.template.versions[0]
     Object.assign(globalForm, { versionId: v?.id ?? '', resourcePoolId: props.pools[0]?.id ?? '', placementPool: '', targetNetwork: '', cloneMode: 'full', instantCloneParent: '', parentSource: 'existing', newParents: [{ name: 'ic-p', ip: '' }] })
     Object.assign(securityForm, { runAsUser: 'svc_robot', password: '', confirmPassword: '', sshKey: '' })
-    Object.assign(deployPolicy, { deployMode: 'single', ipMode: 'dhcp', netmask: '255.255.255.0', gateway: '172.16.85.1', dns: '172.16.85.1' })
+    Object.assign(deployPolicy, { ipMode: 'dhcp', netmask: '255.255.255.0', gateway: '172.16.85.1', dns: '172.16.85.1' })
+    deployMode.value = 'single'
+    currentStep.value = 'env'
     instanceList.length = 0; instanceList.push({ hostname: '', ip: '', keyBinding: '' })
     batchCount.value = 3; batchPrefix.value = ''; batchStartIP.value = ''; attempted.value = false
   }
@@ -149,10 +170,30 @@ watch(() => props.open, (o) => {
   <cds-modal :hidden="!props.open" size="lg" @closeChange="emit('close')">
     <cds-modal-header><h2 cds-text="title" class="t">部署智能体 — {{ props.template?.name }}</h2></cds-modal-header>
     <cds-modal-content>
-      <div class="f">
+      <div class="wizard-grid">
+        <nav class="wizard-sidebar" aria-label="wizard steps">
+          <ol class="wizard-steps">
+            <li v-for="(s, i) in STEPS" :key="s"
+              class="wizard-step-item"
+              :class="{ active: s === currentStep, visited: i < stepIndex(currentStep), unvisited: i > stepIndex(currentStep) }">
+              <button type="button" class="step-button"
+                :disabled="i > stepIndex(currentStep)"
+                @click="i < stepIndex(currentStep) && (currentStep = s)">
+                <span class="step-marker">
+                  <cds-icon v-if="i < stepIndex(currentStep)" shape="check" size="sm"></cds-icon>
+                  <template v-else>{{ i + 1 }}</template>
+                </span>
+                <span class="step-label">{{ stepLabel(s) }}</span>
+              </button>
+            </li>
+          </ol>
+        </nav>
+
+        <section class="wizard-main">
+          <div class="f">
 
         <!-- ══ 区块1: 基础运行环境 ══ -->
-        <div class="blk"><h3 class="bh">基础运行环境</h3><p class="bd">所有实例共享的底层 IaaS 资源配置</p>
+        <div v-if="currentStep==='env'" class="blk"><h3 class="bh">基础运行环境</h3><p class="bd">所有实例共享的底层 IaaS 资源配置</p>
           <div class="g2">
             <cds-select control-width="shrink"><label>选择版本</label><select v-model="globalForm.versionId"><option v-for="v in versionList" :key="v.id" :value="v.id">{{ v.version }}</option></select></cds-select>
             <cds-select control-width="shrink"><label>vSphere 放置资源池</label><select v-model="globalForm.placementPool"><option value="">继承模板默认</option><option v-for="p in vspherePools" :key="p.path" :value="p.path">{{ p.name }}</option></select></cds-select>
@@ -169,7 +210,7 @@ watch(() => props.open, (o) => {
         </div>
 
         <!-- ══ 区块2: 全局安全与认证 ══ -->
-        <div class="blk"><h3 class="bh">全局安全与认证</h3><p class="bd">所有实例统一的 Cloud-Init / vApp 系统凭据</p>
+        <div v-if="currentStep==='security'" class="blk"><h3 class="bh">全局安全与认证</h3><p class="bd">所有实例统一的 Cloud-Init / vApp 系统凭据</p>
           <div class="g2">
             <cds-input><label>RunAs User</label><input v-model="securityForm.runAsUser" placeholder="svc_robot" class="uline"/></cds-input>
             <!-- 密码 -->
@@ -188,12 +229,14 @@ watch(() => props.open, (o) => {
           </div>
         </div>
 
-        <!-- ══ 区块3: 部署与网络策略 ══ -->
-        <div class="blk"><h3 class="bh">部署与网络策略</h3>
-          <div class="g2">
-            <div><label class="sl">部署模式</label><div class="rr"><label class="ir" :class="{a:deployPolicy.deployMode==='single'}"><input type="radio" v-model="deployPolicy.deployMode" value="single"/>单台部署</label><label class="ir" :class="{a:deployPolicy.deployMode==='batch'}"><input type="radio" v-model="deployPolicy.deployMode" value="batch"/>批量部署</label></div></div>
-            <div><label class="sl">IP 分配模式</label><div class="rr"><label class="ir" :class="{a:deployPolicy.ipMode==='dhcp'}"><input type="radio" v-model="deployPolicy.ipMode" value="dhcp"/>DHCP</label><label class="ir" :class="{a:deployPolicy.ipMode==='static'}"><input type="radio" v-model="deployPolicy.ipMode" value="static"/>静态 IP</label></div></div>
-          </div>
+        <!-- ══ 区块2.5: 部署模式 (单台/批量) ══ -->
+        <div v-if="currentStep==='mode'" class="blk"><h3 class="bh">部署模式</h3>
+          <div class="rr"><label class="ir" :class="{a:deployMode==='single'}"><input type="radio" v-model="deployMode" value="single"/>单台部署</label><label class="ir" :class="{a:deployMode==='batch'}"><input type="radio" v-model="deployMode" value="batch"/>批量部署</label></div>
+        </div>
+
+        <!-- ══ 区块3: 网络策略 ══ -->
+        <div v-if="currentStep==='network'" class="blk"><h3 class="bh">网络策略</h3>
+          <div class="rr"><label class="ir" :class="{a:deployPolicy.ipMode==='dhcp'}"><input type="radio" v-model="deployPolicy.ipMode" value="dhcp"/>DHCP</label><label class="ir" :class="{a:deployPolicy.ipMode==='static'}"><input type="radio" v-model="deployPolicy.ipMode" value="static"/>静态 IP</label></div>
           <template v-if="deployPolicy.ipMode==='static'">
             <div class="g3" style="margin-top:12px">
               <cds-input><label>子网掩码</label><input v-model="deployPolicy.netmask" placeholder="255.255.255.0"/></cds-input>
@@ -204,32 +247,39 @@ watch(() => props.open, (o) => {
         </div>
 
         <!-- ══ 区块4: 实例配置清单 ══ -->
-        <div class="blk"><h3 class="bh">实例配置清单</h3>
+        <div v-if="currentStep==='instances'" class="blk"><h3 class="bh">实例配置清单</h3>
           <!-- 单台 -->
-          <template v-if="deployPolicy.deployMode==='single'">
+          <template v-if="deployMode==='single'">
             <div class="g2">
               <cds-input><label>智能体名称 <span class="rq">*</span></label><input v-model="instanceList[0].hostname" placeholder="my-agent-01"/></cds-input>
               <cds-input v-if="deployPolicy.ipMode==='static'"><label>IP 地址 <span class="rq">*</span></label><input v-model="instanceList[0].ip" placeholder="172.16.85.200"/></cds-input>
-              <cds-select control-width="shrink"><label>网关密钥绑定</label><select v-model="instanceList[0].keyBinding"><option value="">-- 新建密钥 --</option><option v-for="k in unboundKeys" :key="k.id" :value="k.id">{{ k.alias||k.id.slice(0,8) }}</option></select></cds-select>
+              <cds-select control-width="shrink"><label>网关密钥绑定</label><select v-model="instanceList[0].keyBinding"><option value="">-- 浏览密钥 --</option><option v-for="k in unboundKeys" :key="k.id" :value="k.id">{{ k.name||k.id.slice(0,8) }}</option></select></cds-select>
             </div>
             <p v-if="attempted&&errors.host" class="er">{{errors.host}}</p>
             <p v-if="attempted&&errors.ip0" class="er">{{errors.ip0}}</p>
           </template>
           <!-- 批量 -->
-          <template v-if="deployPolicy.deployMode==='batch'">
+          <template v-if="deployMode==='batch'">
             <div class="bt"><cds-input style="width:100px"><label>数量</label><input v-model.number="batchCount" type="number" min="1" max="50"/></cds-input><cds-input style="width:160px"><label>名称前缀</label><input v-model="batchPrefix" placeholder="agent"/></cds-input><cds-input v-if="deployPolicy.ipMode==='static'" style="width:160px"><label>起始 IP</label><input v-model="batchStartIP" placeholder="172.16.85.200"/></cds-input><cds-button size="sm" action="outline" @click="generateBatch">生成清单</cds-button></div>
             <div class="tw" v-if="instanceList.length">
               <table class="it"><thead><tr><th style="width:50px">#</th><th>主机名 <span class="rq">*</span></th><th v-if="deployPolicy.ipMode==='static'">IP 地址 <span class="rq">*</span></th><th>密钥绑定</th></tr></thead>
-                <tbody><tr v-for="(row,i) in instanceList" :key="i"><td class="ix">{{i+1}}</td><td><input class="ci" v-model="row.hostname" :class="{er2:attempted&&!row.hostname.trim()}"/></td><td v-if="deployPolicy.ipMode==='static'"><input class="ci" v-model="row.ip" :class="{er2:attempted&&!row.ip}"/></td><td><select class="cs" v-model="row.keyBinding"><option value="">-- 新建 --</option><option v-for="k in unboundKeys" :key="k.id" :value="k.id">{{k.alias||k.id.slice(0,8)}}</option></select></td></tr></tbody>
+                <tbody><tr v-for="(row,i) in instanceList" :key="i"><td class="ix">{{i+1}}</td><td><input class="ci" v-model="row.hostname" :class="{er2:attempted&&!row.hostname.trim()}"/></td><td v-if="deployPolicy.ipMode==='static'"><input class="ci" v-model="row.ip" :class="{er2:attempted&&!row.ip}"/></td><td><select class="cs" v-model="row.keyBinding"><option value="">-- 浏览 --</option><option v-for="k in unboundKeys" :key="k.id" :value="k.id">{{k.name||k.id.slice(0,8)}}</option></select></td></tr></tbody>
               </table>
               <p v-if="attempted&&errors.ndup" class="er">{{errors.ndup}}</p><p v-if="attempted&&errors.idup" class="er">{{errors.idup}}</p><p v-if="attempted&&errors.ipmiss" class="er">{{errors.ipmiss}}</p>
             </div>
           </template>
         </div>
 
+          </div>
+        </section>
       </div>
     </cds-modal-content>
-    <cds-modal-actions><cds-button action="outline" @click="emit('close')">取消</cds-button><cds-button :loading-state="props.deploying?'loading':'default'" status="primary" @click="submit">部署</cds-button></cds-modal-actions>
+    <cds-modal-actions>
+      <cds-button v-if="stepIndex(currentStep) > 0" action="outline" @click="goPrev">上一步</cds-button>
+      <cds-button action="outline" @click="emit('close')">取消</cds-button>
+      <cds-button v-if="stepIndex(currentStep) < STEPS.length - 1" status="primary" @click="goNext">下一步</cds-button>
+      <cds-button v-else :loading-state="props.deploying?'loading':'default'" status="primary" @click="submit">部署</cds-button>
+    </cds-modal-actions>
   </cds-modal>
 </template>
 
@@ -247,4 +297,16 @@ watch(() => props.open, (o) => {
 .pw-wrap{display:flex;align-items:center;gap:4px}.pw-wrap input{flex:1}
 .uline{border:none;border-bottom:1px solid #d0d5dd;border-radius:0;padding:6px 0;font-size:14px;width:100%;outline:none;background:transparent}.uline:focus{border-bottom-color:#0072a3}.uline-err{border-bottom-color:#c92100}
 .fl{font-size:14px;color:#4e5969;display:block;margin-bottom:4px}.field{display:flex;flex-direction:column}
+.wizard-grid{display:grid;grid-template-columns:200px 1fr;height:min(70vh,600px);width:100%}
+.wizard-sidebar{background:#f4f4f4;box-shadow:inset -1px 0 0 #e8e8e8;padding:20px 0 16px;display:flex;flex-direction:column;height:100%;overflow-y:auto}
+.wizard-steps{list-style:none;margin:0;padding:0}
+.wizard-step-item{margin:0}
+.step-button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 14px;border:0;background:transparent;color:#565656;font:inherit;text-align:left;cursor:pointer}
+.step-button:disabled{cursor:default}
+.step-marker{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font-size:11px;font-weight:600;background:transparent;border:1px solid currentColor;flex-shrink:0}
+.wizard-step-item.active .step-button{color:#fff;background:#0072a3}
+.wizard-step-item.active .step-marker{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.4)}
+.wizard-step-item.visited .step-marker{background:#0072a3;color:#fff;border-color:#0072a3}
+.step-label{font-size:13px}
+.wizard-main{display:flex;flex-direction:column;min-width:0;height:100%;min-height:0;overflow-y:auto;padding:16px 24px}
 </style>

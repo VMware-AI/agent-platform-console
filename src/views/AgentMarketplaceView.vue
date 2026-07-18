@@ -683,6 +683,7 @@ const typeFilterLabel = computed(() => {
                 class="detail-version-row"
               >
                 <span class="version-label">{{ v.version }}</span>
+                <span v-if="v.ovaIdentifier" cds-text="body" class="muted version-ova">模板: {{ v.ovaIdentifier }}</span>
                 <span v-if="v.notes" cds-text="body" class="muted version-desc">{{ v.notes }}</span>
               </div>
             </div>

@@ -17,6 +17,7 @@ const FAMILY_FIELDS = /* GraphQL */ `
     versions {
       id
       version
+      ovaIdentifier
     }
   }
 `
