@@ -76,6 +76,7 @@ const groups: Group[] = [
       { name: 'platform.resources', labelKey: 'nav.system.resources', icon: 'resource-pool', to: '/platform/resources' },
       { name: 'platform.gateway',   labelKey: 'nav.system.gateway',   icon: 'router',        to: '/platform/gateway' },
       { name: 'platform.users',     labelKey: 'nav.system.users',     icon: 'users',         to: '/platform/users' },
+      { name: 'platform.skills',    labelKey: 'nav.system.skills',    icon: 'wrench',        to: '/platform/skills' },
     ],
   },
 ]

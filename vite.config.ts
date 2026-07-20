@@ -56,6 +56,10 @@ export default defineConfig({
       // required for the SameSite=Lax `ap_session` cookie to be sent on the POST
       // (LLD-12). VITE_GRAPHQL_ENDPOINT in .env is the same-origin path the
       // app POSTs to; the proxy then forwards to the real backend.
+      '/v1': {
+        target: backendBaseUrl,
+        changeOrigin: true,
+      },
       '/query': {
         target: backendBaseUrl,
         changeOrigin: true,
