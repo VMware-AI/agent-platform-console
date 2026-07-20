@@ -1,11 +1,24 @@
-# Rendered by /entrypoint.sh from this template. The only thing envsubst
-# replaces is the BACKEND_BASE_URL token on the proxy_pass line below.
-# DO NOT put any other $VAR here — envsubst would mangle it.
+# Rendered by /entrypoint.sh from this template. envsubst replaces ONLY the
+# tokens on the envsubst allowlist (see entrypoint.sh). Every other $VAR
+# ($uri, $host, $scheme, ...) is left untouched. When SSL is disabled, the
+# SSL tokens render to empty strings, so the resulting config is HTTP-only
+# on :80.
 
 server {
     listen       80;
     listen       [::]:80;
+    ${SSL_LISTEN}
     server_name  _;
+
+    # When SSL is enabled, ${HTTP_REDIRECT} becomes:
+    #   if ($scheme != "https") { return 301 https://$host$request_uri; }
+    # and :80 transparently upgrades to :443. The `if` guard makes the
+    # redirect a no-op for traffic that already arrived on :443 (otherwise
+    # `return` at server-block level would also catch the HTTPS listener and
+    # cause a self-redirect loop).
+    # When SSL is disabled (or SSL_REDIRECT=false), the token is empty and
+    # :80 serves the SPA normally.
+    ${HTTP_REDIRECT}
 
     root  /usr/share/nginx/html;
     index index.html;
@@ -40,6 +53,8 @@ server {
         add_header Pragma "no-cache" always;
         add_header Expires "0" always;
     }
+
+    ${SSL_CERTS}
 
     # Vite emits content-hashed assets under /assets/ — safe to cache forever.
     location /assets/ {

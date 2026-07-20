@@ -36,3 +36,6 @@ docs
 
 *.tsbuildinfo
 postman
+
+# Generated self-signed TLS certs from docker/gen-cert.sh — never commit.
+docker/certs/
