@@ -391,7 +391,7 @@ function onConfigure(agent: Agent) {
     configureDialogOpen.value = true
   } catch (err: unknown) {
     console.warn('[agents] configure dialog failed', err)
-    toast.error('无法打开配置面板')
+    toast.error(locale.t('agents.action.configureOpenFail'))
   }
 }
 function closeConfigureDialog() {
@@ -515,7 +515,7 @@ async function onCopyAccess(agent: Agent) {
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    accessError.value = msg || '无法获取虚拟机凭据'
+    accessError.value = msg || locale.t('agents.action.accessFetchFail')
   } finally {
     accessLoading.value = false
   }
@@ -542,7 +542,7 @@ function retryAccessInfo() {
     }
   }).catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : String(err)
-    accessError.value = msg || '重试失败'
+    accessError.value = msg || locale.t('agents.action.retryFail')
   }).finally(() => {
     accessLoading.value = false
   })
@@ -741,74 +741,6 @@ const summaryText = computed(() => {
       <p cds-text="body" class="desc muted">{{ locale.t('agents.list.description') }}</p>
     </header>
 
-    <!-- Multi-condition filter bar -->
-    <div class="filter-bar">
-      <cds-input class="filter-input">
-        <input
-          type="text"
-          :placeholder="locale.t('agents.col.name.search')"
-          :aria-label="locale.t('agents.col.name.search')"
-          :value="columnFilters.nameKeyword"
-          @input="(e: Event) => setColumnFilter('nameKeyword', (e.target as HTMLInputElement).value)"
-        />
-        <cds-icon slot="prefix" shape="search" size="sm" aria-hidden="true"></cds-icon>
-      </cds-input>
-
-      <AppDropdown align="start">
-        <template #trigger>
-          <cds-button action="outline" size="sm">
-            {{ typeFilter === 'all' ? locale.t('agents.type.filter.all') : locale.t(`agents.type.${typeFilter}`) }}
-            <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
-          </cds-button>
-        </template>
-        <template #default="{ close }">
-          <button
-            v-for="t in TYPE_OPTIONS"
-            :key="t"
-            type="button"
-            class="menu-opt"
-            :class="{ active: typeFilter === t }"
-            @click="setTypeFilter(t); close()"
-          >
-            <span>{{ t === 'all' ? locale.t('agents.type.filter.all') : locale.t(`agents.type.${t}`) }}</span>
-            <cds-icon v-if="typeFilter === t" shape="check" size="sm"></cds-icon>
-          </button>
-        </template>
-      </AppDropdown>
-
-      <AppDropdown align="start">
-        <template #trigger>
-          <cds-button action="outline" size="sm">
-            {{ statusFilter === 'all' ? locale.t('agents.status.filter.all') : locale.t(`agents.status.${statusFilter}`) }}
-            <cds-icon shape="angle" direction="down" size="sm" aria-hidden="true"></cds-icon>
-          </cds-button>
-        </template>
-        <template #default="{ close }">
-          <button
-            v-for="s in STATUS_OPTIONS"
-            :key="s"
-            type="button"
-            class="menu-opt"
-            :class="{ active: statusFilter === s }"
-            @click="setStatusFilter(s); close()"
-          >
-            <span>{{ s === 'all' ? locale.t('agents.status.filter.all') : locale.t(`agents.status.${s}`) }}</span>
-            <cds-icon v-if="statusFilter === s" shape="check" size="sm"></cds-icon>
-          </button>
-        </template>
-      </AppDropdown>
-
-      <cds-input class="filter-input">
-        <input
-          type="text"
-          :placeholder="locale.t('agents.col.username.search')"
-          :aria-label="locale.t('agents.col.username.search')"
-          :value="columnFilters.usernameKeyword"
-          @input="(e: Event) => setColumnFilter('usernameKeyword', (e.target as HTMLInputElement).value)"
-        />
-      </cds-input>
-    </div>
-
     <!-- Toolbar: export / batch / refresh -->
     <div class="toolbar">
 
@@ -881,6 +813,7 @@ const summaryText = computed(() => {
       {{ locale.t('agents.error') }}
     </cds-alert>
 
+    <div class="grid-card">
     <cds-grid
       :border="'row'"
       :column-layout="'flex'"
@@ -1079,7 +1012,7 @@ const summaryText = computed(() => {
           </span>
         </cds-grid-column>
 
-        <cds-grid-column :width="'12%'">
+        <cds-grid-column :width="'11%'">
           {{ locale.t('agents.col.createdAt') }}
           <span class="col-head-actions">
             <cds-button-action
@@ -1108,7 +1041,7 @@ const summaryText = computed(() => {
           </span>
         </cds-grid-column>
 
-        <cds-grid-column :width="'12%'">
+        <cds-grid-column :width="'11%'">
           {{ locale.t('agents.col.updatedAt') }}
           <span class="col-head-actions">
             <cds-button-action
@@ -1137,7 +1070,7 @@ const summaryText = computed(() => {
           </span>
         </cds-grid-column>
 
-        <cds-grid-column :width="'20%'">
+        <cds-grid-column :width="'18%'">
           <div class="col-head col-actions">
             <span>{{ locale.t('agents.col.actions') }}</span>
           </div>
@@ -1207,7 +1140,7 @@ const summaryText = computed(() => {
                 action="outline"
                 size="sm"
                 :disabled="agent.status === 'exception'"
-                :title="agent.status === 'exception' ? '异常状态实例暂不支持配置' : undefined"
+                :title="agent.status === 'exception' ? locale.t('agents.action.exceptionConfigureBlocked') : undefined"
                 @click="onConfigure(agent)"
               >
                 <cds-icon shape="cog" size="sm" aria-hidden="true"></cds-icon>
@@ -1314,6 +1247,7 @@ const summaryText = computed(() => {
           </div>
         </cds-grid-footer>
       </cds-grid>
+    </div>
 
     <!-- Column filter dropdowns (anchored to the cds-button-action triggers above) -->
     <cds-dropdown
@@ -1477,10 +1411,10 @@ const summaryText = computed(() => {
   <!-- Action confirm dialog (stop/restart/delete) -->
   <ConfirmDialog
     :open="actionConfirmOpen && actionConfirmMode !== 'hardDelete'"
-    :title="actionConfirmMode === 'stop' ? '停止智能体' : actionConfirmMode === 'start' ? '启动智能体' : actionConfirmMode === 'restart' ? '重启智能体' : '删除智能体'"
-    :body="actionConfirmMode === 'stop' ? `确定停止 ${actionTarget?.name ?? ''} 吗？` : actionConfirmMode === 'start' ? `确定启动 ${actionTarget?.name ?? ''} 吗？` : actionConfirmMode === 'restart' ? `确定重启 ${actionTarget?.name ?? ''} 吗？` : `确定删除 ${actionTarget?.name ?? ''} 吗？此操作不可撤销。`"
-    confirm-text="确认"
-    cancel-text="取消"
+    :title="actionConfirmMode === 'stop' ? locale.t('agents.confirm.stopTitle') : actionConfirmMode === 'start' ? locale.t('agents.confirm.startTitle') : actionConfirmMode === 'restart' ? locale.t('agents.confirm.restartTitle') : locale.t('agents.confirm.deleteTitle')"
+    :body="actionConfirmMode === 'stop' ? locale.t('agents.confirm.stopBody').replace('{name}', actionTarget?.name ?? '') : actionConfirmMode === 'start' ? locale.t('agents.confirm.startBody').replace('{name}', actionTarget?.name ?? '') : actionConfirmMode === 'restart' ? locale.t('agents.confirm.restartBody').replace('{name}', actionTarget?.name ?? '') : locale.t('agents.confirm.deleteBody').replace('{name}', actionTarget?.name ?? '')"
+    :confirm-text="locale.t('common.confirm')"
+    :cancel-text="locale.t('common.cancel')"
     @confirm="confirmAction"
     @cancel="closeActionConfirm"
   />
@@ -1504,8 +1438,8 @@ const summaryText = computed(() => {
     :open="batchConfirmOpen && batchConfirmMode === 'delete'"
     :title="locale.t('agents.confirm.deleteTitle')"
     :body="locale.t('agents.confirm.batchDeleteBody').replace('{count}', String(selectedAgents.length))"
-    confirm-text="确认"
-    cancel-text="取消"
+    :confirm-text="locale.t('common.confirm')"
+    :cancel-text="locale.t('common.cancel')"
     @confirm="confirmBatchAction"
     @cancel="closeBatchConfirm"
   />
@@ -1537,6 +1471,27 @@ const summaryText = computed(() => {
   min-width: 0;
 }
 
+/* Wrap the cds-grid in a card that owns the horizontal scrollbar —
+   same pattern as ModelGatewayView. The card scrolls independently of
+   the page header / toolbar / pagination above it, so the title stays
+   put while the table extends. */
+.agent-list .grid-card {
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+  border-radius: 6px;
+  background: var(--cds-alias-object-container-background, #fff);
+  flex-shrink: 0;
+  /* `.agent-list` uses `cds-layout="vertical gap:md"` which sets
+     `align-items: flex-start`. Without `align-self: stretch` here the
+     card takes its content's intrinsic width (1180px from the cds-grid
+     inside) instead of stretching to the page width. Force the cross-axis
+     to fill so the card is constrained and the horizontal scrollbar kicks
+     in at narrow viewports. */
+  align-self: stretch;
+}
+
 .page-head {
   flex-shrink: 0;
 }
@@ -1544,7 +1499,7 @@ const summaryText = computed(() => {
 .heading {
   margin: 0;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 18px;
+  font-size: 28px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -1572,8 +1527,14 @@ const summaryText = computed(() => {
   flex-shrink: 0;
   flex-wrap: wrap;
 }
+/* cds-input's default --padding is `2px 6px 0 6px`, so the 16-20px prefix
+   search icon overlaps the placeholder text. Reserve ~32px on the left so
+   "搜索名称" / "搜索运行账户" starts after the magnifying glass.
+   Mirrors the LoginView .pwd-input pattern (which reserves the right side
+   for the eye button via --padding). */
 .filter-input {
   width: 200px;
+  --padding: 4px 8px 4px 32px;
 }
 
 /* ---------- Username cell (truncate + hover tooltip) ---------- */
@@ -1598,6 +1559,9 @@ const summaryText = computed(() => {
   justify-content: flex-end;
   gap: 8px;
   flex-shrink: 0;
+  /* Match SupplierModelView's `.content-card { margin-top: 20px }` so the
+     gap between the page description and the action row is the same as
+     on the 模型管理 page (parent gap 12px + this 20px = 32px). */
   margin-top: 20px;
 }
 
@@ -1662,12 +1626,32 @@ const summaryText = computed(() => {
 /* Force the cds-grid host to respect the parent column. Without this the
    element's default `min-width: auto` expands to the intrinsic min-width of
    its cells (long key names + two outline action buttons), forcing a
-   horizontal scroll on the page even when the columns use % widths. */
+   horizontal scroll on the page even when the columns use % widths.
+
+   The cds-grid's column-size controller auto-sets `width="36px"` on the
+   `type="action"` column (see grid-column-size.controller.js setActionWidth),
+   so the ch-grid template is `36px <pct-cols>`. To keep the table inside
+   the page the explicit %'s must total <100% (so 36px + %'s ≤ container).
+   With the column %'s at 97% and the action column at 36px, a 1150px host
+   has 1.5px to spare at 1440px viewport.
+
+   `min-width: 0; overflow: hidden` on the slotted columns/cells stops their
+   intrinsic content width (header text + sort/filter icons) from blowing
+   out the grid track — the same fix VirtualKeyView uses. */
 .agent-list cds-grid {
   display: block;
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  /* min-width: 1180px reserves the table's natural width; the
+     `.grid-card` wrapper (overflow-x: auto) provides the horizontal
+     scrollbar when the viewport drops below this width. */
+  min-width: 1180px;
+}
+.agent-list cds-grid-column,
+.agent-list cds-grid-cell {
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Native checkbox used for row + header selection. We use a plain <input
@@ -1770,6 +1754,13 @@ const summaryText = computed(() => {
    room. Height stays at the cds default (16px). */
 .status-badge {
   min-width: 48px;
+  /* Force white badge text in both light and dark themes. cds-badge's
+     `:host { --color: #fff }` default is fine for success/danger/neutral,
+     but `:host([status=warning])` overrides to a near-black `#21333b` —
+     reads as black text on yellow and clashes with the other statuses.
+     The class selector beats the attribute selector inside :host, so
+     this wins for every status. */
+  --color: #fff;
 }
 
 /* ---------- Row cells ---------- */

@@ -882,7 +882,7 @@ function formatCost(d: SpecDraft): string {
                       size="sm"
                     ></cds-icon>
                     <span>
-                      模型 #{{ i + 1 }}
+                      {{ locale.t('supplier.model.form.spec.heading').replace('{n}', String(i + 1)) }}
                       <template v-if="d.model">— {{ d.model }}</template>
                     </span>
                     <span
@@ -1036,7 +1036,7 @@ function formatCost(d: SpecDraft): string {
                         >
                           <option v-for="m in specModelLists[i]" :key="m" :value="m" />
                         </datalist>
-                        <cds-control-message v-if="attemptSpecs && !d.model.trim()" status="error">必填</cds-control-message>
+                        <cds-control-message v-if="attemptSpecs && !d.model.trim()" status="error">{{ locale.t('supplier.model.form.spec.requiredHint') }}</cds-control-message>
                       </cds-input>
                     </div>
 

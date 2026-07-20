@@ -38,39 +38,21 @@ const ACTION_PREFIXES = [
 ] as const
 type ActionPrefix = (typeof ACTION_PREFIXES)[number]
 
-const ACTION_VERB_LABELS: Record<string, { zh: string; en: string }> = {
-  add: { zh: '新增', en: 'Add' },
-  assign_role: { zh: '分配角色', en: 'Assign Role' },
-  change_password: { zh: '修改密码', en: 'Change Password' },
-  create: { zh: '创建', en: 'Create' },
-  delete: { zh: '删除', en: 'Delete' },
-  deploy: { zh: '部署', en: 'Deploy' },
-  issue: { zh: '签发', en: 'Issue' },
-  login: { zh: '登录', en: 'Login' },
-  recycle: { zh: '回收', en: 'Recycle' },
-  regenerate: { zh: '重新生成', en: 'Regenerate' },
-  register: { zh: '注册', en: 'Register' },
-  remove: { zh: '移除', en: 'Remove' },
-  remove_role: { zh: '移除角色', en: 'Remove Role' },
-  reset_password: { zh: '重置密码', en: 'Reset Password' },
-  revert_snapshot: { zh: '回滚快照', en: 'Revert Snapshot' },
-  revoke: { zh: '吊销', en: 'Revoke' },
-  set_default: { zh: '设为默认', en: 'Set Default' },
-  set_enabled: { zh: '启用/禁用', en: 'Set Enabled' },
-  set_knowledge: { zh: '设置知识库', en: 'Set Knowledge' },
-  set_permissions: { zh: '设置权限', en: 'Set Permissions' },
-  set_status: { zh: '设置状态', en: 'Set Status' },
-  set_tier: { zh: '设置层级', en: 'Set Tier' },
-  snapshot: { zh: '创建快照', en: 'Snapshot' },
-  sync: { zh: '同步', en: 'Sync' },
-  test: { zh: '测试', en: 'Test' },
-  toggle_enabled: { zh: '启用/禁用', en: 'Toggle Enabled' },
-  update: { zh: '更新', en: 'Update' },
-  upsert: { zh: '新增/更新', en: 'Upsert' },
-}
+const ACTION_VERB_KEYS = [
+  'add', 'assign_role', 'change_password', 'create', 'delete', 'deploy',
+  'issue', 'login', 'recycle', 'regenerate', 'register', 'remove',
+  'remove_role', 'reset_password', 'revert_snapshot', 'revoke', 'set_default',
+  'set_enabled', 'set_knowledge', 'set_permissions', 'set_status', 'set_tier',
+  'snapshot', 'sync', 'test', 'toggle_enabled', 'update', 'upsert',
+] as const
+
+// `auditLog.action.<verb>` keys live in the locale dictionary; this set is
+// used to quickly check whether an unknown verb has a translation. If not,
+// we fall back to the snake_case verb (see actionLabel()).
+const KNOWN_VERB_KEYS = new Set<string>(ACTION_VERB_KEYS)
 
 const timeWindow = ref<TimeWindow>('1d')
-const pageSize = ref<PageSize>(20)
+const pageSize = ref<PageSize>(10)
 const currentPage = ref(1)
 const actionPrefix = ref<ActionPrefix | null>(null)
 const searchInput = ref('')
@@ -330,7 +312,10 @@ function actionLabel(action: string): string {
   const [category, ...verbParts] = action.split('.')
   const verb = verbParts.join('.') || action
   const categoryText = actionPrefixLabel(`${category}.`)
-  const verbText = ACTION_VERB_LABELS[verb]?.[locale.locale] ?? verb.replace(/_/g, ' ')
+  const verbKey = `auditLog.action.${verb}`
+  const verbText = KNOWN_VERB_KEYS.has(verb)
+    ? locale.t(verbKey)
+    : verb.replace(/_/g, ' ')
   return locale.locale === 'zh' ? `${categoryText}${verbText}` : `${categoryText} ${verbText}`
 }
 
@@ -392,8 +377,7 @@ async function copyResourceId(value: string | null) {
       <p cds-text="body" class="desc muted">{{ locale.t('auditLog.description') }}</p>
     </header>
 
-    <div class="audit-shell">
-      <div class="toolbar" :aria-label="locale.t('auditLog.filter.toolbar')">
+    <div class="toolbar" :aria-label="locale.t('auditLog.filter.toolbar')">
         <div class="time-tabs" role="group" :aria-label="locale.t('auditLog.filter.timeRange')">
           <button
             type="button"
@@ -489,7 +473,7 @@ async function copyResourceId(value: string | null) {
         />
 
         <cds-button action="outline" size="sm" :disabled="exportingCsv" @click="exportCsv">
-          <cds-icon shape="export" size="sm" aria-hidden="true"></cds-icon>
+          <cds-icon shape="download" size="sm" aria-hidden="true"></cds-icon>
           {{ exportingCsv ? locale.t('auditLog.export.inProgress') : locale.t('auditLog.action.export') }}
         </cds-button>
       </div>
@@ -517,119 +501,162 @@ async function copyResourceId(value: string | null) {
         <span>{{ errorMessage }}</span>
       </div>
 
-      <div class="table-wrap">
-        <table class="audit-table" :aria-label="locale.t('auditLog.table.label')">
-          <colgroup>
-            <col class="time-col" />
-            <col class="actor-col" />
-            <col class="action-col" />
-            <col class="resource-col" />
-            <col class="ip-col" />
-            <col class="desc-col" />
-            <col class="result-col" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th scope="col">{{ locale.t('auditLog.col.actionTime') }}</th>
-              <th scope="col">{{ locale.t('auditLog.col.actor') }}</th>
-              <th scope="col">{{ locale.t('auditLog.col.actionType') }}</th>
-              <th scope="col">{{ locale.t('auditLog.col.resourceId') }}</th>
-              <th scope="col">{{ locale.t('auditLog.col.ip') }}</th>
-              <th scope="col">{{ locale.t('auditLog.col.description') }}</th>
-              <th scope="col">{{ locale.t('auditLog.col.result') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="log in visibleLogs" :key="log.id" class="data-row">
-              <td class="mono nowrap">{{ formatDateTime(log.createdAt) }}</td>
-              <td>
-                <span class="ellipsis" :title="log.actorUserId ?? locale.t('auditLog.value.system')">
-                  {{ actorLabel(log) }}
-                </span>
-              </td>
-              <td>
-                <span class="ellipsis strong" :title="log.action">{{ actionLabel(log.action) }}</span>
-              </td>
-              <td>
-                <button
-                  v-if="log.resourceId"
-                  type="button"
-                  class="resource-copy"
-                  :title="log.resourceId"
-                  :aria-label="locale.t('auditLog.action.copyResource')"
-                  @click="copyResourceId(log.resourceId)"
-                >
-                  <span class="ellipsis">{{ shortId(log.resourceId, 6) }}</span>
-                  <cds-icon shape="copy" size="sm" aria-hidden="true"></cds-icon>
-                </button>
-                <span v-else class="muted">—</span>
-              </td>
-              <td>
-                <span class="ellipsis" :title="log.ip ?? ''">{{ log.ip ?? '—' }}</span>
-              </td>
-              <td>
-                <span class="ellipsis" :title="detailText(log)">{{ actionDescription(log) }}</span>
-              </td>
-              <td>
-                <span class="result-pill" :data-tone="isSuccess(log.result) ? 'success' : 'danger'">
-                  <span class="result-dot" aria-hidden="true"></span>
-                  {{
-                    locale.t(
-                      isSuccess(log.result) ? 'auditLog.result.success' : 'auditLog.result.fail',
-                    )
-                  }}
-                </span>
-              </td>
-            </tr>
+    <div class="grid-card">
+      <cds-grid
+        border="row"
+        column-layout="flex"
+        role="grid"
+        :aria-label="locale.t('auditLog.table.label')"
+      >
+        <cds-grid-column width="14%">
+          <div class="col-head">
+            <span>{{ locale.t('auditLog.col.actionTime') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="13%">
+          <div class="col-head">
+            <span>{{ locale.t('auditLog.col.actor') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="12%">
+          <div class="col-head">
+            <span>{{ locale.t('auditLog.col.actionType') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="14%">
+          <div class="col-head">
+            <span>{{ locale.t('auditLog.col.resourceId') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="12%">
+          <div class="col-head">
+            <span>{{ locale.t('auditLog.col.ip') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="22%">
+          <div class="col-head">
+            <span>{{ locale.t('auditLog.col.description') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="13%">
+          <div class="col-head">
+            <span>{{ locale.t('auditLog.col.result') }}</span>
+          </div>
+        </cds-grid-column>
 
-            <tr v-if="loading && visibleLogs.length === 0">
-              <td colspan="7" class="placeholder-cell">
-                <cds-icon shape="history" size="xl" class="placeholder-icon"></cds-icon>
-                {{ locale.t('auditLog.loading') }}
-              </td>
-            </tr>
-            <tr v-else-if="visibleLogs.length === 0">
-              <td colspan="7" class="placeholder-cell">
-                <cds-icon shape="list" size="xl" class="placeholder-icon"></cds-icon>
-                {{ hasActiveFilters ? locale.t('auditLog.emptyFiltered') : locale.t('auditLog.empty') }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <footer class="table-footer">
-        <div class="page-size">
-          <span>{{ locale.t('auditLog.pagination.pageSize') }}</span>
-          <cds-select control-width="shrink">
-            <select
-              :value="pageSize"
-              :aria-label="locale.t('auditLog.pagination.pageSize')"
-              @change="onPageSizeChange"
+        <cds-grid-row v-for="log in visibleLogs" :key="log.id">
+          <cds-grid-cell class="mono nowrap time-cell">{{ formatDateTime(log.createdAt) }}</cds-grid-cell>
+          <cds-grid-cell>
+            <span class="ellipsis" :title="log.actorUserId ?? locale.t('auditLog.value.system')">
+              {{ actorLabel(log) }}
+            </span>
+          </cds-grid-cell>
+          <cds-grid-cell>
+            <span class="ellipsis strong" :title="log.action">{{ actionLabel(log.action) }}</span>
+          </cds-grid-cell>
+          <cds-grid-cell>
+            <button
+              v-if="log.resourceId"
+              type="button"
+              class="resource-copy"
+              :title="log.resourceId"
+              :aria-label="locale.t('auditLog.action.copyResource')"
+              @click="copyResourceId(log.resourceId)"
             >
-              <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
-                {{ option }}
-              </option>
-            </select>
-          </cds-select>
-        </div>
-        <span class="range-label">{{ summaryText }}</span>
-        <cds-pagination :aria-label="locale.t('auditLog.pagination.label')">
-          <cds-pagination-button
-            action="prev"
-            :disabled="currentPage <= 1"
-            :aria-label="locale.t('auditLog.pager.prev')"
-            @click="goToPage(currentPage - 1)"
-          ></cds-pagination-button>
-          <span class="page-indicator">{{ currentPage }}</span>
-          <cds-pagination-button
-            action="next"
-            :disabled="currentPage >= totalPages"
-            :aria-label="locale.t('auditLog.pager.next')"
-            @click="goToPage(currentPage + 1)"
-          ></cds-pagination-button>
-        </cds-pagination>
-      </footer>
+              <span class="ellipsis">{{ shortId(log.resourceId, 6) }}</span>
+              <cds-icon shape="copy" size="sm" aria-hidden="true"></cds-icon>
+            </button>
+            <span v-else class="muted">—</span>
+          </cds-grid-cell>
+          <cds-grid-cell>
+            <span class="ellipsis" :title="log.ip ?? ''">{{ log.ip ?? '—' }}</span>
+          </cds-grid-cell>
+          <cds-grid-cell>
+            <span class="ellipsis" :title="detailText(log)">{{ actionDescription(log) }}</span>
+          </cds-grid-cell>
+          <cds-grid-cell>
+            <span class="result-pill" :data-tone="isSuccess(log.result) ? 'success' : 'danger'">
+              <span class="result-dot" aria-hidden="true"></span>
+              {{
+                locale.t(
+                  isSuccess(log.result) ? 'auditLog.result.success' : 'auditLog.result.fail',
+                )
+              }}
+            </span>
+          </cds-grid-cell>
+        </cds-grid-row>
+
+        <cds-grid-placeholder v-if="loading && visibleLogs.length === 0" role="status" aria-live="polite">
+          <cds-icon shape="history" size="xl"></cds-icon>
+          <p cds-text="subsection">{{ locale.t('auditLog.loading') }}</p>
+        </cds-grid-placeholder>
+
+        <cds-grid-placeholder v-else-if="visibleLogs.length === 0" role="status" aria-live="polite">
+          <cds-icon shape="list" size="xl"></cds-icon>
+          <p cds-text="subsection">
+            {{ hasActiveFilters ? locale.t('auditLog.emptyFiltered') : locale.t('auditLog.empty') }}
+          </p>
+        </cds-grid-placeholder>
+
+        <cds-grid-footer v-if="totalCount > 0">
+          <div class="audit-pager">
+            <label for="audit-log-page-size">
+              {{ locale.t('auditLog.pagination.pageSize') }}
+            </label>
+            <cds-select control-width="shrink">
+              <select
+                id="audit-log-page-size"
+                :value="pageSize"
+                :aria-label="locale.t('auditLog.pagination.pageSize')"
+                @change="onPageSizeChange"
+              >
+                <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
+                  {{ option }}
+                </option>
+              </select>
+            </cds-select>
+
+            <span class="range-summary">{{ summaryText }}</span>
+
+            <cds-pagination :aria-label="locale.t('auditLog.pagination.label')">
+              <cds-pagination-button
+                action="first"
+                :disabled="currentPage <= 1"
+                :aria-label="locale.t('auditLog.pager.first')"
+                @click="goToPage(1)"
+              ></cds-pagination-button>
+              <cds-pagination-button
+                action="prev"
+                :disabled="currentPage <= 1"
+                :aria-label="locale.t('auditLog.pager.prev')"
+                @click="goToPage(currentPage - 1)"
+              ></cds-pagination-button>
+              <cds-input cds-pagination-number>
+                <input
+                  type="number"
+                  :value="currentPage"
+                  :min="1"
+                  :max="totalPages"
+                  :aria-label="locale.t('auditLog.pagination.page')"
+                  @change="goToPage(Number(($event.target as HTMLInputElement).value))"
+                />
+              </cds-input>
+              <cds-pagination-button
+                action="next"
+                :disabled="currentPage >= totalPages"
+                :aria-label="locale.t('auditLog.pager.next')"
+                @click="goToPage(currentPage + 1)"
+              ></cds-pagination-button>
+              <cds-pagination-button
+                action="last"
+                :disabled="currentPage >= totalPages"
+                :aria-label="locale.t('auditLog.pager.last')"
+                @click="goToPage(totalPages)"
+              ></cds-pagination-button>
+            </cds-pagination>
+          </div>
+        </cds-grid-footer>
+      </cds-grid>
     </div>
   </section>
 </template>
@@ -677,17 +704,6 @@ async function copyResourceId(value: string | null) {
 }
 .muted {
   color: var(--cds-alias-typography-color-300, #565656);
-}
-.audit-shell {
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--cds-alias-object-border-color, #b3b3b3);
-  border-radius: 6px;
-  background: var(--cds-alias-object-container-background, #fff);
-  overflow: hidden;
 }
 .toolbar {
   flex: 0 0 auto;
@@ -830,60 +846,48 @@ async function copyResourceId(value: string | null) {
   background: color-mix(in srgb, var(--cds-alias-status-danger, #c92100) 8%, transparent);
   font-size: 13px;
 }
-.table-wrap {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
+.grid-card {
+  /* Mirrors ModelGatewayView's `.grid-card` wrapper: provides the
+     card chrome (border, radius, background) and owns the horizontal
+     scrollbar. cds-grid-footer inside is positioned by cds-grid itself.
+     Right-edge alignment is handled by `.audit-page`'s negative
+     margin-right (so title / toolbar / card stay aligned with the
+     AppShell topbar at wide viewports). */
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+  border-radius: 6px;
+  background: var(--cds-alias-object-container-background, #fff);
+  /* Don't grow vertically: the page wrapper already stretches via the
+     page flex layout. Growing too would push the scrollbar to the
+     bottom of the page instead of keeping it under the table. */
+  flex: 0 0 auto;
 }
-.audit-table {
-  width: 100%;
-  min-width: 1080px;
-  border-collapse: collapse;
-  table-layout: fixed;
-  font-size: 13px;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+
+/* Hand-assembled pager that lives inside cds-grid-footer. cds-grid
+   pushes slotted cds-pagination to the right; the label + select +
+   summary sit on the left of the pagination. */
+.audit-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cds-global-space-4, 8px);
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--cds-alias-typography-color-300, #565656);
+  /* cds-grid-footer slots children inline; margin-left: auto pushes
+     this to the right edge of the footer row, matching model-gateway. */
+  margin-left: auto;
 }
-.time-col {
-  width: 170px;
+.audit-pager > label {
+  color: var(--cds-alias-typography-color-300, #565656);
 }
-.actor-col {
-  width: 170px;
-}
-.action-col {
-  width: 150px;
-}
-.resource-col {
-  width: 110px;
-}
-.ip-col {
-  width: 140px;
-}
-.desc-col {
-  width: auto;
-}
-.result-col {
-  width: 95px;
-}
-.audit-table th,
-.audit-table td {
-  height: 32px;
-  padding: 5px 10px;
-  border-bottom: 1px solid var(--cds-alias-object-border-color, #e2e2e2);
-  text-align: left;
-  vertical-align: middle;
-}
-.audit-table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--cds-alias-object-app-background, #f4f7f9);
-  color: var(--cds-alias-typography-color-400, #313131);
-  font-weight: 600;
+.range-summary {
+  color: var(--cds-alias-typography-color-300, #565656);
   white-space: nowrap;
 }
-.data-row:hover {
-  background: var(--cds-alias-object-interaction-background-hover, #eef4f7);
-}
+
+/* Cell-content helpers — reused across multiple cds-grid cells. */
 .mono {
   font-family: var(--cds-global-typography-monospace-font-family, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
 }
@@ -945,42 +949,6 @@ async function copyResourceId(value: string | null) {
 .result-pill[data-tone='danger'] .result-dot {
   background: var(--cds-alias-status-danger, #b53d35);
 }
-.placeholder-cell {
-  height: 180px !important;
-  text-align: center !important;
-  color: var(--cds-alias-typography-color-300, #565656);
-}
-.placeholder-icon {
-  display: block;
-  margin: 0 auto 8px;
-  color: var(--cds-alias-typography-color-300, #565656);
-}
-.table-footer {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  min-height: 38px;
-  padding: 6px 10px;
-  border-top: 1px solid var(--cds-alias-object-border-color, #d8d8d8);
-  color: var(--cds-alias-typography-color-300, #565656);
-  font-size: 12px;
-}
-.page-size {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.range-label {
-  white-space: nowrap;
-}
-.page-indicator {
-  min-width: 24px;
-  text-align: center;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-variant-numeric: tabular-nums;
-}
 .spinning {
   animation: audit-spin 1s linear infinite;
   transform-origin: center;
@@ -1006,12 +974,6 @@ async function copyResourceId(value: string | null) {
 @media (max-width: 720px) {
   .heading {
     font-size: 24px;
-  }
-  .page-size {
-    display: none;
-  }
-  .table-footer {
-    justify-content: space-between;
   }
 }
 @media (prefers-reduced-motion: reduce) {

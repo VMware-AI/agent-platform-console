@@ -685,7 +685,12 @@ const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
   border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
   border-radius: 6px;
   background: var(--cds-alias-object-container-background, #fff);
-  overflow: hidden;
+  /* The cds-grid inside uses overflow-x: auto + min-width: 1180px so the
+     table itself scrolls when narrow — but the surrounding card was
+     clipping that scrollbar with overflow: hidden, hiding the action
+     column completely. Allow the card to scroll horizontally instead. */
+  overflow-x: auto;
+  overflow-y: hidden;
   flex-shrink: 0;
 }
 .query-error {
@@ -711,6 +716,13 @@ const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  /* Without a min-width the action column's row buttons (sync / edit /
+     delete) get squeezed on narrow viewports and the trailing icons
+     overflow visually. overflow-x: auto + min-width falls back to a
+     horizontal scrollbar below the natural table width instead. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 1180px;
 }
 .name-cell strong {
   overflow: hidden;
@@ -735,6 +747,13 @@ const deleteFinalBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
 .sync-status-badge {
   display: inline-flex;
   white-space: nowrap;
+  /* Force white badge text in both light and dark themes. cds-badge's
+     `:host { --color: #fff }` default is fine for success/danger/neutral,
+     but `:host([status=warning])` overrides to a near-black `#21333b` —
+     reads as black text on the yellow "PARTIAL" pill and clashes with
+     the rest. The class selector beats the attribute selector inside
+     :host, so this wins for every status (including warning). */
+  --color: #fff;
 }
 .strategy-cell {
   color: var(--cds-alias-typography-color-300, #565656);

@@ -355,6 +355,7 @@ const deleteFinalBodySegments = computed<
       {{ locale.t('users.error') }}
     </cds-alert>
 
+    <div class="grid-card">
     <cds-grid
       :border="'row'"
       :column-layout="'flex'"
@@ -695,6 +696,7 @@ const deleteFinalBodySegments = computed<
         </div>
       </cds-grid-footer>
     </cds-grid>
+    </div>
 
     <!-- Column filter dropdowns (one anchor reused for all three keyword
          filters + the status select; the popup prepends '#' to the anchor
@@ -809,11 +811,29 @@ const deleteFinalBodySegments = computed<
   min-width: 0;
 }
 
+/* Wrap the cds-grid in a card that owns the horizontal scrollbar —
+   same pattern as ModelGatewayView. The card scrolls independently
+   of the page header / toolbar / pagination above it, so the title
+   stays put while the table extends. */
+.users-tab .grid-card {
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+  border-radius: 6px;
+  background: var(--cds-alias-object-container-background, #fff);
+  flex-shrink: 0;
+}
+
 .users-tab :deep(cds-grid) {
   display: block;
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  /* min-width: 1180px reserves the table's natural width; the
+     `.grid-card` wrapper (overflow-x: auto) provides the horizontal
+     scrollbar when the viewport drops below this width. */
+  min-width: 1180px;
 }
 
 .toolbar {
@@ -917,6 +937,14 @@ const deleteFinalBodySegments = computed<
   min-width: 56px;
   text-align: center;
   justify-content: center;
+  /* Force white badge text in both light and dark themes. cds-badge's
+     `:host { --color: #fff }` default is fine for success/neutral, but
+     `:host([status=warning])` overrides to a near-black `#21333b` —
+     reads as black text and clashes with the rest. The class selector
+     beats the attribute selector inside :host, so this wins for every
+     status (defensive: the current view only uses success/neutral but
+     future statuses inherit the same treatment). */
+  --color: #fff;
 }
 
 .pager {

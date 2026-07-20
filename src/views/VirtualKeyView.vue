@@ -1267,6 +1267,7 @@ function goToPage(page: number) {
       </button>
     </div>
 
+    <div class="grid-card">
     <cds-grid
       border="row"
       column-layout="flex"
@@ -1490,7 +1491,7 @@ function goToPage(page: number) {
           </div>
         </cds-grid-cell>
 
-        <cds-grid-cell>
+        <cds-grid-cell class="actions-cell">
           <!--
             Actions are rendered inline (no AppDropdown) to match the
             supplier-model "操作" column pattern. Revoked keys collapse to
@@ -1609,6 +1610,7 @@ function goToPage(page: number) {
         </div>
       </cds-grid-footer>
     </cds-grid>
+    </div>
 
     <cds-dropdown
       v-if="filterMenuAnchor && filterMenuKey"
@@ -1872,6 +1874,20 @@ function goToPage(page: number) {
   flex-direction: column;
   gap: 12px;
 }
+
+/* Wrap the cds-grid in a card that owns the horizontal scrollbar —
+   same pattern as ModelGatewayView. The card scrolls independently
+   of the page header / toolbar / pagination above it, so the title
+   stays put while the table extends. */
+.virtual-key-page .grid-card {
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+  border-radius: 6px;
+  background: var(--cds-alias-object-container-background, #fff);
+  flex-shrink: 0;
+}
 .page-head {
   flex: 0 0 auto;
 }
@@ -1928,10 +1944,10 @@ function goToPage(page: number) {
   min-height: 0;
   max-width: 100%;
   width: 100%;
-  /* scroll-lock on <cds-grid> disables the shadow-DOM scroll container's
-     scrollbars; combined with min-width: 0 + max-width: 100% on the host
-     this prevents the table from ever overflowing the viewport. */
-  overflow: hidden;
+  /* min-width: 1180px reserves the table's natural width; the
+     `.grid-card` wrapper (overflow-x: auto) provides the horizontal
+     scrollbar when the viewport drops below this width. */
+  min-width: 1180px;
 }
 /* Force cds-grid columns + cells to clip instead of expanding past their
    intrinsic content width (which would re-introduce the inner scrollbar
@@ -2032,7 +2048,7 @@ function goToPage(page: number) {
      lighter than the `#e8e8e8` border grey used elsewhere) so the
      empty track reads as a soft inline rail without visually
      competing with the row's separators. */
-  background: #ececec;
+  background: var(--cds-alias-object-app-background, #ececec);
   border-radius: 4px;
   overflow: hidden;
   min-width: 0;
@@ -2215,6 +2231,13 @@ function goToPage(page: number) {
   min-width: 62px;
   white-space: nowrap;
   margin: 0 auto;
+  /* Force white badge text in both light and dark themes. cds-badge's
+     `:host { --color: #fff }` default is fine for success/danger/neutral,
+     but `:host([status=warning])` overrides to a near-black `#21333b` —
+     reads as black text and clashes with the rest. The class selector
+     beats the attribute selector inside :host, so this wins for every
+     status. */
+  --color: #fff;
 }
 .row-actions {
   display: flex;
@@ -2228,6 +2251,17 @@ function goToPage(page: number) {
      flex-shrink:0 keeps the row intact; the cell will visually extend
      past its percentage width if needed, matching supplier-model. */
   flex-shrink: 0;
+}
+/* Right-side breathing room for the 操作 column. The trailing icon
+   (e.g. 启用|禁用) was hugging the cell's right padding edge because
+   the row of icons naturally spans almost the entire column width once
+   the cell's own 12px padding-inline-end is subtracted. Reaching
+   into the cds-grid-cell shadow root via :deep bumps the cell's
+   own padding-inline-end, which actually narrows the slotted
+   content area — the icons then sit visibly away from the right
+   border without changing the column's percentage width. */
+.actions-cell :deep(.private-host) {
+  padding-inline-end: 40px;
 }
 .row-action {
   display: inline-flex;

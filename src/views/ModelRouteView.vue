@@ -168,11 +168,6 @@ const formOpen = ref(false)
 const editingRoute = ref<ModelRouteNode | null>(null)
 const saving = ref(false)
 const pendingDeleteIds = ref<string[]>([])
-// Single-route second-step confirm target. Set after the first delete
-// dialog acknowledges; null until the operator starts a new flow.
-// Only ever holds one id (batch deletes skip the type-to-confirm step
-// — see onFirstConfirm).
-const finalDeleteId = ref<string | null>(null)
 const sortField = ref<RouteSortField | null>(null)
 const sortDirection = ref<SortDirection>('ASC')
 const nameFilter = ref('')
@@ -234,51 +229,13 @@ const summaryText = computed(() => {
     .replace('{total}', String(totalCount.value))
 })
 const deleteDialogTitle = computed(() =>
-  pendingDeleteIds.value.length > 1
-    ? locale.t('gatewayModel.confirm.batchDeleteTitle')
-    : locale.t('gatewayModel.confirm.deleteTitle'),
+  locale.t('gatewayModel.confirm.batchDeleteTitle'),
 )
-const deleteDialogBody = computed(() => {
-  if (pendingDeleteIds.value.length > 1) {
-    return locale
-      .t('gatewayModel.confirm.batchDeleteBody')
-      .replace('{count}', String(pendingDeleteIds.value.length))
-  }
-  const target = routes.value.find((route) => route.id === pendingDeleteIds.value[0])
-  return locale.t('gatewayModel.confirm.deleteBody').replace('{name}', target?.name ?? '')
-})
-// Single-route final-confirm data. Pre-resolves the route's name so
-// ConfirmDialog can lock its confirm button until the operator
-// re-types the exact value — guards against "clicked the row above /
-// below by mistake" deleting the wrong route. The body renders the
-// route name in `<strong>` (bodySegments.`-bold`) so the value the
-// user is asked to type matches the value they see highlighted.
-const finalDeleteTarget = computed(() =>
-  finalDeleteId.value
-    ? routes.value.find((route) => route.id === finalDeleteId.value) ?? null
-    : null,
+const deleteDialogBody = computed(() =>
+  locale
+    .t('gatewayModel.confirm.batchDeleteBody')
+    .replace('{count}', String(Math.max(pendingDeleteIds.value.length, 0))),
 )
-const finalDeleteBodySegments = computed(() => {
-  const name = finalDeleteTarget.value?.name ?? ''
-  const template = locale.t('gatewayModel.confirm.finalDeleteBody')
-  // Split on the {{name}} placeholder — keeps the highlighted name in
-  // a separate <strong> segment so it's visually distinct. The pattern
-  // in `gatewayModel.confirm.finalDeleteBody` uses double-braces around
-  // {{name}} to make the token easy to find via split('{{name}}').
-  const parts = template.split('{{name}}')
-  return [
-    { text: parts[0] ?? '' },
-    { text: name, bold: true },
-    { text: parts[1] ?? '' },
-  ]
-})
-const finalDeleteExpectedInput = computed(
-  () => finalDeleteTarget.value?.name ?? '',
-)
-const finalDeleteInputPlaceholder = computed(() =>
-  locale.t('gatewayModel.confirm.finalDeleteInputPlaceholder'),
-)
-
 function toggleSelect(id: string, checked: boolean) {
   const next = new Set(selectedIds.value)
   if (checked) next.add(id)
@@ -418,42 +375,13 @@ function performBatch(action: BatchAction, close: () => void) {
   pendingDeleteIds.value = ids
 }
 
-function requestDelete(route: ModelRouteNode) {
-  pendingDeleteIds.value = [route.id]
-}
-
 function closeDelete() {
   pendingDeleteIds.value = []
 }
 
-// First-step "confirm" handler: routes the operator into either the
-// type-to-confirm dialog (single delete) or straight through to the
-// mutation (batch delete — the "click again on a row you didn't
-// intend" risk is much lower with N>1 selected, and asking the
-// operator to type the names of every route would be hostile UX).
-//
-// Mirrors the two-step delete flow on the Model Gateway page
-// (ModelGatewayView.vue showDeleteConfirm → showDeleteFinalConfirm).
-function onFirstConfirm() {
-  const ids = [...pendingDeleteIds.value]
-  if (ids.length !== 1) {
-    void confirmDelete()
-    return
-  }
-  pendingDeleteIds.value = []
-  finalDeleteId.value = ids[0]
-}
-
-function closeFinalDelete() {
-  finalDeleteId.value = null
-}
-
 async function confirmDelete() {
-  const ids = finalDeleteId.value
-    ? [finalDeleteId.value]
-    : [...pendingDeleteIds.value]
+  const ids = [...pendingDeleteIds.value]
   pendingDeleteIds.value = []
-  finalDeleteId.value = null
   if (ids.length === 0) return
   const outcomes = await Promise.allSettled(
     ids.map((id) =>
@@ -742,16 +670,6 @@ function goToPage(page: number) {
               <cds-icon shape="pencil" size="sm"></cds-icon>
               <span>{{ locale.t('gatewayModel.action.edit') }}</span>
             </button>
-            <button
-              v-if="auth.role === 'admin'"
-              type="button"
-              class="row-action danger"
-              :title="locale.t('gatewayModel.action.delete')"
-              @click="requestDelete(route)"
-            >
-              <cds-icon shape="trash" size="sm"></cds-icon>
-              <span>{{ locale.t('gatewayModel.action.delete') }}</span>
-            </button>
           </div>
         </cds-grid-cell>
       </cds-grid-row>
@@ -901,17 +819,6 @@ function goToPage(page: number) {
       :body="deleteDialogBody"
       danger
       @close="closeDelete"
-      @confirm="onFirstConfirm"
-    />
-
-    <ConfirmDialog
-      :open="!!finalDeleteId"
-      :title="locale.t('gatewayModel.confirm.finalDeleteTitle')"
-      :body-segments="finalDeleteBodySegments"
-      :input-placeholder="finalDeleteInputPlaceholder"
-      :expected-input="finalDeleteExpectedInput"
-      danger
-      @close="closeFinalDelete"
       @confirm="confirmDelete"
     />
   </section>
@@ -925,6 +832,20 @@ function goToPage(page: number) {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* Wrap the cds-grid in a card that owns the horizontal scrollbar —
+   same pattern as ModelGatewayView. The card scrolls independently
+   of the page header / toolbar / pagination above it, so the title
+   stays put while the table extends. */
+.route-page .grid-card {
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+  border-radius: 6px;
+  background: var(--cds-alias-object-container-background, #fff);
+  flex-shrink: 0;
 }
 .page-head {
   flex: 0 0 auto;
@@ -1001,7 +922,10 @@ function goToPage(page: number) {
   min-width: 0;
   max-width: 100%;
   width: 100%;
-  overflow: hidden;
+  /* min-width: 1180px reserves the table's natural width; the
+     `.grid-card` wrapper (overflow-x: auto) provides the horizontal
+     scrollbar when the viewport drops below this width. */
+  min-width: 1180px;
 }
 /* Force cds-grid columns + cells to shrink below their intrinsic content
    width so the table never overflows the viewport horizontally. Both
@@ -1200,9 +1124,6 @@ function goToPage(page: number) {
   font-size: 10px;
   line-height: 1.1;
   white-space: nowrap;
-}
-.row-action.danger {
-  color: var(--cds-alias-status-danger, #c92100);
 }
 .selected-summary {
   color: var(--cds-alias-typography-color-300, #565656);

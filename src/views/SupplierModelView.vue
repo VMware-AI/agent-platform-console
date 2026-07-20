@@ -568,6 +568,7 @@ async function confirmDelete() {
         </button>
       </div>
 
+      <div class="grid-card">
       <cds-grid
         border="row"
         column-layout="flex"
@@ -707,7 +708,7 @@ async function confirmDelete() {
           <cds-grid-cell class="muted-cell">
             {{ formatDateTime(m.updatedAt) }}
           </cds-grid-cell>
-          <cds-grid-cell>
+          <cds-grid-cell class="actions-cell">
             <div class="row-actions">
               <button
                 v-if="auth.role === 'admin'"
@@ -784,6 +785,7 @@ async function confirmDelete() {
           </div>
         </cds-grid-footer>
       </cds-grid>
+      </div>
     </div>
 
     <cds-dropdown
@@ -949,14 +951,34 @@ async function confirmDelete() {
   cursor: not-allowed;
   opacity: 0.5;
 }
+/* Wrap the cds-grid in a card that owns the horizontal scrollbar —
+   same pattern as ModelGatewayView / AgentListView / etc. The card
+   scrolls independently of the page header / toolbar above it, so
+   the title stays put while the table extends.
+
+   Don't grow the card vertically (`flex: 1 1 auto`): the parent
+   `.content-card` already grows to fill the page, and if this card
+   grew too, the horizontal scrollbar would drop to the bottom of
+   the page instead of sitting right under the table. Letting it
+   shrink to content height keeps the scrollbar adjacent. */
+.supplier-page .grid-card {
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+  border-radius: 6px;
+  background: var(--cds-alias-object-container-background, #fff);
+  flex: 0 0 auto;
+}
 .supplier-page cds-grid {
   display: block;
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 0;
-  max-width: 100%;
   width: 100%;
-  overflow: hidden;
+  max-width: 100%;
+  min-width: 0;
+  /* min-width: 1120px reserves the table's natural width; the
+     `.grid-card` wrapper (overflow-x: auto) provides the horizontal
+     scrollbar when the viewport drops below this width. */
+  min-width: 1120px;
 }
 .supplier-page cds-grid-column,
 .supplier-page cds-grid-cell {
@@ -998,6 +1020,13 @@ async function confirmDelete() {
   min-width: 66px;
   white-space: nowrap;
   text-transform: capitalize;
+  /* Force white badge text in both light and dark themes. cds-badge's
+     `:host { --color: #fff }` default is fine for success/danger/neutral,
+     but `:host([status=warning])` overrides to a near-black `#21333b` —
+     reads as black text on the yellow "partial_outage" pill and clashes
+     with the rest. The class selector beats the attribute selector inside
+     :host, so this wins for every status. */
+  --color: #fff;
 }
 .row-actions {
   display: flex;
@@ -1012,6 +1041,17 @@ async function confirmDelete() {
      row intact; the cell will visually extend past its percentage
      width if needed, which is preferable to silent truncation. */
   flex-shrink: 0;
+}
+/* Right-side breathing room for the 操作 column. The trailing icon
+   (e.g. 编辑) was hugging the cell's right padding edge because the
+   row of icons naturally spans almost the entire column width once
+   the cell's own 12px padding-inline-end is subtracted. Reaching
+   into the cds-grid-cell shadow root via :deep bumps the cell's
+   own padding-inline-end, which actually narrows the slotted
+   content area — the icons then sit visibly away from the right
+   border without changing the column's percentage width. */
+.actions-cell :deep(.private-host) {
+  padding-inline-end: 40px;
 }
 .row-action {
   display: inline-flex;

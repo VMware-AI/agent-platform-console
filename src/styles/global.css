@@ -9,4 +9,30 @@ body {
   background: transparent;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
   font-family: 'Metropolis', 'Avenir Next', 'Helvetica Neue', Arial, sans-serif;
+  /* App-level alias that `@cds/core` doesn't ship: when the dark theme is
+     active, `--cds-global-typography-color-500` flips to white, and every
+     `var(--cds-alias-object-app-foreground, #1b1b1b)` reference in the app
+     (brand link in AppShell, page <h1 class="heading">, .desc / .muted,
+     dialog titles, form labels, …) follows automatically. Without this,
+     every consumer falls back to the hardcoded dark and stays black in dark
+     mode. See fix #1 in the round-2 plan. */
+  --cds-alias-object-app-foreground: var(--cds-global-typography-color-500);
+}
+
+/* CDS's panel base (cds-card, cds-modal, cds-alert, …) declares
+   `:host { --color: initial }` inside its shadow tree and then applies
+   `color: var(--color)` to its internal `.private-host` wrapper. That wrapper
+   sits between every slotted element and the light-DOM parent, so without
+   this override every text node inside a CDS container renders in default
+   canvas-text (black) regardless of the page's theme — visible as black text
+   on a dark background in /overview, /observability/metering,
+   /observability/monitor, etc. CSS custom properties cross the shadow
+   boundary, so re-declaring `--color` on the host from outside flips the
+   slotted content's foreground with the theme. */
+cds-card,
+cds-modal,
+cds-alert,
+cds-tag,
+cds-badge {
+  --color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }

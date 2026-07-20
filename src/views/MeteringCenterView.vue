@@ -186,7 +186,12 @@ function statusText(status: UsageStatus): string {
 // `metering.table.showing` key ("显示中"/"Showing") and composes the count in the
 // component, since the locale helper does not interpolate placeholders.
 function footerText(count: number): string {
-  const unit = locale.locale === 'zh' ? '条' : count === 1 ? 'row' : 'rows'
+  // zh has no plural ("条" for both 1 and N); en uses "row" / "rows".
+  const unit = locale.locale === 'zh'
+    ? locale.t('metering.spend.unit')
+    : count === 1
+      ? locale.t('metering.spend.unit').replace(/s$/, '')
+      : locale.t('metering.spend.unit')
   return `${locale.t('metering.table.showing')} ${formatNumber(count)} ${unit}`
 }
 

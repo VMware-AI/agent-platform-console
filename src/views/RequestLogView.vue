@@ -35,7 +35,7 @@ const appliedRequestId = ref('')
 
 const pageSize = ref<PageSize>(10)
 const currentPage = ref(1)
-const expandedId = ref<string | null>(null)
+const detailModalId = ref<string | null>(null)
 const customFrom = ref('')
 const customTo = ref('')
 const userInput = ref('')
@@ -91,7 +91,8 @@ const logs = computed<RequestLogNode[]>(() => result.value?.requestLogs.items ??
 const totalCount = computed(() => result.value?.requestLogs.total ?? 0)
 // Server applies every filter now, so render exactly what came back.
 const visibleLogs = computed(() => logs.value)
-const hasNextPage = computed(() => offset.value + logs.value.length < totalCount.value)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)))
+const hasNextPage = computed(() => currentPage.value < totalPages.value)
 const hasPrevPage = computed(() => currentPage.value > 1)
 const isEmpty = computed(() => !loading.value && visibleLogs.value.length === 0)
 
@@ -162,9 +163,10 @@ const rangeText = computed(() => {
   const start = offset.value + 1
   const end = offset.value + visibleLogs.value.length
   return locale
-    .t('requestLog.pagination.range')
+    .t('requestLog.pagination.summary')
     .replace('{start}', String(start))
     .replace('{end}', String(end))
+    .replace('{total}', String(totalCount.value))
 })
 
 const anyFilterActive = computed(
@@ -219,16 +221,35 @@ function onPageSizeChange(event: Event) {
   currentPage.value = 1
 }
 
+function goFirst() {
+  if (!hasPrevPage.value) return
+  currentPage.value = 1
+  detailModalId.value = null
+}
+
 function goPrev() {
   if (!hasPrevPage.value) return
   currentPage.value -= 1
-  expandedId.value = null
+  detailModalId.value = null
 }
 
 function goNext() {
   if (!hasNextPage.value) return
   currentPage.value += 1
-  expandedId.value = null
+  detailModalId.value = null
+}
+
+function goLast() {
+  if (!hasNextPage.value) return
+  currentPage.value = totalPages.value
+  detailModalId.value = null
+}
+
+function goToPage(page: number) {
+  const clamped = Math.max(1, Math.min(totalPages.value, Math.floor(page) || 1))
+  if (clamped === currentPage.value) return
+  currentPage.value = clamped
+  detailModalId.value = null
 }
 
 async function refreshLogs() {
@@ -282,9 +303,21 @@ function detailText(detail: string | null): string {
   }
 }
 
-function toggleDetail(log: RequestLogNode) {
+// cds-grid doesn't have a built-in row-span mechanism, so promote the
+// detail panel to a cds-modal dialog. Track the open log id so the
+// modal title / body can pull data from the visible list.
+const detailModalLog = computed<RequestLogNode | null>(() => {
+  if (!detailModalId.value) return null
+  return visibleLogs.value.find((l) => l.id === detailModalId.value) ?? null
+})
+
+function openDetail(log: RequestLogNode) {
   if (!log.detail) return
-  expandedId.value = expandedId.value === log.id ? null : log.id
+  detailModalId.value = log.id
+}
+
+function closeDetail() {
+  detailModalId.value = null
 }
 
 function copyWithFallback(value: string) {
@@ -325,8 +358,7 @@ async function copyRequestId(value: string) {
       <p cds-text="body" class="desc muted">{{ locale.t('requestLog.description') }}</p>
     </header>
 
-    <div class="log-shell">
-      <div class="toolbar" :aria-label="locale.t('requestLog.filter.toolbar')">
+    <div class="toolbar" :aria-label="locale.t('requestLog.filter.toolbar')">
         <div class="time-tabs" role="group" :aria-label="locale.t('requestLog.filter.timeRange')">
           <button
             type="button"
@@ -439,7 +471,7 @@ async function copyRequestId(value: string) {
           @change="applyToolbarFilters"
         />
         <cds-button action="outline" size="sm" :disabled="exportingCsv" @click="exportCsv">
-          <cds-icon shape="export" size="sm" aria-hidden="true"></cds-icon>
+          <cds-icon shape="download" size="sm" aria-hidden="true"></cds-icon>
           {{ exportingCsv ? locale.t('requestLog.export.inProgress') : locale.t('requestLog.action.export') }}
         </cds-button>
       </div>
@@ -462,141 +494,203 @@ async function copyRequestId(value: string) {
         </button>
       </div>
 
-      <div class="table-wrap">
-        <table class="log-table" :aria-label="locale.t('requestLog.table.label')">
-          <colgroup>
-            <col class="time-col" />
-            <col class="request-col" />
-            <col class="agent-col" />
-            <col class="agent-col" />
-            <col class="model-col" />
-            <col class="token-col" />
-            <col class="token-col" />
-            <col class="latency-col" />
-            <col class="status-col" />
-            <col class="action-col" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th scope="col">{{ locale.t('requestLog.col.time') }}</th>
-              <th scope="col">{{ locale.t('requestLog.col.requestId') }}</th>
-              <th scope="col">{{ locale.t('requestLog.col.agentId') }}</th>
-              <th scope="col">{{ locale.t('requestLog.col.user') }}</th>
-              <th scope="col">{{ locale.t('requestLog.col.model') }}</th>
-              <th scope="col">{{ locale.t('requestLog.col.inputTokens') }}</th>
-              <th scope="col">{{ locale.t('requestLog.col.outputTokens') }}</th>
-              <th scope="col">{{ locale.t('requestLog.col.latencyMs') }}</th>
-              <th scope="col">{{ locale.t('requestLog.col.status') }}</th>
-              <th scope="col">{{ locale.t('requestLog.col.actions') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="log in visibleLogs" :key="log.id">
-              <tr class="data-row" :class="{ expanded: expandedId === log.id }">
-                <td class="mono nowrap">{{ formatDateTime(log.createdAt) }}</td>
-                <td>
-                  <button
-                    type="button"
-                    class="request-copy"
-                    :title="locale.t('requestLog.action.copy')"
-                    :aria-label="locale.t('requestLog.action.copy')"
-                    @click="copyRequestId(log.requestId)"
-                  >
-                    <span class="mono ellipsis">{{ log.requestId }}</span>
-                    <cds-icon shape="copy" size="sm" aria-hidden="true"></cds-icon>
-                  </button>
-                </td>
-                <td>
-                  <span class="ellipsis" :title="dash(log.agentId)">{{ dash(log.agentId) }}</span>
-                </td>
-                <td>
-                  <span class="ellipsis mono" :title="dash(log.userId)">{{ log.userId ? log.userId.slice(0, 8) : '—' }}</span>
-                </td>
-                <td>
-                  <span class="ellipsis" :title="dash(log.model)">{{ dash(log.model) }}</span>
-                </td>
-                <td class="tabular">{{ formatNumber(log.inputTokens) }}</td>
-                <td class="tabular">{{ formatNumber(log.outputTokens) }}</td>
-                <td class="tabular">{{ formatNumber(log.latencyMs) }}</td>
-                <td>
-                  <span class="status-pill" :data-tone="statusTone(log.statusCode)">
-                    <span class="status-dot" aria-hidden="true"></span>
-                    {{ log.statusCode }}
-                  </span>
-                </td>
-                <td class="action-cell">
-                  <button
-                    type="button"
-                    class="row-action"
-                    :disabled="!log.detail"
-                    :aria-expanded="expandedId === log.id"
-                    :title="locale.t('requestLog.action.toggleDetail')"
-                    :aria-label="locale.t('requestLog.action.toggleDetail')"
-                    @click="toggleDetail(log)"
-                  >
-                    <cds-icon
-                      shape="angle"
-                      :direction="expandedId === log.id ? 'up' : 'down'"
-                      size="sm"
-                    ></cds-icon>
-                  </button>
-                </td>
-              </tr>
-              <tr v-if="expandedId === log.id && log.detail" class="detail-row">
-                <td colspan="10">
-                  <pre class="detail-text">{{ detailText(log.detail) }}</pre>
-                </td>
-              </tr>
-            </template>
+    <div class="grid-card">
+      <cds-grid
+        border="row"
+        column-layout="flex"
+        role="grid"
+        :aria-label="locale.t('requestLog.table.label')"
+      >
+        <cds-grid-column width="13%">
+          <div class="col-head">
+            <span>{{ locale.t('requestLog.col.time') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="13%">
+          <div class="col-head">
+            <span>{{ locale.t('requestLog.col.requestId') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="16%">
+          <div class="col-head">
+            <span>{{ locale.t('requestLog.col.agentId') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="10%">
+          <div class="col-head">
+            <span>{{ locale.t('requestLog.col.user') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="11%">
+          <div class="col-head">
+            <span>{{ locale.t('requestLog.col.model') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="8%">
+          <div class="col-head">
+            <span>{{ locale.t('requestLog.col.inputTokens') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="8%">
+          <div class="col-head">
+            <span>{{ locale.t('requestLog.col.outputTokens') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="9%">
+          <div class="col-head">
+            <span>{{ locale.t('requestLog.col.latencyMs') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="6%">
+          <div class="col-head">
+            <span>{{ locale.t('requestLog.col.status') }}</span>
+          </div>
+        </cds-grid-column>
+        <cds-grid-column width="6%">
+          <div class="col-head">
+            <span>{{ locale.t('requestLog.col.actions') }}</span>
+          </div>
+        </cds-grid-column>
 
-            <tr v-if="loading && visibleLogs.length === 0">
-              <td colspan="10" class="placeholder-cell">
-                <cds-icon shape="history" size="xl" class="placeholder-icon"></cds-icon>
-                {{ locale.t('requestLog.loading') }}
-              </td>
-            </tr>
-            <tr v-else-if="isEmpty">
-              <td colspan="10" class="placeholder-cell">
-                <cds-icon shape="filter" size="xl" class="placeholder-icon"></cds-icon>
-                {{ locale.t('requestLog.empty') }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <footer class="table-footer">
-        <div class="page-size">
-          <span>{{ locale.t('requestLog.pagination.pageSize') }}</span>
-          <cds-select control-width="shrink">
-            <select
-              :value="pageSize"
-              :aria-label="locale.t('requestLog.pagination.pageSize')"
-              @change="onPageSizeChange"
+        <cds-grid-row v-for="log in visibleLogs" :key="log.id">
+          <cds-grid-cell class="mono nowrap time-cell">{{ formatDateTime(log.createdAt) }}</cds-grid-cell>
+          <cds-grid-cell>
+            <button
+              type="button"
+              class="request-copy"
+              :title="locale.t('requestLog.action.copy')"
+              :aria-label="locale.t('requestLog.action.copy')"
+              @click="copyRequestId(log.requestId)"
             >
-              <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
-                {{ option }}
-              </option>
-            </select>
-          </cds-select>
-        </div>
-        <span class="range-label">{{ rangeText }}</span>
-        <cds-pagination :aria-label="locale.t('requestLog.pagination.label')">
-          <cds-pagination-button
-            action="prev"
-            :disabled="!hasPrevPage"
-            :aria-label="locale.t('agents.pager.prev')"
-            @click="goPrev"
-          ></cds-pagination-button>
-          <span class="page-indicator">{{ currentPage }}</span>
-          <cds-pagination-button
-            action="next"
-            :disabled="!hasNextPage"
-            :aria-label="locale.t('agents.pager.next')"
-            @click="goNext"
-          ></cds-pagination-button>
-        </cds-pagination>
-      </footer>
+              <span class="mono ellipsis">{{ log.requestId }}</span>
+              <cds-icon shape="copy" size="sm" aria-hidden="true"></cds-icon>
+            </button>
+          </cds-grid-cell>
+          <cds-grid-cell>
+            <span class="ellipsis" :title="dash(log.agentId)">{{ dash(log.agentId) }}</span>
+          </cds-grid-cell>
+          <cds-grid-cell>
+            <span class="ellipsis mono" :title="dash(log.userId)">{{ log.userId ? log.userId.slice(0, 8) : '—' }}</span>
+          </cds-grid-cell>
+          <cds-grid-cell>
+            <span class="ellipsis" :title="dash(log.model)">{{ dash(log.model) }}</span>
+          </cds-grid-cell>
+          <cds-grid-cell class="tabular num-cell">{{ formatNumber(log.inputTokens) }}</cds-grid-cell>
+          <cds-grid-cell class="tabular num-cell">{{ formatNumber(log.outputTokens) }}</cds-grid-cell>
+          <cds-grid-cell class="tabular num-cell">{{ formatNumber(log.latencyMs) }}</cds-grid-cell>
+          <cds-grid-cell>
+            <span class="status-pill" :data-tone="statusTone(log.statusCode)">
+              <span class="status-dot" aria-hidden="true"></span>
+              {{ log.statusCode }}
+            </span>
+          </cds-grid-cell>
+          <cds-grid-cell class="action-cell">
+            <button
+              type="button"
+              class="row-action"
+              :disabled="!log.detail"
+              :title="locale.t('requestLog.action.toggleDetail')"
+              :aria-label="locale.t('requestLog.action.toggleDetail')"
+              @click="openDetail(log)"
+            >
+              <cds-icon shape="zoom" size="sm"></cds-icon>
+            </button>
+          </cds-grid-cell>
+        </cds-grid-row>
+
+        <cds-grid-placeholder v-if="loading && visibleLogs.length === 0" role="status" aria-live="polite">
+          <cds-icon shape="history" size="xl"></cds-icon>
+          <p cds-text="subsection">{{ locale.t('requestLog.loading') }}</p>
+        </cds-grid-placeholder>
+
+        <cds-grid-placeholder v-else-if="isEmpty" role="status" aria-live="polite">
+          <cds-icon shape="filter" size="xl"></cds-icon>
+          <p cds-text="subsection">{{ locale.t('requestLog.empty') }}</p>
+        </cds-grid-placeholder>
+
+        <cds-grid-footer v-if="totalCount > 0">
+          <div class="log-pager">
+            <label for="request-log-page-size">
+              {{ locale.t('requestLog.pagination.pageSize') }}
+            </label>
+            <cds-select control-width="shrink">
+              <select
+                id="request-log-page-size"
+                :value="pageSize"
+                :aria-label="locale.t('requestLog.pagination.pageSize')"
+                @change="onPageSizeChange"
+              >
+                <option v-for="option in PAGE_SIZE_OPTIONS" :key="option" :value="option">
+                  {{ option }}
+                </option>
+              </select>
+            </cds-select>
+
+            <span class="range-summary">{{ rangeText }}</span>
+
+            <cds-pagination :aria-label="locale.t('requestLog.pagination.label')">
+              <cds-pagination-button
+                action="first"
+                :disabled="!hasPrevPage"
+                :aria-label="locale.t('agents.pager.first')"
+                @click="goFirst"
+              ></cds-pagination-button>
+              <cds-pagination-button
+                action="prev"
+                :disabled="!hasPrevPage"
+                :aria-label="locale.t('agents.pager.prev')"
+                @click="goPrev"
+              ></cds-pagination-button>
+              <cds-input cds-pagination-number>
+                <input
+                  type="number"
+                  :value="currentPage"
+                  :min="1"
+                  :max="totalPages"
+                  :aria-label="locale.t('requestLog.pagination.page')"
+                  @change="goToPage(Number(($event.target as HTMLInputElement).value))"
+                />
+              </cds-input>
+              <cds-pagination-button
+                action="next"
+                :disabled="!hasNextPage"
+                :aria-label="locale.t('agents.pager.next')"
+                @click="goNext"
+              ></cds-pagination-button>
+              <cds-pagination-button
+                action="last"
+                :disabled="!hasNextPage"
+                :aria-label="locale.t('agents.pager.last')"
+                @click="goLast"
+              ></cds-pagination-button>
+            </cds-pagination>
+          </div>
+        </cds-grid-footer>
+      </cds-grid>
+
+      <!-- Detail modal — replaces the inline expandable row pattern that
+           the raw HTML <table> supported. cds-grid doesn't have a
+           built-in row-span mechanism, so we promote the detail to a
+           modal dialog triggered by the action button. -->
+      <cds-modal
+        :hidden="detailModalId === null"
+        size="md"
+        @closeChange="closeDetail"
+      >
+        <cds-modal-header>
+          <h2 cds-text="title" class="modal-title">
+            {{ locale.t('requestLog.detail.title') }}
+          </h2>
+        </cds-modal-header>
+        <cds-modal-content>
+          <pre class="detail-text">{{ detailText(detailModalLog?.detail) }}</pre>
+        </cds-modal-content>
+        <cds-modal-actions>
+          <cds-button action="outline" @click="closeDetail">
+            {{ locale.t('common.close') }}
+          </cds-button>
+        </cds-modal-actions>
+      </cds-modal>
     </div>
   </section>
 </template>
@@ -644,17 +738,6 @@ async function copyRequestId(value: string) {
 }
 .muted {
   color: var(--cds-alias-typography-color-300, #565656);
-}
-.log-shell {
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--cds-alias-object-border-color, #b3b3b3);
-  border-radius: 6px;
-  background: var(--cds-alias-object-container-background, #fff);
-  overflow: hidden;
 }
 .toolbar {
   flex: 0 0 auto;
@@ -825,66 +908,68 @@ async function copyRequestId(value: string) {
   padding: 0;
   text-decoration: underline;
 }
-.table-wrap {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
+.grid-card {
+  /* Mirrors ModelGatewayView's `.grid-card` wrapper: provides the
+     card chrome (border, radius, background) and owns the horizontal
+     scrollbar. cds-grid-footer inside is positioned by cds-grid itself.
+     Right-edge alignment is handled by `.request-log-page`'s negative
+     margin-right (so title / toolbar / card stay aligned with the
+     AppShell topbar at wide viewports). */
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+  border-radius: 6px;
+  background: var(--cds-alias-object-container-background, #fff);
+  /* Don't grow vertically: the page wrapper already stretches via the
+     page flex layout. Growing too would push the scrollbar to the
+     bottom of the page instead of keeping it under the table. */
+  flex: 0 0 auto;
 }
-.log-table {
+
+/* The cds-grid itself reserves the table's natural width; its shadow-DOM
+   `.scroll-container` already has `overflow: auto`, so the card-level
+   `overflow-x: auto` here only kicks in as a backstop. Same shape as
+   ModelGatewayView + VirtualKeyView — at viewports below the natural
+   width the table scrolls horizontally instead of squeezing the action
+   column past the icon button. */
+.request-log-page cds-grid {
+  display: block;
   width: 100%;
-  min-width: 1040px;
-  border-collapse: collapse;
-  table-layout: fixed;
-  font-size: 13px;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Mirrors the 1180px floor used by ModelGatewayView and VirtualKeyView —
+     wide enough that all 10 columns keep their declared percentage shares
+     (incl. the 3% actions column hosting the row zoom button) without
+     clipping, narrow enough that 1366×768 viewports still get a scrollbar. */
+  min-width: 1180px;
 }
-.time-col {
-  width: 170px;
+
+/* Hand-assembled pager that lives inside cds-grid-footer. cds-grid
+   pushes slotted cds-pagination to the right; the label + select +
+   summary sit on the left of the pagination. */
+.log-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cds-global-space-4, 8px);
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--cds-alias-typography-color-300, #565656);
+  /* cds-grid-footer slots children inline; margin-left: auto pushes
+     this to the right edge of the footer row, matching model-gateway. */
+  margin-left: auto;
 }
-.request-col {
-  width: 150px;
+.log-pager > label {
+  color: var(--cds-alias-typography-color-300, #565656);
 }
-.agent-col {
-  width: 220px;
-}
-.model-col {
-  width: 100px;
-}
-.token-col {
-  width: 96px;
-}
-.latency-col {
-  width: 112px;
-}
-.status-col {
-  width: 90px;
-}
-.action-col {
-  width: 64px;
-}
-.log-table th,
-.log-table td {
-  height: 32px;
-  padding: 5px 10px;
-  border-bottom: 1px solid var(--cds-alias-object-border-color, #e2e2e2);
-  text-align: left;
-  vertical-align: middle;
-}
-.log-table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--cds-alias-object-app-background, #f4f7f9);
-  color: var(--cds-alias-typography-color-400, #313131);
-  font-weight: 600;
+.range-summary {
+  color: var(--cds-alias-typography-color-300, #565656);
   white-space: nowrap;
 }
-.data-row:hover {
-  background: var(--cds-alias-object-interaction-background-hover, #eef4f7);
-}
-.data-row.expanded {
-  background: var(--cds-alias-object-app-background, #f5f7fa);
-}
+
+/* Cell-content helpers — reused across multiple cds-grid cells. */
 .mono {
   font-family: var(--cds-global-typography-monospace-font-family, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
 }
@@ -973,58 +1058,28 @@ async function copyRequestId(value: string) {
   opacity: 0.35;
   cursor: default;
 }
-.detail-row td {
-  height: auto;
-  padding: 8px 10px 10px;
-  background: var(--cds-alias-object-app-background, #f5f7fa);
-}
+/* Detail modal — JSON pretty-print, monospaced, scrollable. */
 .detail-text {
   margin: 0;
   min-height: 72px;
-  max-height: 220px;
+  max-height: 360px;
   overflow: auto;
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  background: var(--cds-alias-object-app-background, #f5f7fa);
+  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+  border-radius: 4px;
+  padding: 12px;
   font-family: var(--cds-global-typography-monospace-font-family, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
 }
-.placeholder-cell {
-  height: 180px !important;
-  text-align: center !important;
-  color: var(--cds-alias-typography-color-300, #565656);
-}
-.placeholder-icon {
-  display: block;
-  margin: 0 auto 8px;
-  color: var(--cds-alias-typography-color-300, #565656);
-}
-.table-footer {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  min-height: 38px;
-  padding: 6px 10px;
-  border-top: 1px solid var(--cds-alias-object-border-color, #d8d8d8);
-  color: var(--cds-alias-typography-color-300, #565656);
-  font-size: 12px;
-}
-.page-size {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.range-label {
-  white-space: nowrap;
-}
-.page-indicator {
-  min-width: 24px;
-  text-align: center;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-variant-numeric: tabular-nums;
+.modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--cds-alias-object-app-foreground, #1d2129);
 }
 .spinning {
   animation: request-log-spin 1s linear infinite;
@@ -1053,12 +1108,6 @@ async function copyRequestId(value: string) {
   .heading {
     font-size: 24px;
   }
-  .page-size {
-    display: none;
-  }
-  .table-footer {
-    justify-content: space-between;
-  }
 }
 @media (prefers-reduced-motion: reduce) {
   .spinning {
@@ -1066,3 +1115,4 @@ async function copyRequestId(value: string) {
   }
 }
 </style>
+// Cache bust Mon Jul 20 13:24:44 CST 2026

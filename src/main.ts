@@ -5,6 +5,13 @@ import '@cds/core/global.min.css'
 import '@cds/core/styles/module.reset.min.css'
 import '@cds/core/styles/module.layout.min.css'
 import '@cds/core/styles/module.typography.min.css'
+// Dark-theme token overrides. global.min.css only declares the [cds-theme] base
+// selector (background/foreground); the `[cds-theme~=dark]` rule that swaps the
+// CDS color tokens to the dark palette lives here and must be loaded for
+// `body[cds-theme="dark"]` (set by useThemeStore.toggle) to actually re-skin
+// the app. Without this import, the body attribute changes but the visual
+// theme doesn't.
+import '@cds/core/styles/theme.dark.min.css'
 import '@cds/city/css/bundles/default.min.css'
 
 // Per-component side-effect imports — each register.js wires the corresponding

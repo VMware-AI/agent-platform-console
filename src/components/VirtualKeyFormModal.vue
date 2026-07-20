@@ -1527,7 +1527,7 @@ function submit() {
   line-height: 1.2;
   border: 1px solid var(--cds-alias-object-border-color, #cbd4d8);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--cds-alias-object-container-background, #ffffff);
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
   user-select: none;
   transition: background-color 120ms ease, border-color 120ms ease,
@@ -1891,7 +1891,7 @@ cds-control-message.duration-hint {
   list-style: none;
   margin: 0;
   padding: 4px 0;
-  background: #ffffff;
+  background: var(--cds-alias-object-container-background, #ffffff);
   border: 1px solid var(--cds-alias-object-border-color, #cbd4d8);
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);

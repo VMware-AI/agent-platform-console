@@ -88,7 +88,7 @@ function onBackdropClick(e: MouseEvent) {
                 <td>{{ u.username }}</td>
                 <td>{{ u.email }}</td>
                 <td>
-                  <cds-badge :status="enabledStatusFor(u.enabled)">
+                  <cds-badge class="status-badge" :status="enabledStatusFor(u.enabled)">
                     {{ enabledLabel(u.enabled) }}
                   </cds-badge>
                 </td>
@@ -204,5 +204,16 @@ function onBackdropClick(e: MouseEvent) {
 .role-users-fade-enter-from,
 .role-users-fade-leave-to {
   opacity: 0;
+}
+
+/* Force white badge text in both light and dark themes. cds-badge's
+   `:host { --color: #fff }` default is fine for success/neutral, but
+   `:host([status=warning])` overrides to a near-black `#21333b` —
+   reads as black text and clashes with the rest. The class selector
+   beats the attribute selector inside :host, so this wins for every
+   status (defensive: the current dialog only uses success/neutral but
+   future statuses inherit the same treatment). */
+.status-badge {
+  --color: #fff;
 }
 </style>

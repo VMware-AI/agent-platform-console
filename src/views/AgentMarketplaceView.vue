@@ -288,18 +288,18 @@ async function onSubmitDeploy(payload: DeployAgentInput & { _createParents?: Arr
             { key: 'guestinfo.static_ip', value: p.ip },
           ],
         }
-        toast.info(`正在部署父虚拟机 ${p.name} (${p.ip})...`)
+        toast.info(locale.t('marketplace.toast.deployingParent').replace('{name}', p.name).replace('{ip}', p.ip))
         const parentR = await deployMutate({ input: parentInput })
         const parentAgent = parentR?.data?.deployAgent?.agent
-        if (!parentAgent || !parentAgent.endpoint) throw new Error(`父虚拟机 ${p.name} 部署失败`)
+        if (!parentAgent || !parentAgent.endpoint) throw new Error(locale.t('marketplace.error.parentDeployFail').replace('{name}', p.name))
         // Deploy instant clone from this parent
-        toast.info(`父虚拟机 ${parentAgent.endpoint} 就绪，正在即时克隆...`)
+        toast.info(locale.t('marketplace.toast.parentReady').replace('{endpoint}', parentAgent.endpoint))
         const childPayload = { ...payload, instantCloneParent: parentAgent.endpoint }
         delete (childPayload as Record<string, unknown>)._createParents
         const childR = await deployMutate({ input: childPayload })
         const childResult = childR?.data?.deployAgent
         if (childResult?.agent) {
-          toast.success(`即时克隆完成：${childResult.agent.name}`)
+          toast.success(locale.t('marketplace.toast.cloneComplete').replace('{name}', childResult.agent.name))
         }
       }
       closeDeployDialog()
@@ -683,7 +683,7 @@ const typeFilterLabel = computed(() => {
                 class="detail-version-row"
               >
                 <span class="version-label">{{ v.version }}</span>
-                <span v-if="v.ovaIdentifier" cds-text="body" class="muted version-ova">模板: {{ v.ovaIdentifier }}</span>
+                <span v-if="v.ovaIdentifier" cds-text="body" class="muted version-ova">{{ locale.t('marketplace.card.ovaTemplateLabel').replace('{ovaIdentifier}', v.ovaIdentifier) }}</span>
                 <span v-if="v.notes" cds-text="body" class="muted version-desc">{{ v.notes }}</span>
               </div>
             </div>
@@ -748,17 +748,17 @@ const typeFilterLabel = computed(() => {
   <!-- Delete confirmation modal -->
   <cds-modal :hidden="!deleteConfirmOpen" size="sm" @closeChange="closeDeleteConfirm">
     <cds-modal-header>
-      <h2 cds-text="title" class="delete-title">确认删除模板</h2>
+      <h2 cds-text="title" class="delete-title">{{ locale.t('marketplace.deleteTemplate.title') }}</h2>
     </cds-modal-header>
     <cds-modal-content>
-      <p>确定要删除模板「<strong>{{ deleteTarget?.name }}</strong>」及其所有版本吗？</p>
+      <p>{{ locale.t('marketplace.deleteTemplate.body.before') }}<strong>{{ deleteTarget?.name }}</strong>{{ locale.t('marketplace.deleteTemplate.body.after') }}</p>
       <cds-alert status="warning">
-        <cds-alert-content>此操作不可撤销。已有智能体引用的模板无法删除。</cds-alert-content>
+        <cds-alert-content>{{ locale.t('marketplace.deleteTemplate.warning') }}</cds-alert-content>
       </cds-alert>
     </cds-modal-content>
     <cds-modal-actions>
-      <cds-button action="outline" @click="closeDeleteConfirm">取消</cds-button>
-      <cds-button status="danger" :loading-state="deleting ? 'loading' : 'default'" @click="onConfirmDelete">确认删除</cds-button>
+      <cds-button action="outline" @click="closeDeleteConfirm">{{ locale.t('common.cancel') }}</cds-button>
+      <cds-button status="danger" :loading-state="deleting ? 'loading' : 'default'" @click="onConfirmDelete">{{ locale.t('marketplace.deleteTemplate.confirm') }}</cds-button>
     </cds-modal-actions>
   </cds-modal>
 </template>

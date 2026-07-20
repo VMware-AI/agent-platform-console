@@ -315,6 +315,13 @@ function statusLabel(status: DashboardAgentStatus): string {
   border: 1px solid var(--cds-alias-object-border-color, #b3b3b3);
   border-radius: 6px;
   box-shadow: none;
+  /* CDS's panel-base sets `--color: initial` on the host and applies
+     `color: var(--color)` to its internal `.private-host` wrapper, which
+     sits between the slotted content and the host. That forces every text
+     node inside a cds-card to default `canvastext` / black regardless of
+     what the light-DOM parent set. Override with our themed foreground token
+     so headings, table headers, donut labels, etc. flip with the theme. */
+  --color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
 .metric-card {
   min-height: 112px;
