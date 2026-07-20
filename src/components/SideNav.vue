@@ -367,3 +367,36 @@ function isActive(name: string): boolean {
   color: #fff;
 }
 </style>
+
+<!-- Dark-mode override block — non-scoped so the [cds-theme] ancestor (on
+     <body>, outside this component) can be matched. Vue's scoped CSS only
+     rewrites selectors within the component's own subtree, so a `<style scoped>`
+     rule like `:global([cds-theme~='dark']) .sidenav` gets compiled to a bare
+     `[cds-theme~='dark']` that paints <body> instead of the sidebar. Hoisting
+     the overrides into a sibling non-scoped `<style>` block keeps the
+     descendant selector intact and applies it under the body's cds-theme
+     attribute. Per design ("浅色模式保留现样") the sidebar stays dark in both
+     modes; this only re-skins it to a deeper navy in dark mode. -->
+<style>
+[cds-theme~='dark'] .sidenav {
+  background: hsl(207, 56%, 12%);
+  color: var(--cds-global-typography-color-300, #c8d2dc);
+}
+[cds-theme~='dark'] .sidebar-toggle-row {
+  border-bottom-color: hsl(207, 56%, 22%);
+}
+[cds-theme~='dark'] .item.active,
+[cds-theme~='dark'] .child.active,
+[cds-theme~='dark'] .icon-item.active {
+  background: rgba(125, 211, 252, 0.18);
+  color: #fff;
+}
+[cds-theme~='dark'] .parent:hover,
+[cds-theme~='dark'] .item:hover,
+[cds-theme~='dark'] .child:hover,
+[cds-theme~='dark'] .icon-item:hover,
+[cds-theme~='dark'] .sidebar-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+</style>

@@ -29,6 +29,7 @@ const emit = defineEmits<{
 }>()
 
 const toast = useToast()
+const locale = useLocaleStore()
 
 /* ---------- Accordion state ---------- */
 const basicX = ref(true)
@@ -95,11 +96,12 @@ const hasChanges = computed(() =>
 
 const diffs = computed(() => {
   const d: Array<{ label: string; before: string; after: string }> = []
-  if (dirtyCpu.value) d.push({ label: 'CPU 核数', before: `${vmCpu.value} 核`, after: `${dirtyCpu.value} 核` })
-  if (dirtyMemory.value) d.push({ label: '内存', before: `${vmMemory.value} GB`, after: `${dirtyMemory.value} GB` })
-  if (dirtyDisk.value) d.push({ label: '磁盘', before: `${vmDisk.value} GB`, after: `${dirtyDisk.value} GB` })
-  if (dirtyPortGroup.value) d.push({ label: '端口组', before: vmNetworkLabel.value || '—', after: dirtyPortGroup.value })
-  if (dirtyRunAs.value) d.push({ label: '运行账户', before: props.agent?.credentials?.username || '—', after: dirtyRunAs.value })
+  const num = (key: string, n: number) => locale.t(key).replace('{n}', String(n))
+  if (dirtyCpu.value) d.push({ label: locale.t('configure.diff.cpu'), before: num('configure.diff.value.cpu', vmCpu.value), after: num('configure.diff.value.cpu', dirtyCpu.value) })
+  if (dirtyMemory.value) d.push({ label: locale.t('configure.diff.memory'), before: num('configure.diff.value.memGb', vmMemory.value), after: num('configure.diff.value.memGb', dirtyMemory.value) })
+  if (dirtyDisk.value) d.push({ label: locale.t('configure.diff.disk'), before: num('configure.diff.value.diskGb', vmDisk.value), after: num('configure.diff.value.diskGb', dirtyDisk.value) })
+  if (dirtyPortGroup.value) d.push({ label: locale.t('configure.diff.portGroup'), before: vmNetworkLabel.value || '—', after: dirtyPortGroup.value })
+  if (dirtyRunAs.value) d.push({ label: locale.t('configure.diff.runAs'), before: props.agent?.credentials?.username || '—', after: dirtyRunAs.value })
   dirtyVApp.value?.forEach(p => d.push({ label: `vApp:${p.key}`, before: '—', after: p.value }))
   return d
 })
@@ -126,10 +128,10 @@ async function onConfirmSave() {
     if (dirtyPortGroup.value) vars.network = { portGroup: dirtyPortGroup.value }
     if (dirtyVApp.value?.length ?? 0) vars.vAppProperties = dirtyVApp.value
     await apolloClient.mutate({ mutation: RECONFIG_AGENT_VM_MUTATION, variables: vars })
-    toast.success('配置已保存，vCenter 同步中...')
+    toast.success(locale.t('configure.savedToast'))
     diffOpen.value = false; emit('close')
   } catch (err: unknown) {
-    saveError.value = err instanceof Error ? err.message : '保存失败'
+    saveError.value = err instanceof Error ? err.message : locale.t('configure.saveFail')
     toast.error(saveError.value!)
   } finally { saving.value = false }
 }
@@ -143,8 +145,8 @@ function onRestart() { if (props.agent) emit('restart', props.agent) }
 <template>
   <cds-modal :hidden="!props.open" size="lg" @closeChange="emit('close')">
     <cds-modal-header>
-      <h2 cds-text="title" class="modal-title">{{ props.agent?.name || '' }} 配置</h2>
-      <p class="modal-subtitle">查看与修改智能体部署参数。🔒 = 只读字段</p>
+      <h2 cds-text="title" class="modal-title">{{ locale.t('configure.title').replace('{name}', props.agent?.name || '') }}</h2>
+      <p class="modal-subtitle">{{ locale.t('configure.subtitle') }}</p>
     </cds-modal-header>
 
     <cds-modal-content>
@@ -153,13 +155,13 @@ function onRestart() { if (props.agent) emit('restart', props.agent) }
         <div class="accordion-section">
           <button type="button" class="accordion-trigger" :aria-expanded="basicX" @click="tx('basic')">
             <cds-icon :shape="basicX ? 'angle' : 'angle'" :direction="basicX ? 'down' : 'right'" size="sm" class="accordion-arrow"></cds-icon>
-            <span class="accordion-label">基础信息</span>
+            <span class="accordion-label">{{ locale.t('configure.section.basic') }}</span>
           </button>
           <div v-show="basicX" class="accordion-body">
             <ConfigureBasicInfo :agent="props.agent" />
             <cds-alert v-if="props.agent?.endpoint" status="info" class="ic-info-alert">
               <cds-alert-content>
-                此 VM 为完全独立的 vCenter 清单对象，可像常规虚拟机一样管理。即时克隆仅影响创建速度（秒级），不影响后续生命周期与数据持久性。
+                {{ locale.t('configure.vmIndependenceHint') }}
               </cds-alert-content>
             </cds-alert>
           </div>
@@ -169,7 +171,7 @@ function onRestart() { if (props.agent) emit('restart', props.agent) }
         <div class="accordion-section">
           <button type="button" class="accordion-trigger" :aria-expanded="resX" @click="tx('res')">
             <cds-icon :shape="resX ? 'angle' : 'angle'" :direction="resX ? 'down' : 'right'" size="sm" class="accordion-arrow"></cds-icon>
-            <span class="accordion-label">虚拟机资源配置</span>
+            <span class="accordion-label">{{ locale.t('configure.section.vmResources') }}</span>
           </button>
           <div v-show="resX" class="accordion-body">
             <ConfigureVmResources
@@ -184,7 +186,7 @@ function onRestart() { if (props.agent) emit('restart', props.agent) }
         <div class="accordion-section">
           <button type="button" class="accordion-trigger" :aria-expanded="netX" @click="tx('net')">
             <cds-icon :shape="netX ? 'angle' : 'angle'" :direction="netX ? 'down' : 'right'" size="sm" class="accordion-arrow"></cds-icon>
-            <span class="accordion-label">网络配置</span>
+            <span class="accordion-label">{{ locale.t('configure.section.network') }}</span>
           </button>
           <div v-show="netX" class="accordion-body">
             <ConfigureNetwork
@@ -199,7 +201,7 @@ function onRestart() { if (props.agent) emit('restart', props.agent) }
         <div class="accordion-section">
           <button type="button" class="accordion-trigger" :aria-expanded="vappX" @click="tx('vapp')">
             <cds-icon :shape="vappX ? 'angle' : 'angle'" :direction="vappX ? 'down' : 'right'" size="sm" class="accordion-arrow"></cds-icon>
-            <span class="accordion-label">vApp 部署参数</span>
+            <span class="accordion-label">{{ locale.t('configure.section.vapp') }}</span>
           </button>
           <div v-show="vappX" class="accordion-body">
             <ConfigureVAppProperties
@@ -219,7 +221,7 @@ function onRestart() { if (props.agent) emit('restart', props.agent) }
         <div class="accordion-section">
           <button type="button" class="accordion-trigger" :aria-expanded="accX" @click="tx('acc')">
             <cds-icon :shape="accX ? 'angle' : 'angle'" :direction="accX ? 'down' : 'right'" size="sm" class="accordion-arrow"></cds-icon>
-            <span class="accordion-label">网络访问信息</span>
+            <span class="accordion-label">{{ locale.t('configure.section.access') }}</span>
           </button>
           <div v-show="accX" class="accordion-body">
             <ConfigureAccessPreview
@@ -235,7 +237,7 @@ function onRestart() { if (props.agent) emit('restart', props.agent) }
         <div class="accordion-section">
           <button type="button" class="accordion-trigger" :aria-expanded="actX" @click="tx('act')">
             <cds-icon :shape="actX ? 'angle' : 'angle'" :direction="actX ? 'down' : 'right'" size="sm" class="accordion-arrow"></cds-icon>
-            <span class="accordion-label">快捷运维操作</span>
+            <span class="accordion-label">{{ locale.t('configure.section.quickActions') }}</span>
           </button>
           <div v-show="actX" class="accordion-body">
             <ConfigureQuickActions
@@ -250,13 +252,13 @@ function onRestart() { if (props.agent) emit('restart', props.agent) }
     </cds-modal-content>
 
     <cds-modal-actions>
-      <cds-button action="outline" @click="emit('close')">关闭</cds-button>
+      <cds-button action="outline" @click="emit('close')">{{ locale.t('common.close') }}</cds-button>
     </cds-modal-actions>
   </cds-modal>
 
   <!-- Diff confirmation sub-dialog -->
   <ConfirmDiffDialog
-    :open="diffOpen" title="确认配置变更"
+    :open="diffOpen" :title="locale.t('configure.diff.title')"
     :diffs="diffs" :loading="saving"
     @close="diffOpen = false" @confirm="onConfirmSave"
   />
@@ -264,13 +266,13 @@ function onRestart() { if (props.agent) emit('restart', props.agent) }
 
 <style scoped>
 .modal-title { margin: 0; font-size: 18px; font-weight: 600; }
-.modal-subtitle { margin: 8px 0 0; font-size: 13px; color: #86909c; }
+.modal-subtitle { margin: 8px 0 0; font-size: 13px; color: var(--cds-global-typography-color-300, #86909c); }
 .config-content { display: flex; flex-direction: column; }
-.accordion-section { border: 1px solid #e5e6eb; border-radius: 6px; margin-bottom: 12px; overflow: hidden; }
-.accordion-trigger { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 16px; background: #f7f8fa; border: none; cursor: pointer; font: inherit; text-align: left; transition: background 0.15s; }
-.accordion-trigger:hover { background: #eef0f4; }
-.accordion-arrow { flex-shrink: 0; color: #86909c; }
-.accordion-label { font-size: 14px; font-weight: 600; color: #1d2129; }
+.accordion-section { border: 1px solid var(--cds-alias-object-border-color, #e5e6eb); border-radius: 6px; margin-bottom: 12px; overflow: hidden; }
+.accordion-trigger { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 16px; background: var(--cds-alias-object-app-background, #f7f8fa); border: none; cursor: pointer; font: inherit; text-align: left; transition: background 0.15s; }
+.accordion-trigger:hover { background: var(--cds-alias-object-app-background, #eef0f4); }
+.accordion-arrow { flex-shrink: 0; color: var(--cds-global-typography-color-300, #86909c); }
+.accordion-label { font-size: 14px; font-weight: 600; color: var(--cds-global-typography-color-500, #1d2129); }
 .accordion-body { padding: 4px 16px 12px; }
 .ic-info-alert { margin-top: 12px; }
 </style>

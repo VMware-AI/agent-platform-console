@@ -16,6 +16,41 @@ const remember = ref(false)
 const attempted = ref(false)
 const showPassword = ref(false)
 
+// Storage key for the last successfully-logged-in email, kept ONLY when the
+// operator checked "remember me" on that login. Pre-fills the email field
+// (and re-checks the box) the next time the login page renders, matching
+// the httpOnly cookie's "remember me" behaviour on the auth side. Stored
+// alongside the other `clarity-*` keys (theme, locale, auth-user) so it's
+// cleared in lockstep when the user wipes site data from DevTools.
+const REMEMBERED_EMAIL_KEY = 'clarity-auth-email'
+
+function readRememberedEmail(): string {
+  try {
+    return localStorage.getItem(REMEMBERED_EMAIL_KEY) ?? ''
+  } catch {
+    // Storage unavailable (private mode, sandboxed iframe) — fall back to
+    // a blank form. The login flow itself is unaffected; only the
+    // pre-fill convenience is lost.
+    return ''
+  }
+}
+
+function writeRememberedEmail(value: string): void {
+  try {
+    localStorage.setItem(REMEMBERED_EMAIL_KEY, value)
+  } catch {
+    // Ignore — see readRememberedEmail().
+  }
+}
+
+function clearRememberedEmail(): void {
+  try {
+    localStorage.removeItem(REMEMBERED_EMAIL_KEY)
+  } catch {
+    // Ignore.
+  }
+}
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const emailValid = computed(() => EMAIL_RE.test(email.value.trim()))
@@ -54,6 +89,17 @@ async function onSubmit(e: Event) {
   if (!canSubmit.value) return
   const ok = await auth.login(email.value, password.value, remember.value)
   if (ok) {
+    // Mirror the remember flag onto the saved-email slot: when the operator
+    // opted in, persist the trimmed email so the next visit pre-fills the
+    // field; when they opted out, wipe any prior remembered value so an
+    // explicit "don't remember me" doesn't leak into a future session.
+    // The trim matches what we send to the backend, so the pre-filled
+    // value is byte-identical to the one the server expects.
+    if (remember.value) {
+      writeRememberedEmail(email.value.trim())
+    } else {
+      clearRememberedEmail()
+    }
     router.push({ name: 'overview' })
   }
 }
@@ -75,6 +121,16 @@ function onKeydownEnter(e: KeyboardEvent) {
 
 onMounted(() => {
   document.title = locale.t('app.title')
+  // Pre-fill the email field from the last "remember me" login so the
+  // operator doesn't retype their identifier every visit. Also re-check
+  // the box to match the state that originally saved the email — if the
+  // operator unchecks it before submitting, the existing else-branch in
+  // onSubmit() clears the slot, so the dis/alignment self-corrects.
+  const remembered = readRememberedEmail()
+  if (remembered) {
+    email.value = remembered
+    remember.value = true
+  }
 })
 </script>
 

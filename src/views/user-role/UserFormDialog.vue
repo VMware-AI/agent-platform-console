@@ -147,7 +147,7 @@ function scheduleEmailCheck() {
 
 /* ---------- complexity + match ----------
    Only computed / consulted in CUSTOM mode. */
-const complexity = computed(() => passwordMeets(customPassword.value))
+const complexity = computed(() => passwordMeets(customPassword.value, locale.t))
 const passwordsMatch = computed(
   () => customPassword.value === confirmPassword.value,
 )

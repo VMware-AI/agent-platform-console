@@ -20,13 +20,25 @@ export interface ComplexityResult {
   reasons: string[]
 }
 
-export function passwordMeets(pwd: string): ComplexityResult {
-  const reasons: string[] = []
-  if (!pwd || pwd.length < 12) reasons.push('长度至少 12 位')
-  if (!/[A-Z]/.test(pwd)) reasons.push('需含大写字母')
-  if (!/[a-z]/.test(pwd)) reasons.push('需含小写字母')
-  if (!/\d/.test(pwd)) reasons.push('需含数字')
-  return { ok: reasons.length === 0, reasons }
+type ReasonKey =
+  | 'users.form.password.reason.length'
+  | 'users.form.password.reason.upper'
+  | 'users.form.password.reason.lower'
+  | 'users.form.password.reason.digit'
+
+// The reasons must remain language-agnostic so they can be rendered into
+// either zh or en UI without leaking the source's locale. Callers pass in a
+// translator (typically `useLocaleStore().t`) which is invoked lazily — the
+// UI language may change between invocations and the keys resolve at render
+// time. The keys themselves are part of the public contract and live in
+// `src/stores/locale.ts` under `users.form.password.reason.*`.
+export function passwordMeets(pwd: string, t: (key: ReasonKey) => string): ComplexityResult {
+  const reasons: ReasonKey[] = []
+  if (!pwd || pwd.length < 12) reasons.push('users.form.password.reason.length')
+  if (!/[A-Z]/.test(pwd)) reasons.push('users.form.password.reason.upper')
+  if (!/[a-z]/.test(pwd)) reasons.push('users.form.password.reason.lower')
+  if (!/\d/.test(pwd)) reasons.push('users.form.password.reason.digit')
+  return { ok: reasons.length === 0, reasons: reasons.map(t) }
 }
 
 const UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ'

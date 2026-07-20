@@ -968,7 +968,6 @@ export const STRINGS: Dict = {
   'gatewayModel.action.refresh': { zh: '刷新', en: 'Refresh' },
   'gatewayModel.action.edit': { zh: '编辑', en: 'Edit' },
   'gatewayModel.action.manage': { zh: '管理', en: 'Manage' },
-  'gatewayModel.action.delete': { zh: '删除', en: 'Delete' },
   'gatewayModel.batch.delete': { zh: '批量删除', en: 'Delete Selected' },
   'gatewayModel.batch.disabled': { zh: '请先选择路由', en: 'Select routes first' },
   'gatewayModel.col.selectAll': { zh: '选择当前页全部路由', en: 'Select all routes on this page' },
@@ -1028,32 +1027,10 @@ export const STRINGS: Dict = {
   'gatewayModel.form.requiredMark': { zh: '*', en: '*' },
   'gatewayModel.form.submit': { zh: '修改', en: 'Update' },
   'gatewayModel.form.submitCreate': { zh: '创建', en: 'Create' },
-  'gatewayModel.confirm.deleteTitle': { zh: '确认删除网关路由', en: 'Delete Gateway Route' },
-  'gatewayModel.confirm.deleteBody': {
-    zh: '确定要删除路由“{name}”吗？此操作无法撤销。',
-    en: 'Delete route “{name}”? This action cannot be undone.',
-  },
   'gatewayModel.confirm.batchDeleteTitle': { zh: '确认批量删除', en: 'Delete Selected Routes' },
   'gatewayModel.confirm.batchDeleteBody': {
     zh: '确定要删除选中的 {count} 个路由吗？此操作无法撤销。',
     en: 'Delete the selected {count} routes? This action cannot be undone.',
-  },
-  // Second-step confirmation (modeled after `gateway.delete.confirm.*`).
-  // After the operator acknowledges the first delete dialog the second
-  // one renders a type-to-confirm input so they have to retype the
-  // route's name verbatim — guards against muscle-memory clicks on a
-  // row other than the one they meant to delete.
-  'gatewayModel.confirm.finalDeleteTitle': {
-    zh: '再次确认删除',
-    en: 'Confirm Delete Again',
-  },
-  'gatewayModel.confirm.finalDeleteBody': {
-    zh: '将永久删除该网关路由且无法恢复。请输入 {{name}} 以确认。',
-    en: 'This gateway route will be permanently deleted. Type {{name}} to confirm.',
-  },
-  'gatewayModel.confirm.finalDeleteInputPlaceholder': {
-    zh: '输入路由名称',
-    en: 'Type the route name',
   },
   'gatewayModel.toast.created': { zh: '网关路由已创建', en: 'Gateway route created' },
   'gatewayModel.toast.updated': { zh: '网关路由已更新', en: 'Gateway route updated' },
@@ -2277,7 +2254,8 @@ export const STRINGS: Dict = {
   'requestLog.value.tokensTitle': { zh: '输入 {in} / 输出 {out}', en: 'Input {in} / Output {out}' },
   'requestLog.action.refresh': { zh: '刷新', en: 'Refresh' },
   'requestLog.action.copy': { zh: '复制请求 ID', en: 'Copy request ID' },
-  'requestLog.action.toggleDetail': { zh: '展开/收起详情', en: 'Toggle detail' },
+  'requestLog.action.toggleDetail': { zh: '查看详情', en: 'View detail' },
+  'requestLog.detail.title': { zh: '请求详情', en: 'Request detail' },
   'requestLog.loading': { zh: '加载中…', en: 'Loading…' },
   'requestLog.empty': { zh: '暂无请求日志', en: 'No request logs' },
   'requestLog.filter.toolbar': { zh: '请求日志筛选工具栏', en: 'Request log filter toolbar' },
@@ -2298,9 +2276,13 @@ export const STRINGS: Dict = {
   'requestLog.filter.modelPlaceholder': { zh: '模型名称', en: 'Model name' },
   'requestLog.filter.agentPlaceholder': { zh: '智能体 ID', en: 'Agent ID' },
   'requestLog.filter.requestPlaceholder': { zh: '请求 ID', en: 'Request ID' },
-  'requestLog.pagination.pageSize': { zh: '每页', en: 'Per page' },
-  'requestLog.pagination.label': { zh: '分页', en: 'Pagination' },
-  'requestLog.pagination.range': { zh: '第 {start}–{end} 条', en: 'Items {start}–{end}' },
+  'requestLog.pagination.pageSize': { zh: '每页条数', en: 'Per page' },
+  'requestLog.pagination.label': { zh: '请求日志分页', en: 'Request log pagination' },
+  'requestLog.pagination.summary': {
+    zh: '显示 {start}-{end} 条，共 {total} 条',
+    en: 'Showing {start}-{end} of {total}',
+  },
+  'requestLog.pagination.page': { zh: '当前页', en: 'Current page' },
   'requestLog.pagination.empty': { zh: '暂无数据', en: 'No data' },
   'requestLog.toast.refreshed': { zh: '已刷新', en: 'Refreshed' },
   'requestLog.toast.refreshFailed': { zh: '刷新失败', en: 'Refresh failed' },
@@ -2370,13 +2352,14 @@ export const STRINGS: Dict = {
   'auditLog.toast.refreshFailed': { zh: '刷新失败', en: 'Refresh failed' },
   'auditLog.toast.copied': { zh: '已复制资源 ID', en: 'Resource ID copied' },
   'auditLog.toast.copyFailed': { zh: '复制失败', en: 'Copy failed' },
-  'auditLog.pagination.pageSize': { zh: '每页', en: 'Page size' },
+  'auditLog.pagination.pageSize': { zh: '每页条数', en: 'Per page' },
   'auditLog.pagination.summary': {
-    zh: '显示 {start}–{end} / {total}',
-    en: 'Showing {start}–{end} of {total}',
+    zh: '显示 {start}-{end} 条，共 {total} 条',
+    en: 'Showing {start}-{end} of {total}',
   },
   'auditLog.pagination.empty': { zh: '暂无数据', en: 'No data' },
-  'auditLog.pagination.label': { zh: '分页', en: 'Pagination' },
+  'auditLog.pagination.label': { zh: '审计日志分页', en: 'Audit log pagination' },
+  'auditLog.pagination.page': { zh: '当前页', en: 'Current page' },
   'auditLog.pager.first': { zh: '首页', en: 'First page' },
   'auditLog.pager.prev': { zh: '上一页', en: 'Previous page' },
   'auditLog.pager.next': { zh: '下一页', en: 'Next page' },
@@ -2395,6 +2378,36 @@ export const STRINGS: Dict = {
   'auditLog.category.resource_pool': { zh: '资源池', en: 'Resource Pool' },
   'auditLog.category.ova_template_family': { zh: 'OVA 模板族', en: 'OVA Template Family' },
   'auditLog.category.ova_template_version': { zh: 'OVA 模板版本', en: 'OVA Template Version' },
+  // Action verbs — the second half of an action string ("category.verb"),
+  // rendered next to the category label in the table.
+  'auditLog.action.add': { zh: '新增', en: 'Add' },
+  'auditLog.action.assign_role': { zh: '分配角色', en: 'Assign Role' },
+  'auditLog.action.change_password': { zh: '修改密码', en: 'Change Password' },
+  'auditLog.action.create': { zh: '创建', en: 'Create' },
+  'auditLog.action.delete': { zh: '删除', en: 'Delete' },
+  'auditLog.action.deploy': { zh: '部署', en: 'Deploy' },
+  'auditLog.action.issue': { zh: '签发', en: 'Issue' },
+  'auditLog.action.login': { zh: '登录', en: 'Login' },
+  'auditLog.action.recycle': { zh: '回收', en: 'Recycle' },
+  'auditLog.action.regenerate': { zh: '重新生成', en: 'Regenerate' },
+  'auditLog.action.register': { zh: '注册', en: 'Register' },
+  'auditLog.action.remove': { zh: '移除', en: 'Remove' },
+  'auditLog.action.remove_role': { zh: '移除角色', en: 'Remove Role' },
+  'auditLog.action.reset_password': { zh: '重置密码', en: 'Reset Password' },
+  'auditLog.action.revert_snapshot': { zh: '回滚快照', en: 'Revert Snapshot' },
+  'auditLog.action.revoke': { zh: '吊销', en: 'Revoke' },
+  'auditLog.action.set_default': { zh: '设为默认', en: 'Set Default' },
+  'auditLog.action.set_enabled': { zh: '启用/禁用', en: 'Set Enabled' },
+  'auditLog.action.set_knowledge': { zh: '设置知识库', en: 'Set Knowledge' },
+  'auditLog.action.set_permissions': { zh: '设置权限', en: 'Set Permissions' },
+  'auditLog.action.set_status': { zh: '设置状态', en: 'Set Status' },
+  'auditLog.action.set_tier': { zh: '设置层级', en: 'Set Tier' },
+  'auditLog.action.snapshot': { zh: '创建快照', en: 'Snapshot' },
+  'auditLog.action.sync': { zh: '同步', en: 'Sync' },
+  'auditLog.action.test': { zh: '测试', en: 'Test' },
+  'auditLog.action.toggle_enabled': { zh: '启用/禁用', en: 'Toggle Enabled' },
+  'auditLog.action.update': { zh: '更新', en: 'Update' },
+  'auditLog.action.upsert': { zh: '新增/更新', en: 'Upsert' },
 
   // 实时监控 (real-time monitor)
   'monitor.title': { zh: '实时监控仪表板', en: 'Real-time Monitoring Dashboard' },
@@ -2606,6 +2619,7 @@ export const STRINGS: Dict = {
 
   // --- Added for i18n/dark-mode fix pass ---
   'common.close': { zh: '关闭', en: 'Close' },
+  'common.retry': { zh: '重试', en: 'Retry' },
   'common.noPermission': {
     zh: '你没有权限执行此操作',
     en: 'You do not have permission to perform this action',
@@ -2644,9 +2658,471 @@ export const STRINGS: Dict = {
     en: 'vSphere {version} · {count} content libraries',
   },
   'resources.form.endpointPlaceholder': {
-    zh: 'https://vc.example.local/sdk',
-    en: 'https://vc.example.local/sdk',
+    zh: 'https://vc.example.com',
+    en: 'https://vc.example.com',
   },
+
+  /* ============================================================
+   * Access info dialog (AgentDetailView opens this from
+   * ConfigureAccessPreview's "查看完整访问信息" button).
+   * Title format mirrors the create-modals' "action · name" pattern.
+   * ============================================================ */
+  'accessInfo.title': { zh: '{name} 访问信息', en: '{name} Access Info' },
+  'accessInfo.loading': {
+    zh: '正在从 vCenter 拉取虚拟机凭据...',
+    en: 'Fetching VM credentials from vCenter...',
+  },
+  'accessInfo.section.key': { zh: '密钥信息', en: 'API Key Info' },
+  'accessInfo.section.creds': { zh: '虚拟机访问凭据', en: 'VM Access Credentials' },
+  'accessInfo.osUser': { zh: 'OS账户', en: 'OS User' },
+  'accessInfo.password': { zh: '登录密码', en: 'Login Password' },
+  'accessInfo.sshCmd': { zh: 'SSH 连接', en: 'SSH Connection' },
+  'accessInfo.ip': { zh: 'IP 地址', en: 'IP Address' },
+  'accessInfo.copyAll': { zh: '一键复制全部凭据', en: 'Copy all credentials' },
+  'accessInfo.copyAllOk': { zh: '全部凭据已复制', en: 'All credentials copied' },
+  'accessInfo.noCreds': { zh: '无凭据可复制', en: 'No credentials to copy' },
+  'accessInfo.copyFailHint': {
+    zh: '复制失败，请手动选择文本复制',
+    en: 'Copy failed — please select and copy the text manually',
+  },
+  'accessInfo.passwordHint': {
+    zh: '密码由部署时设定，平台不存储明文。如遗忘请通过 vCenter Console 重置。',
+    en: 'Password is set at deploy time; the platform does not store plaintext. Reset via vCenter Console if forgotten.',
+  },
+  // Composite lines written to the clipboard payload — preserve the trailing
+  // "{value}" so callers can substitute without rebuilding the format string.
+  'accessInfo.line.keyName': { zh: '密钥名称: {value}', en: 'Key Name: {value}' },
+  'accessInfo.line.osUser': { zh: 'OS账户: {value}', en: 'OS User: {value}' },
+  'accessInfo.line.password': { zh: '登录密码: {value}', en: 'Password: {value}' },
+  'accessInfo.line.ssh': { zh: 'SSH 连接: {value}', en: 'SSH: {value}' },
+  'accessInfo.line.ip': { zh: 'IP 地址: {value}', en: 'IP: {value}' },
+  // Single-field copy button titles/aria-labels — keyed by field to keep
+  // the dialog template declarative.
+  'accessInfo.copy.keyTitle': { zh: '复制密钥名称', en: 'Copy key name' },
+  'accessInfo.copy.userTitle': { zh: '复制运行账户', en: 'Copy run-as user' },
+  'accessInfo.copy.passwordTitle': { zh: '复制密码', en: 'Copy password' },
+  'accessInfo.copy.sshTitle': { zh: '复制 SSH 命令', en: 'Copy SSH command' },
+  'accessInfo.copy.ipTitle': { zh: '复制 IP 地址', en: 'Copy IP address' },
+  // Per-field toast confirmation: `${label} 已复制` — the label token is the
+  // field name the user clicked (e.g. "OS账户"). Reuses `common.copyOk` shape.
+  'accessInfo.copy.okSuffix': { zh: '已复制', en: 'copied' },
+
+  // ConfigureAccessPreview (read-only inline preview inside the agent config dialog)
+  'configure.access.clickToView': {
+    zh: '（点击下方按钮查看）',
+    en: '(click the button below to view)',
+  },
+  'configure.access.viewFull': { zh: '查看完整访问信息', en: 'View full access info' },
+  'configure.access.viewHint': {
+    zh: '跳转至访问信息弹窗，查看 SSH 连接命令与登录凭据',
+    en: 'Opens the access info dialog with SSH command and login credentials',
+  },
+
+  /* ============================================================
+   * Configure agent dialog + its 7 sub-panels (Configure*)
+   * Single namespace "configure.*" groups every panel + the parent dialog.
+   * ============================================================ */
+  'configure.title': { zh: '{name} 配置', en: '{name} Configuration' },
+  'configure.subtitle': {
+    zh: '查看与修改智能体部署参数。🔒 = 只读字段',
+    en: 'View and modify agent deploy parameters. 🔒 = read-only',
+  },
+  'configure.close': { zh: '关闭', en: 'Close' },
+  'configure.section.basic': { zh: '基础信息', en: 'Basic Info' },
+  'configure.section.vmResources': { zh: '虚拟机资源配置', en: 'VM Resources' },
+  'configure.section.network': { zh: '网络配置', en: 'Network' },
+  'configure.section.vapp': { zh: 'vApp 部署参数', en: 'vApp Deploy Parameters' },
+  'configure.section.access': { zh: '网络访问信息', en: 'Network Access' },
+  'configure.section.quickActions': { zh: '快捷运维操作', en: 'Quick Actions' },
+  'configure.savedToast': {
+    zh: '配置已保存，vCenter 同步中...',
+    en: 'Configuration saved; syncing to vCenter...',
+  },
+  'configure.saveFail': { zh: '保存失败', en: 'Save failed' },
+  'configure.vmIndependenceHint': {
+    zh: '此 VM 为完全独立的 vCenter 清单对象，可像常规虚拟机一样管理。即时克隆仅影响创建速度（秒级），不影响后续生命周期与数据持久性。',
+    en: 'This VM is a fully independent vCenter inventory object; it can be managed like any other VM. Instant cloning only speeds up creation (seconds); lifecycle and data persistence are unaffected.',
+  },
+
+  // ConfigureDiff (rendered inside ConfirmDiffDialog)
+  'configure.diff.title': { zh: '确认配置变更', en: 'Confirm Configuration Changes' },
+  'configure.diff.subtitle': { zh: '变更将在 vCenter 同步执行：', en: 'Changes will be applied to vCenter:' },
+  'configure.diff.col.field': { zh: '字段', en: 'Field' },
+  'configure.diff.col.before': { zh: '变更前', en: 'Before' },
+  'configure.diff.col.after': { zh: '变更后', en: 'After' },
+  'configure.diff.empty': { zh: '无变更项', en: 'No changes' },
+  'configure.diff.cpu': { zh: 'CPU 核数', en: 'CPU Cores' },
+  'configure.diff.memory': { zh: '内存', en: 'Memory' },
+  'configure.diff.disk': { zh: '磁盘', en: 'Disk' },
+  'configure.diff.portGroup': { zh: '端口组', en: 'Port Group' },
+  'configure.diff.runAs': { zh: '运行账户', en: 'Run-as User' },
+  // Composite "before / after" cells (rendered via .replace() in
+  // ConfigureAgentDialog.buildDiff — see how it composes "{n} 核" / "{n} GB").
+  'configure.diff.value.cpu': { zh: '{n} 核', en: '{n} cores' },
+  'configure.diff.value.memGb': { zh: '{n} GB', en: '{n} GB' },
+  'configure.diff.value.diskGb': { zh: '{n} GB', en: '{n} GB' },
+
+  // ConfigureNetwork
+  'configure.network.portGroup': { zh: '端口组', en: 'Port Group' },
+  'configure.network.loading': { zh: '加载中...', en: 'Loading…' },
+  'configure.network.noPortGroup': { zh: '无可用端口组', en: 'No port groups available' },
+  'configure.network.switchWarn': {
+    zh: '⚠️ 切换端口组将临时断开虚拟机网络，建议业务低峰时段操作',
+    en: '⚠️ Switching port groups will briefly disconnect the VM; schedule during low-traffic periods',
+  },
+
+  // ConfigureQuickActions
+  'configure.quickActions.rotateKey': { zh: '密码更新', en: 'Rotate Key' },
+  'configure.quickActions.rotateSecret': { zh: '密钥轮换', en: 'Rotate Secret' },
+  'configure.quickActions.restart': { zh: '重启实例', en: 'Restart Instance' },
+  'configure.quickActions.restartTitle': {
+    zh: '仅运行中实例可重启',
+    en: 'Only running instances can be restarted',
+  },
+  'configure.quickActions.stop': { zh: '停止实例', en: 'Stop Instance' },
+  'configure.quickActions.stopTitle': { zh: '实例未在运行', en: 'Instance is not running' },
+  'configure.quickActions.save': { zh: '保存配置', en: 'Save Configuration' },
+  'configure.quickActions.saveHint': {
+    zh: '修改资源、网络或 vApp 参数后保存到 vCenter',
+    en: 'Modify resources, network, or vApp parameters and save to vCenter',
+  },
+
+  // ConfigureVAppProperties
+  'configure.vapp.templateFamily': { zh: '模版族', en: 'Template Family' },
+  'configure.vapp.templateVersion': { zh: '模版版本', en: 'Template Version' },
+  'configure.vapp.resourcePool': { zh: '资源池', en: 'Resource Pool' },
+  'configure.vapp.runAs': { zh: '运行账户', en: 'Run-as User' },
+  'configure.vapp.ovfHeading': { zh: '自定义 OVF 属性', en: 'Custom OVF Properties' },
+  'configure.vapp.keyPlaceholder': { zh: '属性名', en: 'Property name' },
+  'configure.vapp.valuePlaceholder': { zh: '属性值', en: 'Property value' },
+  'configure.vapp.remove': { zh: '移除', en: 'Remove' },
+  'configure.vapp.addProp': { zh: '+ 添加属性', en: '+ Add property' },
+  'configure.vapp.runAsPlaceholder': { zh: 'svc_robot', en: 'svc_robot' },
+
+  // ConfigureVmResources — input labels, range hints, validation messages
+  'configure.vm.cpuLabel': { zh: 'CPU 核数', en: 'CPU Cores' },
+  'configure.vm.memLabel': { zh: '内存 (GB)', en: 'Memory (GB)' },
+  'configure.vm.diskLabel': { zh: '磁盘 (GB)', en: 'Disk (GB)' },
+  'configure.vm.cpuRange': {
+    zh: '当前 {n} 核，范围 1-{max}',
+    en: 'Current {n} cores, range 1-{max}',
+  },
+  'configure.vm.memRange': {
+    zh: '当前 {n} GB，范围 1-{max}',
+    en: 'Current {n} GB, range 1-{max}',
+  },
+  'configure.vm.diskRange': {
+    zh: '当前 {n} GB，范围 {min}-{max}',
+    en: 'Current {n} GB, range {min}-{max}',
+  },
+  'configure.vm.positiveInt': { zh: '请输入 ≥1 的正整数', en: 'Enter a positive integer ≥ 1' },
+  'configure.vm.maxCpu': { zh: '最大 {n} 核', en: 'Max {n} cores' },
+  'configure.vm.maxMem': { zh: '最大 {n} GB', en: 'Max {n} GB' },
+  'configure.vm.maxDisk': { zh: '最大 {n} GB', en: 'Max {n} GB' },
+  'configure.vm.cpuScaleUpOnly': {
+    zh: '运行中仅支持扩容（≥{n}）',
+    en: 'Running instance can only scale up (≥{n})',
+  },
+  'configure.vm.memScaleUpOnly': {
+    zh: '运行中仅支持扩容（≥{n}GB）',
+    en: 'Running instance can only scale up (≥{n}GB)',
+  },
+  'configure.vm.diskScaleUpOnly': {
+    zh: '磁盘仅支持扩容（≥{n}GB）',
+    en: 'Disk can only scale up (≥{n}GB)',
+  },
+  'configure.vm.scaleHintRunning': {
+    zh: '运行中实例仅支持扩容，缩减需先停止实例',
+    en: 'Running instances can only scale up; stop first to scale down',
+  },
+  'configure.vm.scaleHintStopped': {
+    zh: '已停止实例可自由调整资源规格',
+    en: 'Stopped instances can be freely resized',
+  },
+
+  /* ============================================================
+   * Password complexity reasons (composables/usePasswordComplexity.ts)
+   * Returned in `reasons[]` and rendered verbatim by UserFormDialog.
+   * ============================================================ */
+  'users.form.password.reason.length': {
+    zh: '长度至少 12 位',
+    en: 'At least 12 characters',
+  },
+  'users.form.password.reason.upper': {
+    zh: '需含大写字母',
+    en: 'Must contain an uppercase letter',
+  },
+  'users.form.password.reason.lower': {
+    zh: '需含小写字母',
+    en: 'Must contain a lowercase letter',
+  },
+  'users.form.password.reason.digit': {
+    zh: '需含数字',
+    en: 'Must contain a digit',
+  },
+
+  /* ============================================================
+   * Agent list stragglers — toasts, exception-state tooltip, action
+   * confirm dialogs (start / stop / restart / delete).
+   * ============================================================ */
+  'agents.action.configureOpenFail': {
+    zh: '无法打开配置面板',
+    en: 'Unable to open configuration panel',
+  },
+  'agents.action.accessFetchFail': {
+    zh: '无法获取虚拟机凭据',
+    en: 'Unable to fetch VM credentials',
+  },
+  'agents.action.retryFail': { zh: '重试失败', en: 'Retry failed' },
+  'agents.action.exceptionConfigureBlocked': {
+    zh: '异常状态实例暂不支持配置',
+    en: 'Exception-state instances are not configurable',
+  },
+  // Confirm dialog titles + bodies — the same shape as
+  // `agents.confirm.deleteTitle` / `agents.confirm.deleteBody` already in the
+  // dictionary; just for the other actions (start/stop/restart).
+  'agents.confirm.startTitle': { zh: '启动智能体', en: 'Start Agent' },
+  'agents.confirm.startBody': { zh: '确定启动 {name} 吗？', en: 'Start {name}?' },
+  'agents.confirm.stopTitle': { zh: '停止智能体', en: 'Stop Agent' },
+  'agents.confirm.stopBody': { zh: '确定停止 {name} 吗？', en: 'Stop {name}?' },
+  'agents.confirm.restartTitle': { zh: '重启智能体', en: 'Restart Agent' },
+  'agents.confirm.restartBody': { zh: '确定重启 {name} 吗？', en: 'Restart {name}?' },
+
+  /* ============================================================
+   * Agent marketplace — instant-clone flow toasts + delete-template
+   * confirmation modal. Instant-clone toasts come from
+   * AgentMarketplaceView's "create parents, then instant-clone" path.
+   * ============================================================ */
+  'marketplace.toast.deployingParent': {
+    zh: '正在部署父虚拟机 {name} ({ip})...',
+    en: 'Deploying parent VM {name} ({ip})...',
+  },
+  'marketplace.error.parentDeployFail': {
+    zh: '父虚拟机 {name} 部署失败',
+    en: 'Parent VM {name} deploy failed',
+  },
+  'marketplace.toast.parentReady': {
+    zh: '父虚拟机 {endpoint} 就绪，正在即时克隆...',
+    en: 'Parent VM {endpoint} ready; instant cloning...',
+  },
+  'marketplace.toast.cloneComplete': {
+    zh: '即时克隆完成：{name}',
+    en: 'Instant clone complete: {name}',
+  },
+  'marketplace.card.ovaTemplateLabel': {
+    zh: '模板: {ovaIdentifier}',
+    en: 'Template: {ovaIdentifier}',
+  },
+  'marketplace.deleteTemplate.title': { zh: '确认删除模板', en: 'Confirm Delete Template' },
+  'marketplace.deleteTemplate.body': {
+    zh: '确定要删除模板「{name}」及其所有版本吗？',
+    en: 'Delete template "{name}" and all its versions?',
+  },
+  // Split form so the template can bold the name without re-running .replace().
+  'marketplace.deleteTemplate.body.before': {
+    zh: '确定要删除模板「',
+    en: 'Delete template "',
+  },
+  'marketplace.deleteTemplate.body.after': {
+    zh: '」及其所有版本吗？',
+    en: '" and all its versions?',
+  },
+  'marketplace.deleteTemplate.warning': {
+    zh: '此操作不可撤销。已有智能体引用的模板无法删除。',
+    en: 'This cannot be undone. Templates referenced by existing agents cannot be deleted.',
+  },
+  'marketplace.deleteTemplate.confirm': { zh: '确认删除', en: 'Delete' },
+
+  /* ============================================================
+   * SupplierModelFormModal stragglers — "必填" inline message and the
+   * spec-heading text inside the multi-spec editor.
+   * ============================================================ */
+  'supplier.model.form.spec.requiredHint': { zh: '必填', en: 'Required' },
+  // "模型 #1" / "模型 #2" — the per-spec heading inside the
+  // create/edit dialog's specs array. Mirrors `supplier.model.form.review.specHeading`.
+  'supplier.model.form.spec.heading': { zh: '模型 #{n}', en: 'Model #{n}' },
+
+  /* ============================================================
+   * SupplierModelViewModal cost/limit formatters. These run in <script>
+   * and emit the two-line text rendered into the read-only spec cells —
+   * input/output/cacheRead/cacheWrite labels plus the tpm/rpm/maxBudget/
+   * budgetDuration labels. Both zh and en follow the same "{label} {value}"
+   * shape so the caller can string-concat without thinking about it.
+   * ============================================================ */
+  'supplier.viewModal.cost.input': {
+    zh: '输入 {v}/token',
+    en: 'Input {v}/token',
+  },
+  'supplier.viewModal.cost.output': {
+    zh: '输出 {v}/token',
+    en: 'Output {v}/token',
+  },
+  'supplier.viewModal.cost.cacheRead': {
+    zh: '缓存读 {v}/token',
+    en: 'Cache read {v}/token',
+  },
+  'supplier.viewModal.cost.cacheWrite': {
+    zh: '缓存写 {v}/token',
+    en: 'Cache write {v}/token',
+  },
+  'supplier.viewModal.limit.tpm': { zh: 'tpm {v}', en: 'tpm {v}' },
+  'supplier.viewModal.limit.rpm': { zh: 'rpm {v}', en: 'rpm {v}' },
+  'supplier.viewModal.limit.maxBudget': {
+    zh: 'maxBudget {v}',
+    en: 'maxBudget {v}',
+  },
+  'supplier.viewModal.limit.budgetDuration': {
+    zh: 'budgetDuration {v}',
+    en: 'budgetDuration {v}',
+  },
+
+  /* ============================================================
+   * Metering center — unit string for the per-dimension row count
+   * (used in `metering.spend.col.*` summaries). Was hardcoded as
+   * locale.locale === 'zh' ? '条' : 'rows'.
+   * ============================================================ */
+  'metering.spend.unit': { zh: '条', en: 'rows' },
+
+  /* ============================================================
+   * Add OVA template dialog — auto/custom mode toggle, vCenter browse
+   * flow placeholders, and per-line hints.
+   * ============================================================ */
+  'marketplace.form.typePlaceholder': {
+    zh: '请选择智能体类型',
+    en: 'Select agent type',
+  },
+  'marketplace.form.modeToggle.default': { zh: '默认模式', en: 'Default mode' },
+  'marketplace.form.modeToggle.custom': {
+    zh: '自定义模式（浏览 vCenter 模板）',
+    en: 'Custom mode (browse vCenter templates)',
+  },
+  'marketplace.form.vmTemplateLabel': {
+    zh: 'vCenter VM 模板',
+    en: 'vCenter VM Template',
+  },
+  'marketplace.form.vmTemplate.loading': {
+    zh: '正在查询 vCenter 模板列表...',
+    en: 'Loading vCenter template list...',
+  },
+  'marketplace.form.vmTemplate.pickPool': {
+    zh: '请先选择资源池',
+    en: 'Select a resource pool first',
+  },
+  'marketplace.form.vmTemplate.loadingShort': { zh: '查询中...', en: 'Loading…' },
+  'marketplace.form.vmTemplate.unreachable': {
+    zh: 'vCenter 不可达',
+    en: 'vCenter unreachable',
+  },
+  'marketplace.form.vmTemplate.empty': {
+    zh: '无可用模板',
+    en: 'No templates available',
+  },
+  'marketplace.form.vmTemplate.placeholder': { zh: '选择 VM 模板', en: 'Select VM template' },
+  'marketplace.form.ovaIdentifierFallbackPlaceholder': {
+    zh: '手动输入 VM 模板名称（如 dlvmova）',
+    en: 'Manually enter VM template name (e.g. dlvmova)',
+  },
+  'marketplace.form.linePlaceholder': { zh: '每行一条', en: 'One per line' },
+  'marketplace.form.lineHint': {
+    zh: '每行仅填写一条内容',
+    en: 'One item per line',
+  },
+
+  /* ============================================================
+   * Deploy Agent dialog (DeployAgentDialog.vue) — the entire 5-step
+   * wizard. Namespace `deployAgent.*` groups every label, placeholder,
+   * validation, and button used by this dialog.
+   * ============================================================ */
+  'deployAgent.title': { zh: '部署智能体 — {name}', en: 'Deploy Agent — {name}' },
+  'deployAgent.section.env': { zh: '基础运行环境', en: 'Base Environment' },
+  'deployAgent.section.envDesc': {
+    zh: '所有实例共享的底层 IaaS 资源配置',
+    en: 'Shared IaaS resource configuration for all instances',
+  },
+  'deployAgent.section.security': { zh: '全局安全与认证', en: 'Global Security & Auth' },
+  'deployAgent.section.securityDesc': {
+    zh: '所有实例统一的 Cloud-Init / vApp 系统凭据',
+    en: 'Unified Cloud-Init / vApp system credentials for all instances',
+  },
+  'deployAgent.section.mode': { zh: '部署模式', en: 'Deploy Mode' },
+  'deployAgent.section.network': { zh: '网络策略', en: 'Network Policy' },
+  'deployAgent.section.instances': { zh: '实例配置清单', en: 'Instance Configuration' },
+  // Form labels
+  'deployAgent.label.version': { zh: '选择版本', en: 'Select version' },
+  'deployAgent.label.placementPool': {
+    zh: 'vSphere 放置资源池',
+    en: 'vSphere placement pool',
+  },
+  'deployAgent.label.targetNetwork': { zh: '目标端口组', en: 'Target port group' },
+  'deployAgent.label.cloneMode': { zh: '克隆模式', en: 'Clone mode' },
+  'deployAgent.cloneMode.full': { zh: '全量克隆', en: 'Full clone' },
+  'deployAgent.cloneMode.instant': { zh: '即时克隆', en: 'Instant clone' },
+  'deployAgent.inheritDefault': {
+    zh: '继承模板默认',
+    en: 'Inherit template default',
+  },
+  'deployAgent.parentSource.existing': {
+    zh: '选择已有父虚拟机',
+    en: 'Pick existing parent VM',
+  },
+  'deployAgent.parentSource.create': {
+    zh: '创建新父虚拟机',
+    en: 'Create new parent VM',
+  },
+  'deployAgent.label.parentVm': { zh: '父虚拟机', en: 'Parent VM' },
+  'deployAgent.selectPlaceholder': { zh: '-- 选择 --', en: '-- Select --' },
+  'deployAgent.label.name': { zh: '名称', en: 'Name' },
+  'deployAgent.label.staticIp': { zh: '静态 IP', en: 'Static IP' },
+  'deployAgent.action.addParent': { zh: '添加父虚拟机', en: 'Add parent VM' },
+  'deployAgent.action.remove': { zh: '移除', en: 'Remove' },
+  'deployAgent.label.password': { zh: '密码', en: 'Password' },
+  'deployAgent.err.passwordRequired': { zh: '密码不能为空', en: 'Password is required' },
+  'deployAgent.err.passwordMinLen': { zh: '密码至少 8 位', en: 'Password must be at least 8 characters' },
+  'deployAgent.placeholder.password': { zh: '至少 8 位', en: 'At least 8 characters' },
+  'deployAgent.label.confirmPassword': { zh: '确认密码', en: 'Confirm Password' },
+  'deployAgent.placeholder.confirmPassword': { zh: '再次输入', en: 'Re-enter' },
+  'deployAgent.err.passwordMismatch': { zh: '两次密码不一致', en: 'Passwords do not match' },
+  'deployAgent.action.show': { zh: '显示', en: 'Show' },
+  'deployAgent.action.hide': { zh: '隐藏', en: 'Hide' },
+  'deployAgent.action.showPassword': { zh: '显示密码', en: 'Show password' },
+  'deployAgent.action.hidePassword': { zh: '隐藏密码', en: 'Hide password' },
+  'deployAgent.label.sshKey': { zh: 'SSH 公钥（可选）', en: 'SSH public key (optional)' },
+  'deployAgent.placeholder.sshKey': { zh: 'ssh-rsa AAA...', en: 'ssh-rsa AAA...' },
+  'deployAgent.mode.single': { zh: '单台部署', en: 'Single deploy' },
+  'deployAgent.mode.batch': { zh: '批量部署', en: 'Batch deploy' },
+  'deployAgent.ipMode.dhcp': { zh: 'DHCP', en: 'DHCP' },
+  'deployAgent.ipMode.static': { zh: '静态 IP', en: 'Static IP' },
+  'deployAgent.label.netmask': { zh: '子网掩码', en: 'Subnet mask' },
+  'deployAgent.placeholder.netmask': { zh: '255.255.255.0', en: '255.255.255.0' },
+  'deployAgent.label.gateway': { zh: '网关', en: 'Gateway' },
+  'deployAgent.placeholder.gateway': { zh: '172.16.85.1', en: '172.16.85.1' },
+  'deployAgent.label.dns': { zh: 'DNS（逗号分隔多个）', en: 'DNS (comma-separated)' },
+  'deployAgent.placeholder.dns': { zh: '172.16.85.1,8.8.8.8', en: '172.16.85.1,8.8.8.8' },
+  'deployAgent.label.agentName': { zh: '智能体名称', en: 'Agent name' },
+  'deployAgent.placeholder.agentName': { zh: 'my-agent-01', en: 'my-agent-01' },
+  'deployAgent.err.ipRequired': { zh: 'IP 必填', en: 'IP is required' },
+  'deployAgent.label.keyBinding': { zh: '网关密钥绑定', en: 'Gateway key binding' },
+  'deployAgent.placeholder.browseKeys': { zh: '-- 浏览密钥 --', en: '-- Browse keys --' },
+  'deployAgent.placeholder.browse': { zh: '-- 浏览 --', en: '-- Browse --' },
+  'deployAgent.label.count': { zh: '数量', en: 'Count' },
+  'deployAgent.label.namePrefix': { zh: '名称前缀', en: 'Name prefix' },
+  'deployAgent.placeholder.namePrefix': { zh: 'agent', en: 'agent' },
+  'deployAgent.label.startIp': { zh: '起始 IP', en: 'Starting IP' },
+  'deployAgent.placeholder.startIp': { zh: '172.16.85.200', en: '172.16.85.200' },
+  'deployAgent.action.generate': { zh: '生成清单', en: 'Generate' },
+  'deployAgent.table.hostname': { zh: '主机名', en: 'Hostname' },
+  'deployAgent.table.ip': { zh: 'IP 地址', en: 'IP address' },
+  'deployAgent.table.keyBinding': { zh: '密钥绑定', en: 'Key binding' },
+  'deployAgent.err.version': { zh: '请选择版本', en: 'Please select a version' },
+  'deployAgent.err.pool': { zh: '请选择资源池', en: 'Please select a resource pool' },
+  'deployAgent.err.name': { zh: '请输入名称', en: 'Please enter a name' },
+  'deployAgent.err.hostnameDup': { zh: '主机名不可重复', en: 'Hostnames must be unique' },
+  'deployAgent.err.ipMissing': { zh: '所有实例的 IP 必填', en: 'All instance IPs are required' },
+  'deployAgent.err.ipDup': { zh: 'IP 地址不可重复', en: 'IP addresses must be unique' },
+  'deployAgent.action.prev': { zh: '上一步', en: 'Previous' },
+  'deployAgent.action.cancel': { zh: '取消', en: 'Cancel' },
+  'deployAgent.action.next': { zh: '下一步', en: 'Next' },
+  'deployAgent.action.submit': { zh: '部署', en: 'Deploy' },
 }
 
 export const useLocaleStore = defineStore('locale', () => {

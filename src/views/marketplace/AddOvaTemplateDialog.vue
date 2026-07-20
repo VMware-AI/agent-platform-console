@@ -217,7 +217,7 @@ function close() {
             :value="type"
             @change="(e: Event) => (type = (e.target as HTMLSelectElement).value as AgentType)"
           >
-            <option value="" disabled>请选择智能体类型</option>
+            <option value="" disabled>{{ locale.t('marketplace.form.typePlaceholder') }}</option>
             <option v-for="opt in TYPE_OPTIONS" :key="opt.value" :value="opt.value">
               {{ locale.t(`marketplace.type.${opt.key}`) }}
             </option>
@@ -261,7 +261,7 @@ function close() {
         <div class="mode-toggle full-row">
           <cds-button action="outline" size="sm" @click="customMode = !customMode">
             <cds-icon :shape="customMode ? 'eye' : 'cog'" size="sm"></cds-icon>
-            {{ customMode ? '默认模式' : '自定义模式（浏览 vCenter 模板）' }}
+            {{ customMode ? locale.t('marketplace.form.modeToggle.default') : locale.t('marketplace.form.modeToggle.custom') }}
           </cds-button>
         </div>
 
@@ -288,9 +288,9 @@ function close() {
             class="full-row"
             :status="vmtError ? 'error' : attempted && !ovaIdValid ? 'error' : 'neutral'"
           >
-            <label>vCenter VM 模板</label>
+            <label>{{ locale.t('marketplace.form.vmTemplateLabel') }}</label>
             <cds-control-message v-if="vmtLoading" status="neutral">
-              <cds-icon shape="spinner" size="sm" aria-hidden="true"></cds-icon> 正在查询 vCenter 模板列表...
+              <cds-icon shape="spinner" size="sm" aria-hidden="true"></cds-icon> {{ locale.t('marketplace.form.vmTemplate.loading') }}
             </cds-control-message>
             <select
               :value="ovaIdentifier"
@@ -298,14 +298,14 @@ function close() {
               @change="(e: Event) => (ovaIdentifier = (e.target as HTMLSelectElement).value)"
             >
               <option value="">
-                {{ !resourcePoolId ? '请先选择资源池' : vmtLoading ? '查询中...' : vmtError ? 'vCenter 不可达' : vmTemplates.length === 0 ? '无可用模板' : '选择 VM 模板' }}
+                {{ !resourcePoolId ? locale.t('marketplace.form.vmTemplate.pickPool') : vmtLoading ? locale.t('marketplace.form.vmTemplate.loadingShort') : vmtError ? locale.t('marketplace.form.vmTemplate.unreachable') : vmTemplates.length === 0 ? locale.t('marketplace.form.vmTemplate.empty') : locale.t('marketplace.form.vmTemplate.placeholder') }}
               </option>
               <option v-for="tpl in vmTemplates" :key="tpl.name" :value="tpl.name">
                 {{ tpl.name }}
               </option>
             </select>
             <cds-control-message v-if="vmtError" status="error">
-              vCenter 不可达
+              {{ locale.t('marketplace.form.vmTemplate.unreachable') }}
             </cds-control-message>
           </cds-select>
           <!-- vCenter 不可达时退回手动输入 -->
@@ -314,17 +314,17 @@ function close() {
             class="full-row"
             :status="attempted && !ovaIdValid ? 'error' : 'neutral'"
           >
-            <label>OVA 标识符</label>
+            <label>{{ locale.t('marketplace.form.ovaIdentifier') }}</label>
             <input
               :value="ovaIdentifier"
-              placeholder="手动输入 VM 模板名称（如 dlvmova）"
+              :placeholder="locale.t('marketplace.form.ovaIdentifierFallbackPlaceholder')"
               @input="(e: Event) => (ovaIdentifier = (e.target as HTMLInputElement).value)"
             />
           </cds-input>
         </template>
 
         <!-- 描述 -->
-        <cds-input
+        <cds-textarea
           class="full-row"
           :status="attempted && !descValid ? 'error' : 'neutral'"
         >
@@ -337,10 +337,10 @@ function close() {
           <cds-control-message v-if="attempted && !descValid" status="error">
             {{ locale.t('marketplace.form.error.name') }}
           </cds-control-message>
-        </cds-input>
+        </cds-textarea>
 
         <!-- 工具 -->
-        <cds-input
+        <cds-textarea
           class="full-row"
           :status="attempted && !toolsValid ? 'error' : 'neutral'"
         >
@@ -349,16 +349,16 @@ function close() {
             :value="toolsText"
             rows="4"
             @input="(e: Event) => (toolsText = (e.target as HTMLTextAreaElement).value)"
-            placeholder="每行一条"
+            :placeholder="locale.t('marketplace.form.linePlaceholder')"
           ></textarea>
-          <span class="field-hint">每行仅填写一条内容</span>
+          <span class="field-hint">{{ locale.t('marketplace.form.lineHint') }}</span>
           <cds-control-message v-if="attempted && !toolsValid" status="error">
             {{ locale.t('marketplace.form.error.name') }}
           </cds-control-message>
-        </cds-input>
+        </cds-textarea>
 
         <!-- 场景 -->
-        <cds-input
+        <cds-textarea
           class="full-row"
           :status="attempted && !scenariosValid ? 'error' : 'neutral'"
         >
@@ -367,16 +367,16 @@ function close() {
             :value="scenariosText"
             rows="4"
             @input="(e: Event) => (scenariosText = (e.target as HTMLTextAreaElement).value)"
-            placeholder="每行一条"
+            :placeholder="locale.t('marketplace.form.linePlaceholder')"
           ></textarea>
-          <span class="field-hint">每行仅填写一条内容</span>
+          <span class="field-hint">{{ locale.t('marketplace.form.lineHint') }}</span>
           <cds-control-message v-if="attempted && !scenariosValid" status="error">
             {{ locale.t('marketplace.form.error.name') }}
           </cds-control-message>
-        </cds-input>
+        </cds-textarea>
 
         <!-- 技能 -->
-        <cds-input
+        <cds-textarea
           class="full-row"
           :status="attempted && !skillsValid ? 'error' : 'neutral'"
         >
@@ -385,13 +385,13 @@ function close() {
             :value="skillsText"
             rows="4"
             @input="(e: Event) => (skillsText = (e.target as HTMLTextAreaElement).value)"
-            placeholder="每行一条"
+            :placeholder="locale.t('marketplace.form.linePlaceholder')"
           ></textarea>
-          <span class="field-hint">每行仅填写一条内容</span>
+          <span class="field-hint">{{ locale.t('marketplace.form.lineHint') }}</span>
           <cds-control-message v-if="attempted && !skillsValid" status="error">
             {{ locale.t('marketplace.form.error.name') }}
           </cds-control-message>
-        </cds-input>
+        </cds-textarea>
       </form>
     </cds-modal-content>
     <cds-modal-actions>
@@ -414,6 +414,9 @@ function close() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+  /* Indent every parameter inward from the modal edge so the field column
+     no longer butts against the dialog title on the left. */
+  padding-left: 16px;
 }
 .tpl-form .full-row {
   grid-column: 1 / -1;
@@ -439,11 +442,26 @@ function close() {
   background: var(--cds-alias-object-interaction-background-hover, #f0f0f0);
 }
 
-.field-label { font-size: 14px; font-weight: 400; color: #333; }
-.required { color: #ef4444; }
-.field-hint { display: block; font-size: 12px; color: #86909c; margin-top: 4px; line-height: 1.4; }
-.modal-title { font-size: 16px !important; font-weight: 600 !important; color: #1d2129 !important; }
-.mode-hint { font-size: 12px; color: #86909c; }
-.tpl-form { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 14px; color: #333; }
+.field-label { font-size: 14px; font-weight: 400; color: var(--cds-global-typography-color-500, #333); }
+.required { color: var(--cds-alias-status-danger, #ef4444); }
+.field-hint { display: block; font-size: 12px; color: var(--cds-global-typography-color-300, #86909c); margin-top: 4px; line-height: 1.4; }
+.modal-title { font-size: 16px !important; font-weight: 600 !important; color: var(--cds-global-typography-color-500, #1d2129) !important; }
+.mode-hint { font-size: 12px; color: var(--cds-global-typography-color-300, #86909c); }
+.tpl-form { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 14px; color: var(--cds-global-typography-color-500, #333); }
+
+/* Make multi-line fields (description / tools / scenarios / skills) span the
+   full form width and let the user drag the bottom-right corner to resize.
+   cds-textarea defaults to `shrink` width and CDS global styles may clamp
+   resize to none; both are overridden here so the textarea behaves like a
+   normal multi-line input. */
+.tpl-form cds-textarea,
+.tpl-form cds-textarea > textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.tpl-form cds-textarea > textarea {
+  resize: vertical;
+  min-height: 64px;
+}
 
 </style>

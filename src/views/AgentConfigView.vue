@@ -276,6 +276,7 @@ function formatTimestamp(value: string): string {
         </button>
       </div>
 
+      <div class="grid-card">
       <cds-grid
         border="row"
         column-layout="flex"
@@ -425,6 +426,7 @@ function formatTimestamp(value: string): string {
           </div>
         </cds-grid-footer>
       </cds-grid>
+      </div>
 
       <!-- Column text-search dropdown: 与 ModelGatewayView 保持一致,
            cds-input 直接监听 input 事件,每次按键即过滤、无"应用"按钮。 -->
@@ -597,13 +599,33 @@ function formatTimestamp(value: string): string {
   cursor: not-allowed;
   opacity: 0.5;
 }
+/* Wrap the cds-grid in a card that owns the horizontal scrollbar —
+   same pattern as ModelGatewayView / AgentListView / SupplierModelView.
+   The card scrolls independently of the page header / toolbar above it,
+   so the title stays put while the table extends.
+
+   Don't grow vertically (`flex: 0 0 auto`): the parent `.content-card`
+   already grows to fill the page, and if this card grew too, the
+   horizontal scrollbar would drop to the bottom of the page instead
+   of sitting right under the table. */
+.agent-config-page .grid-card {
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+  border-radius: 6px;
+  background: var(--cds-alias-object-container-background, #fff);
+  flex: 0 0 auto;
+}
 .agent-config-page cds-grid {
   display: block;
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 760px;
   width: 100%;
-  overflow: auto;
+  max-width: 100%;
+  min-width: 0;
+  /* min-width: 760px reserves the table's natural width (3 columns +
+     row actions); the `.grid-card` wrapper (overflow-x: auto) provides
+     the horizontal scrollbar when the viewport drops below this width. */
+  min-width: 760px;
 }
 .name-cell {
   display: flex;

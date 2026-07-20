@@ -28,7 +28,7 @@ watch(() => locale.locale, syncTitle)
 <template>
   <div class="shell" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
     <header class="topbar">
-      <RouterLink to="/overview" class="brand" aria-label="返回主页">
+      <RouterLink to="/overview" class="brand" :aria-label="locale.t('nav.home')">
         <BrandLogo :size="38" />
         <strong>{{ locale.t('app.brand') }}</strong>
       </RouterLink>

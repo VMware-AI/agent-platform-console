@@ -26,12 +26,22 @@ function close() {
 function formatCost(s: ModelSpec): string {
   const lp = s.litellmParams
   const lines: string[] = []
-  if (lp.inputCostPerToken != null) lines.push(`输入 ${lp.inputCostPerToken}/token`)
-  if (lp.outputCostPerToken != null) lines.push(`输出 ${lp.outputCostPerToken}/token`)
+  if (lp.inputCostPerToken != null)
+    lines.push(locale.t('supplier.viewModal.cost.input').replace('{v}', String(lp.inputCostPerToken)))
+  if (lp.outputCostPerToken != null)
+    lines.push(locale.t('supplier.viewModal.cost.output').replace('{v}', String(lp.outputCostPerToken)))
   if (lp.cacheReadInputTokenCost != null)
-    lines.push(`缓存读 ${lp.cacheReadInputTokenCost}/token`)
+    lines.push(
+      locale
+        .t('supplier.viewModal.cost.cacheRead')
+        .replace('{v}', String(lp.cacheReadInputTokenCost)),
+    )
   if (lp.cacheCreationInputTokenCost != null)
-    lines.push(`缓存写 ${lp.cacheCreationInputTokenCost}/token`)
+    lines.push(
+      locale
+        .t('supplier.viewModal.cost.cacheWrite')
+        .replace('{v}', String(lp.cacheCreationInputTokenCost)),
+    )
   return lines.length ? lines.join('\n') : '—'
 }
 
@@ -41,10 +51,11 @@ function formatCost(s: ModelSpec): string {
 function formatLimits(s: ModelSpec): string {
   const lp = s.litellmParams
   const parts: string[] = []
-  if (lp.tpm) parts.push(`tpm ${lp.tpm}`)
-  if (lp.rpm) parts.push(`rpm ${lp.rpm}`)
-  if (lp.maxBudget) parts.push(`maxBudget ${lp.maxBudget}`)
-  if (lp.budgetDuration) parts.push(`budgetDuration ${lp.budgetDuration}`)
+  if (lp.tpm) parts.push(locale.t('supplier.viewModal.limit.tpm').replace('{v}', String(lp.tpm)))
+  if (lp.rpm) parts.push(locale.t('supplier.viewModal.limit.rpm').replace('{v}', String(lp.rpm)))
+  if (lp.maxBudget) parts.push(locale.t('supplier.viewModal.limit.maxBudget').replace('{v}', String(lp.maxBudget)))
+  if (lp.budgetDuration)
+    parts.push(locale.t('supplier.viewModal.limit.budgetDuration').replace('{v}', String(lp.budgetDuration)))
   return parts.length ? parts.join('\n') : '—'
 }
 

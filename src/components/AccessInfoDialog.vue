@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useToast } from '@/composables/useToast'
+import { useLocaleStore } from '@/stores/locale'
 import type { Agent } from '@/types/agents'
 
 const props = defineProps<{
@@ -16,6 +17,7 @@ const emit = defineEmits<{
 }>()
 
 const toast = useToast()
+const locale = useLocaleStore()
 
 const showPassword = ref(false)
 const keyExpanded = ref(true)
@@ -28,13 +30,62 @@ const ip = computed(() => creds.value?.ip || '')
 const username = computed(() => creds.value?.username || '')
 const passwordHint = computed(() => creds.value?.passwordHint || '')
 
+// Field-keyed metadata for copy actions. Each entry pairs the i18n keys for
+// (1) the label rendered in the toasts / aria, (2) the title shown on the
+// cds-button-action's hover, and (3) the label used as the `{label}` token
+// inside the per-field toast confirmation.
+type CopyKey =
+  | 'keyName'
+  | 'user'
+  | 'password'
+  | 'ssh'
+  | 'ip'
+
+const copyMeta: Record<
+  CopyKey,
+  { label: string; title: string; lineKey: string; titleKey: string }
+> = {
+  keyName: {
+    label: locale.t('accessInfo.section.key'),
+    title: locale.t('accessInfo.copy.keyTitle'),
+    lineKey: 'accessInfo.line.keyName',
+    titleKey: 'accessInfo.copy.keyTitle',
+  },
+  user: {
+    label: locale.t('accessInfo.osUser'),
+    title: locale.t('accessInfo.copy.userTitle'),
+    lineKey: 'accessInfo.line.osUser',
+    titleKey: 'accessInfo.copy.userTitle',
+  },
+  password: {
+    label: locale.t('accessInfo.password'),
+    title: locale.t('accessInfo.copy.passwordTitle'),
+    lineKey: 'accessInfo.line.password',
+    titleKey: 'accessInfo.copy.passwordTitle',
+  },
+  ssh: {
+    label: locale.t('accessInfo.sshCmd'),
+    title: locale.t('accessInfo.copy.sshTitle'),
+    lineKey: 'accessInfo.line.ssh',
+    titleKey: 'accessInfo.copy.sshTitle',
+  },
+  ip: {
+    label: locale.t('accessInfo.ip'),
+    title: locale.t('accessInfo.copy.ipTitle'),
+    lineKey: 'accessInfo.line.ip',
+    titleKey: 'accessInfo.copy.ipTitle',
+  },
+}
+
 function toggleSection(section: 'key' | 'creds') {
   if (section === 'key') keyExpanded.value = !keyExpanded.value
   else credsExpanded.value = !credsExpanded.value
 }
 
-async function copyText(text: string, label: string) {
+async function copyText(text: string, key: CopyKey) {
   if (!text) return
+  const meta = copyMeta[key]
+  const okMsg = `${meta.label} ${locale.t('accessInfo.copy.okSuffix')}`
   const fallbackCopy = () => {
     const ta = document.createElement('textarea')
     ta.value = text
@@ -51,27 +102,34 @@ async function copyText(text: string, label: string) {
     } else {
       fallbackCopy()
     }
-    toast.success(`${label} 已复制`)
+    toast.success(okMsg)
   } catch {
     // Clipboard API can throw on HTTP origins — fall back to execCommand
-    try { fallbackCopy(); toast.success(`${label} 已复制`) }
-    catch { toast.error('复制失败，请手动选择文本复制') }
+    try {
+      fallbackCopy()
+      toast.success(okMsg)
+    } catch {
+      toast.error(locale.t('accessInfo.copyFailHint'))
+    }
   }
 }
 
 /** Build a formatted multi-line credential block and copy all at once. */
 async function copyAll() {
+  const line = (key: string, value: string) =>
+    locale.t(key).replace('{value}', value)
   const lines: string[] = []
-  if (apiKeyName.value) lines.push(`密钥名称: ${apiKeyName.value}`)
-  if (username.value) lines.push(`OS账户: ${username.value}`)
-  if (passwordHint.value) lines.push(`登录密码: ${passwordHint.value}`)
-  if (sshCmd.value) lines.push(`SSH 连接: ${sshCmd.value}`)
-  if (ip.value) lines.push(`IP 地址: ${ip.value}`)
+  if (apiKeyName.value) lines.push(line(copyMeta.keyName.lineKey, apiKeyName.value))
+  if (username.value) lines.push(line(copyMeta.user.lineKey, username.value))
+  if (passwordHint.value) lines.push(line(copyMeta.password.lineKey, passwordHint.value))
+  if (sshCmd.value) lines.push(line(copyMeta.ssh.lineKey, sshCmd.value))
+  if (ip.value) lines.push(line(copyMeta.ip.lineKey, ip.value))
   if (!lines.length) {
-    toast.error('无凭据可复制')
+    toast.error(locale.t('accessInfo.noCreds'))
     return
   }
   const text = lines.join('\n')
+  const okMsg = locale.t('accessInfo.copyAllOk')
   const fallbackCopy = () => {
     const ta = document.createElement('textarea')
     ta.value = text
@@ -88,10 +146,14 @@ async function copyAll() {
     } else {
       fallbackCopy()
     }
-    toast.success('全部凭据已复制')
+    toast.success(okMsg)
   } catch {
-    try { fallbackCopy(); toast.success('全部凭据已复制') }
-    catch { toast.error('复制失败，请手动选择文本复制') }
+    try {
+      fallbackCopy()
+      toast.success(okMsg)
+    } catch {
+      toast.error(locale.t('accessInfo.copyFailHint'))
+    }
   }
 }
 </script>
@@ -100,7 +162,7 @@ async function copyAll() {
   <cds-modal :hidden="!props.open" size="md" @closeChange="emit('close')">
     <cds-modal-header>
       <h2 cds-text="title" class="modal-title">
-        {{ props.agent?.name || '' }} 访问信息
+        {{ locale.t('accessInfo.title').replace('{name}', props.agent?.name || '') }}
       </h2>
     </cds-modal-header>
 
@@ -108,7 +170,7 @@ async function copyAll() {
       <!-- Loading -->
       <div v-if="loading" class="access-loading">
         <cds-icon shape="spinner" size="lg" class="spin"></cds-icon>
-        <p>正在从 vCenter 拉取虚拟机凭据...</p>
+        <p>{{ locale.t('accessInfo.loading') }}</p>
       </div>
 
       <!-- Error -->
@@ -116,7 +178,7 @@ async function copyAll() {
         <cds-alert status="danger">
           <cds-alert-content>
             <p>{{ error }}</p>
-            <cds-button size="sm" @click="emit('retry')">重试</cds-button>
+            <cds-button size="sm" @click="emit('retry')">{{ locale.t('common.retry') }}</cds-button>
           </cds-alert-content>
         </cds-alert>
       </div>
@@ -137,19 +199,19 @@ async function copyAll() {
               size="sm"
               class="accordion-arrow"
             ></cds-icon>
-            <span class="accordion-label">密钥信息</span>
+            <span class="accordion-label">{{ locale.t('accessInfo.section.key') }}</span>
           </button>
           <div v-show="keyExpanded" class="accordion-body">
             <div class="cred-row">
-              <label>密钥名称</label>
+              <label>{{ locale.t('agents.col.key') }}</label>
               <div class="cred-value">
                 <span>{{ apiKeyName || '—' }}</span>
                 <cds-button-action
                   v-if="apiKeyName"
                   shape="copy"
-                  title="复制密钥名称"
-                  aria-label="复制密钥名称"
-                  @click="copyText(apiKeyName, '密钥名称')"
+                  :title="copyMeta.keyName.title"
+                  :aria-label="copyMeta.keyName.title"
+                  @click="copyText(apiKeyName, 'keyName')"
                 ></cds-button-action>
               </div>
             </div>
@@ -170,72 +232,72 @@ async function copyAll() {
               size="sm"
               class="accordion-arrow"
             ></cds-icon>
-            <span class="accordion-label">虚拟机访问凭据</span>
+            <span class="accordion-label">{{ locale.t('accessInfo.section.creds') }}</span>
           </button>
           <div v-show="credsExpanded" class="accordion-body">
             <!-- Run-as User -->
             <div class="cred-row">
-              <label>OS账户</label>
+              <label>{{ locale.t('accessInfo.osUser') }}</label>
               <div class="cred-value">
                 <span>{{ username || '—' }}</span>
                 <cds-button-action
                   v-if="username"
                   shape="copy"
-                  title="复制运行账户"
-                  aria-label="复制运行账户"
-                  @click="copyText(username, '运行账户')"
+                  :title="copyMeta.user.title"
+                  :aria-label="copyMeta.user.title"
+                  @click="copyText(username, 'user')"
                 ></cds-button-action>
               </div>
             </div>
 
             <!-- Password -->
             <div class="cred-row">
-              <label>登录密码</label>
+              <label>{{ locale.t('accessInfo.password') }}</label>
               <div class="cred-value">
                 <span class="pw-text">{{ showPassword ? passwordHint : '••••••••' }}</span>
                 <cds-button-action
                   v-if="true"
                   :shape="showPassword ? 'eye-hide' : 'eye'"
-                  :title="showPassword ? '隐藏密码' : '显示密码'"
-                  :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+                  :title="showPassword ? locale.t('changePassword.action.hidePwd') : locale.t('changePassword.action.showPwd')"
+                  :aria-label="showPassword ? locale.t('changePassword.action.hidePwd') : locale.t('changePassword.action.showPwd')"
                   @click="showPassword = !showPassword"
                 ></cds-button-action>
                 <cds-button-action
                   v-if="true"
                   shape="copy"
-                  title="复制密码"
-                  aria-label="复制密码"
-                  @click="copyText(passwordHint, '登录密码')"
+                  :title="copyMeta.password.title"
+                  :aria-label="copyMeta.password.title"
+                  @click="copyText(passwordHint, 'password')"
                 ></cds-button-action>
               </div>
             </div>
 
             <!-- SSH Command -->
             <div class="cred-row">
-              <label>SSH 连接</label>
+              <label>{{ locale.t('accessInfo.sshCmd') }}</label>
               <div class="cred-value">
                 <code>{{ sshCmd || '—' }}</code>
                 <cds-button-action
                   v-if="sshCmd"
                   shape="copy"
-                  title="复制 SSH 命令"
-                  aria-label="复制 SSH 命令"
-                  @click="copyText(sshCmd, 'SSH 连接')"
+                  :title="copyMeta.ssh.title"
+                  :aria-label="copyMeta.ssh.title"
+                  @click="copyText(sshCmd, 'ssh')"
                 ></cds-button-action>
               </div>
             </div>
 
             <!-- IP -->
             <div class="cred-row">
-              <label>IP 地址</label>
+              <label>{{ locale.t('accessInfo.ip') }}</label>
               <div class="cred-value">
                 <span class="mono">{{ ip || '—' }}</span>
                 <cds-button-action
                   v-if="ip"
                   shape="copy"
-                  title="复制 IP 地址"
-                  aria-label="复制 IP 地址"
-                  @click="copyText(ip, 'IP 地址')"
+                  :title="copyMeta.ip.title"
+                  :aria-label="copyMeta.ip.title"
+                  @click="copyText(ip, 'ip')"
                 ></cds-button-action>
               </div>
             </div>
@@ -244,7 +306,7 @@ async function copyAll() {
             <div class="copy-all-row">
               <cds-button size="sm" @click="copyAll">
                 <cds-icon shape="copy" size="sm" aria-hidden="true"></cds-icon>
-                一键复制全部凭据
+                {{ locale.t('accessInfo.copyAll') }}
               </cds-button>
             </div>
           </div>
@@ -253,14 +315,14 @@ async function copyAll() {
         <!-- Warning -->
         <cds-alert status="warning" class="access-warning">
           <cds-alert-content>
-            密码由部署时设定，平台不存储明文。如遗忘请通过 vCenter Console 重置。
+            {{ locale.t('accessInfo.passwordHint') }}
           </cds-alert-content>
         </cds-alert>
       </div>
     </cds-modal-content>
 
     <cds-modal-actions>
-      <cds-button action="outline" @click="emit('close')">关闭</cds-button>
+      <cds-button action="outline" @click="emit('close')">{{ locale.t('common.close') }}</cds-button>
     </cds-modal-actions>
   </cds-modal>
 </template>
@@ -280,7 +342,7 @@ async function copyAll() {
 }
 .access-loading p {
   margin-top: 16px;
-  color: #86909c;
+  color: var(--cds-global-typography-color-300, #86909c);
   font-size: 14px;
 }
 .spin {
@@ -297,7 +359,7 @@ async function copyAll() {
 
 /* ---------- Accordion ---------- */
 .accordion-section {
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--cds-alias-object-border-color, #e5e6eb);
   border-radius: 6px;
   margin-bottom: 12px;
   overflow: hidden;
@@ -308,7 +370,7 @@ async function copyAll() {
   gap: 8px;
   width: 100%;
   padding: 12px 16px;
-  background: #f7f8fa;
+  background: var(--cds-alias-object-app-background, #f7f8fa);
   border: none;
   cursor: pointer;
   font: inherit;
@@ -316,17 +378,17 @@ async function copyAll() {
   transition: background 0.15s;
 }
 .accordion-trigger:hover {
-  background: #eef0f4;
+  background: var(--cds-alias-object-app-background, #eef0f4);
 }
 .accordion-arrow {
   flex-shrink: 0;
   transition: transform 0.2s;
-  color: #86909c;
+  color: var(--cds-global-typography-color-300, #86909c);
 }
 .accordion-label {
   font-size: 14px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--cds-global-typography-color-500, #1d2129);
 }
 .accordion-body {
   padding: 4px 16px 12px;
@@ -337,7 +399,7 @@ async function copyAll() {
   display: flex;
   align-items: center;
   padding: 10px 0;
-  border-bottom: 1px solid #f2f3f5;
+  border-bottom: 1px solid var(--cds-alias-object-border-color, #f2f3f5);
 }
 .cred-row:last-of-type {
   border-bottom: none;
@@ -346,7 +408,7 @@ async function copyAll() {
   flex: 0 0 80px;
   font-size: 14px;
   font-weight: 500;
-  color: #4e5969;
+  color: var(--cds-global-typography-color-400, #4e5969);
 }
 .cred-value {
   flex: 1;
@@ -356,7 +418,7 @@ async function copyAll() {
   min-width: 0;
 }
 .cred-value code {
-  background: #f2f3f5;
+  background: var(--cds-alias-object-app-background, #f2f3f5);
   padding: 4px 10px;
   border-radius: 4px;
   font-size: 13px;

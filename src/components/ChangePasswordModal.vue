@@ -57,7 +57,7 @@ const newPassword = ref('')
 const confirmPassword = ref('')
 const submitting = ref(false)
 
-const complexity = computed(() => passwordMeets(newPassword.value))
+const complexity = computed(() => passwordMeets(newPassword.value, locale.t))
 const mismatch = computed(
   () => confirmPassword.value.length > 0 && newPassword.value !== confirmPassword.value,
 )

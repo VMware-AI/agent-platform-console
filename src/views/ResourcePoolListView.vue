@@ -441,9 +441,10 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
       {{ locale.t('resources.error') }}
     </cds-alert>
 
-    <cds-grid :border="'row'" :column-layout="'flex'" role="grid" :aria-label="locale.t('resources.title')">
-      <!-- 7 columns; widths sum to 100% -->
-      <cds-grid-column :width="'12%'">
+    <div class="grid-card">
+      <cds-grid :border="'row'" :column-layout="'flex'" role="grid" :aria-label="locale.t('resources.title')">
+        <!-- 7 columns; widths sum to 100% -->
+        <cds-grid-column :width="'12%'">
         <div class="col-head">
           <span>{{ locale.t('resources.col.name') }}</span>
           <span class="col-head-actions">
@@ -685,6 +686,7 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
         </div>
       </cds-grid-footer>
     </cds-grid>
+    </div>
 
     <!-- Column text-search dropdown (matches AgentListView's pattern: a bare
          cds-input with a typing listener — no apply/clear buttons, the filter
@@ -755,11 +757,29 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
   min-width: 0;
 }
 
+/* Wrap the cds-grid (and its error alert) in a card that owns the
+   horizontal scrollbar — same pattern as ModelGatewayView. The card
+   scrolls independently of the page header / toolbar / pagination
+   above it, so the title stays put while the table extends. */
+.resource-pool-list .grid-card {
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+  border-radius: 6px;
+  background: var(--cds-alias-object-container-background, #fff);
+  flex-shrink: 0;
+}
+
 .resource-pool-list :deep(cds-grid) {
   display: block;
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  /* min-width: 1180px reserves the table's natural width; the
+     `.grid-card` wrapper (overflow-x: auto) provides the horizontal
+     scrollbar when the viewport drops below this width. */
+  min-width: 1180px;
 }
 
 .page-head {
@@ -923,6 +943,13 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
 
 .status-badge {
   min-width: 72px;
+  /* Force white badge text in both light and dark themes. cds-badge's
+     `:host { --color: #fff }` default is fine for success/neutral, but
+     `:host([status=warning])` overrides to a near-black `#21333b` —
+     reads as black text and clashes with the rest. The class selector
+     beats the attribute selector inside :host, so this wins for every
+     status. */
+  --color: #fff;
 }
 .status-badge :deep(.badge) {
   padding: 4px 12px;
