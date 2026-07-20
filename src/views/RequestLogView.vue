@@ -294,7 +294,7 @@ function statusTone(code: number): 'success' | 'warning' | 'danger' | 'neutral' 
   return 'neutral'
 }
 
-function detailText(detail: string | null): string {
+function detailText(detail: string | null | undefined): string {
   if (!detail) return ''
   try {
     return JSON.stringify(JSON.parse(detail), null, 2)
