@@ -135,6 +135,12 @@ make docker-run
 # 或指向 docker-compose 中名为 backend 的服务
 BACKEND_BASE_URL=http://backend:8080 make docker-run
 
+# 启用 HTTPS(自动 -e SSL_ENABLE=true,需要 SSL_CERT_HOST_PATH / SSL_KEY_HOST_PATH)
+make docker-run-ssl
+
+# 一键生成本地自签名证书(开发 / 内网)
+make gen-cert HOST=console.example.com
+
 # 实时跟踪日志
 make docker-logs
 
@@ -142,7 +148,75 @@ make docker-logs
 make docker-rebuild
 ```
 
-构建阶段使用 `node:24-alpine`,运行阶段使用 `nginx:1.31.2`(基于 Debian trixie)。容器启动时,`docker/entrypoint.sh` 通过 `envsubst` 将 `BACKEND_BASE_URL` 注入到 `docker/nginx.conf.template`,生成 `/etc/nginx/conf.d/default.conf`。模板中**仅**该变量会被替换,nginx 自身的运行时变量(`$uri`、`$host` 等)原样保留。
+构建阶段使用 `node:24-alpine`,运行阶段使用 `nginx:1.31.2`(基于 Debian trixie)。容器启动时,`docker/entrypoint.sh` 通过 `envsubst` 把 `${BACKEND_BASE_URL}`、以及 TLS 开关对应的 `${SSL_LISTEN}` / `${SSL_CERTS}` / `${HTTP_REDIRECT}` 注入到 `docker/nginx.conf.template`,生成 `/etc/nginx/conf.d/default.conf`。除这 4 个白名单变量外,nginx 自身的运行时变量(`$uri`、`$host` 等)原样保留。
+
+> 需要启用 HTTPS / 自动生成证书?见下方[启用 HTTPS](#启用-https可选)小节。
+
+#### 启用 HTTPS(可选)
+
+**默认行为(`make docker-run`):纯 HTTP,监听 80,无证书、无 TLS。** 与本仓库历史行为完全一致。
+
+要开启 TLS,需显式设置 `SSL_ENABLE=true`(同时给出证书和私钥路径)。`make docker-run-ssl` 会自动帮你设上 `SSL_ENABLE=true`,所以下面两种方式都开箱即用:
+
+**方式 A:用自己的证书(CA 签发或已有 PEM)**
+
+```bash
+make docker-run-ssl \
+  SSL_CERT_HOST_PATH=$HOME/certs/fullchain.pem \
+  SSL_KEY_HOST_PATH=$HOME/certs/privkey.pem
+```
+
+**方式 B:用自签名证书快速跑通(开发 / 内网)**
+
+仓库里有个一键生成的脚本 `docker/gen-cert.sh`,它会调用本机的 `openssl` 生成一对自签名证书(默认输出到 `docker/certs/tls.crt` 和 `docker/certs/tls.key`):
+
+```bash
+# 用域名
+make gen-cert HOST=console.example.com
+
+# 或用 IP(IPv4 / IPv6 都行)
+make gen-cert HOST=192.168.1.42
+make gen-cert HOST=fe80::1
+
+# 自定义输出目录 / 有效期
+make gen-cert HOST=console.local OUT_DIR=/tmp/certs CERT_DAYS=30
+```
+
+证书生成后会直接落到 `docker/certs/`,此时 `docker-run-ssl` 会自动找到这两个文件,**无需再传 `SSL_CERT_HOST_PATH` / `SSL_KEY_HOST_PATH`**:
+
+```bash
+make docker-run-ssl
+```
+
+> 自签名证书浏览器会报"连接不被信任",本地/内网开发忽略即可;生产请用 CA 签发的证书。
+
+**方式 C:直接 docker run**
+
+`SSL_ENABLE=true` 时,容器会校验 `SSL_CERT_PATH` / `SSL_KEY_PATH` 都存在并指向真实文件,否则启动失败。80 端口默认 301 跳转到 `https://$host$request_uri`。
+
+```bash
+docker run -d --rm \
+  --name agent-platform-console \
+  -p 80:80 -p 443:443 \
+  -e BACKEND_BASE_URL=http://backend:8080 \
+  -e SSL_ENABLE=true \
+  -e SSL_CERT_PATH=/etc/nginx/ssl/tls.crt \
+  -e SSL_KEY_PATH=/etc/nginx/ssl/tls.key \
+  -v $HOME/certs/fullchain.pem:/etc/nginx/ssl/tls.crt:ro \
+  -v $HOME/certs/privkey.pem:/etc/nginx/ssl/tls.key:ro \
+  quay.io/vmware-ai/agent-platform-console:<TAG>
+```
+
+环境变量汇总:
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `SSL_ENABLE` | `false` | 主开关。设 `true` 才校验证书并启用 TLS。 |
+| `SSL_CERT_PATH` | 空 | 容器内**证书**路径,`SSL_ENABLE=true` 时必填且文件必须存在。 |
+| `SSL_KEY_PATH` | 空 | 容器内**私钥**路径,同上。 |
+| `SSL_REDIRECT` | `true` | `true` 时把 80 上所有请求 301 到 https。前端已有 TLS 终结反代时设 `false`。 |
+
+如果只设了 `SSL_CERT_PATH` / `SSL_KEY_PATH` 但**没设** `SSL_ENABLE=true`,容器会以 HTTP-only 启动,并在日志里提示证书路径被忽略,避免你以为证书生效了实际却没生效。
 
 ### License
 
@@ -271,6 +345,12 @@ make docker-run
 # Or point at a docker-compose service named `backend`
 BACKEND_BASE_URL=http://backend:8080 make docker-run
 
+# Run with TLS (auto-sets SSL_ENABLE=true; needs SSL_CERT_HOST_PATH / SSL_KEY_HOST_PATH)
+make docker-run-ssl
+
+# Generate a self-signed cert for dev / LAN
+make gen-cert HOST=console.example.com
+
 # Tail logs
 make docker-logs
 
@@ -278,7 +358,75 @@ make docker-logs
 make docker-rebuild
 ```
 
-The image is built on `node:24-alpine` and runs on `nginx:1.31.2` (Debian trixie base). At container start, `docker/entrypoint.sh` runs `envsubst` against `docker/nginx.conf.template` and writes the rendered file to `/etc/nginx/conf.d/default.conf`. Only `BACKEND_BASE_URL` is substituted; every nginx runtime variable (`$uri`, `$host`, …) is preserved verbatim.
+The image is built on `node:24-alpine` and runs on `nginx:1.31.2` (Debian trixie base). At container start, `docker/entrypoint.sh` runs `envsubst` against `docker/nginx.conf.template` and writes the rendered file to `/etc/nginx/conf.d/default.conf`. Four tokens are substituted: `${BACKEND_BASE_URL}` plus — when TLS is on — `${SSL_LISTEN}`, `${SSL_CERTS}`, and `${HTTP_REDIRECT}`. Every other nginx runtime variable (`$uri`, `$host`, …) is preserved verbatim.
+
+> Need HTTPS / self-signed certs? See [Enabling HTTPS](#enabling-https-optional) below.
+
+#### Enabling HTTPS (optional)
+
+**Default behaviour (`make docker-run`): plain HTTP on :80, no cert, no TLS** — identical to the historical behaviour of this image.
+
+To turn TLS on, set `SSL_ENABLE=true` explicitly (along with the cert/key paths). `make docker-run-ssl` sets `SSL_ENABLE=true` automatically, so both forms below are turn-key:
+
+**Option A — bring your own cert (CA-signed or existing PEM):**
+
+```bash
+make docker-run-ssl \
+  SSL_CERT_HOST_PATH=$HOME/certs/fullchain.pem \
+  SSL_KEY_HOST_PATH=$HOME/certs/privkey.pem
+```
+
+**Option B — self-signed cert for dev / LAN:**
+
+`docker/gen-cert.sh` shells out to your local `openssl` and writes a self-signed cert/key pair (default output: `docker/certs/tls.crt` and `docker/certs/tls.key`):
+
+```bash
+# by domain
+make gen-cert HOST=console.example.com
+
+# or by IP (IPv4 / IPv6)
+make gen-cert HOST=192.168.1.42
+make gen-cert HOST=fe80::1
+
+# custom output dir / validity
+make gen-cert HOST=console.local OUT_DIR=/tmp/certs CERT_DAYS=30
+```
+
+Once the files are in `docker/certs/`, `docker-run-ssl` picks them up automatically:
+
+```bash
+make docker-run-ssl
+```
+
+> Browsers will warn that the self-signed cert is untrusted — fine for dev. Use a CA-signed certificate in production (e.g. via Let's Encrypt / certbot).
+
+**Option C — direct docker run:**
+
+When `SSL_ENABLE=true`, the entrypoint verifies `SSL_CERT_PATH` / `SSL_KEY_PATH` both point to real files; otherwise the container fails to start. :80 is 301-redirected to `https://$host$request_uri` by default.
+
+```bash
+docker run -d --rm \
+  --name agent-platform-console \
+  -p 80:80 -p 443:443 \
+  -e BACKEND_BASE_URL=http://backend:8080 \
+  -e SSL_ENABLE=true \
+  -e SSL_CERT_PATH=/etc/nginx/ssl/tls.crt \
+  -e SSL_KEY_PATH=/etc/nginx/ssl/tls.key \
+  -v $HOME/certs/fullchain.pem:/etc/nginx/ssl/tls.crt:ro \
+  -v $HOME/certs/privkey.pem:/etc/nginx/ssl/tls.key:ro \
+  quay.io/vmware-ai/agent-platform-console:<TAG>
+```
+
+Env-var reference:
+
+| Var | Default | Meaning |
+|---|---|---|
+| `SSL_ENABLE` | `false` | Master switch. Must be `true` for TLS to engage and certs to be validated. |
+| `SSL_CERT_PATH` | _empty_ | Path **inside the container** to the cert PEM. Required when `SSL_ENABLE=true`; file must exist. |
+| `SSL_KEY_PATH` | _empty_ | Path **inside the container** to the key PEM. Same rules as `SSL_CERT_PATH`. |
+| `SSL_REDIRECT` | `true` | When `true`, :80 requests are 301-redirected to https. Set `false` when this container sits behind a TLS-terminating reverse proxy. |
+
+If you set `SSL_CERT_PATH` / `SSL_KEY_PATH` **without** `SSL_ENABLE=true`, the container starts in HTTP-only mode and logs a one-line note that the cert paths were ignored — so you don't accidentally think TLS is on when it isn't.
 
 ### License
 

@@ -36,7 +36,25 @@ RUN chmod +x /entrypoint.sh
 # Default backend — overridable at runtime with `-e BACKEND_BASE_URL=...`.
 ENV BACKEND_BASE_URL=http://agent-platform-backend:8080
 
-EXPOSE 80
+# Optional TLS — when SSL_ENABLE=true is set at run time AND both
+# SSL_CERT_PATH / SSL_KEY_PATH are set, /entrypoint.sh enables a 443 ssl
+# listener using these paths and 301-redirects :80 -> :443. Default is
+# plain HTTP on :80 (matches the historical behaviour of this image).
+#
+#   docker run ... \
+#     -e SSL_ENABLE=true \
+#     -e SSL_CERT_PATH=/etc/nginx/ssl/tls.crt \
+#     -e SSL_KEY_PATH=/etc/nginx/ssl/tls.key \
+#     -v /host/certs:/etc/nginx/ssl:ro
+#
+# Pass `-e SSL_REDIRECT=false` to keep :80 serving normally (useful when
+# a TLS-terminating reverse proxy in front of this container expects HTTP).
+ENV SSL_ENABLE=false
+ENV SSL_CERT_PATH=
+ENV SSL_KEY_PATH=
+ENV SSL_REDIRECT=true
+
+EXPOSE 80 443
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
