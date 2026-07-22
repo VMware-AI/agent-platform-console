@@ -39,6 +39,7 @@ export const STRINGS: Dict = {
   'nav.system.resources': { zh: '资源池接入', en: 'Resource Pools' },
   'nav.system.gateway': { zh: '模型网关接入', en: 'Gateway Connections' },
   'nav.system.users': { zh: '用户与权限', en: 'Users & Roles' },
+  'nav.system.skills': { zh: 'Skill 管理', en: 'Skill Management' },
   'user.profile': { zh: '个人资料', en: 'Profile' },
   'user.logout': { zh: '退出登录', en: 'Log out' },
   'theme.light': { zh: '浅色', en: 'Light' },
@@ -159,6 +160,8 @@ export const STRINGS: Dict = {
   'agents.action.update': { zh: '版本更新', en: 'Version Update' },
   'agents.action.delete': { zh: '删除', en: 'Delete' },
   'agents.action.copyAccess': { zh: '访问信息', en: 'Access info' },
+  'agents.action.installSkill': { zh: '安装 Skill', en: 'Install Skill' },
+  'agents.action.terminal': { zh: '终端', en: 'Terminal' },
   'agents.action.copyKey': { zh: '复制密钥', en: 'Copy key' },
   'agents.action.copyKeyOk': { zh: '已复制 "{name}"', en: 'Copied "{name}"' },
   'agents.action.copyKeyFail': { zh: '复制失败', en: 'Copy failed' },
@@ -2746,7 +2749,10 @@ export const STRINGS: Dict = {
 
   // ConfigureDiff (rendered inside ConfirmDiffDialog)
   'configure.diff.title': { zh: '确认配置变更', en: 'Confirm Configuration Changes' },
-  'configure.diff.subtitle': { zh: '变更将在 vCenter 同步执行：', en: 'Changes will be applied to vCenter:' },
+  'configure.diff.subtitle': {
+    zh: '变更将在 vCenter 同步执行：',
+    en: 'Changes will be applied to vCenter:',
+  },
   'configure.diff.col.field': { zh: '字段', en: 'Field' },
   'configure.diff.col.before': { zh: '变更前', en: 'Before' },
   'configure.diff.col.after': { zh: '变更后', en: 'After' },
@@ -3077,7 +3083,10 @@ export const STRINGS: Dict = {
   'deployAgent.action.remove': { zh: '移除', en: 'Remove' },
   'deployAgent.label.password': { zh: '密码', en: 'Password' },
   'deployAgent.err.passwordRequired': { zh: '密码不能为空', en: 'Password is required' },
-  'deployAgent.err.passwordMinLen': { zh: '密码至少 8 位', en: 'Password must be at least 8 characters' },
+  'deployAgent.err.passwordMinLen': {
+    zh: '密码至少 8 位',
+    en: 'Password must be at least 8 characters',
+  },
   'deployAgent.placeholder.password': { zh: '至少 8 位', en: 'At least 8 characters' },
   'deployAgent.label.confirmPassword': { zh: '确认密码', en: 'Confirm Password' },
   'deployAgent.placeholder.confirmPassword': { zh: '再次输入', en: 'Re-enter' },
