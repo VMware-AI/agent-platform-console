@@ -332,6 +332,6 @@ describe('LoginView — interactions', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(loginSpy).toHaveBeenCalledWith(VALID_EMAIL, VALID_PASSWORD, false)
+    expect(loginSpy).toHaveBeenCalledWith(VALID_EMAIL, VALID_PASSWORD, true)
   })
 })
