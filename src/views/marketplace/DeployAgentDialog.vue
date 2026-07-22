@@ -4,6 +4,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { computed, reactive, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
+import gql from 'graphql-tag'
 import { VSPHERE_RESOURCE_POOLS_QUERY, VSPHERE_NETWORKS_QUERY, UNBOUND_KEYS_QUERY, INSTANT_CLONE_PARENTS_QUERY } from '@/api/graphql/queries/vsphere'
 import type { ResourcePool } from '@/types/resource-pool'
 import type {
@@ -28,7 +29,7 @@ const globalForm = reactive({
 })
 
 /* ════════════ 区块 2: 全局安全与认证 ════════════ */
-const securityForm = reactive({ runAsUser: 'svc_robot', password: '', confirmPassword: '', sshKey: '' })
+const securityForm = reactive({ runAsUser: 'vmware', password: '', confirmPassword: '', sshKey: '' })
 const showPw = ref(false); const showCpw = ref(false)
 const pwErr = ref(''); const cpwErr = ref('')
 
@@ -54,10 +55,15 @@ const instanceList = reactive<InstanceRow[]>([{ hostname: '', ip: '', keyBinding
 const batchCount = ref(3); const batchPrefix = ref(''); const batchStartIP = ref('')
 const attempted = ref(false)
 
+// Skills selection
+const selectedSkillIds = ref<string[]>([])
+const { result: skillsResult } = useQuery(gql`query Skills { skills { id name version description } }`)
+const availableSkills = computed(() => (skillsResult.value as any)?.skills ?? [])
+
 // ─── Wizard state machine ──────────────────────────────────────────────
 // Five steps: 基础环境 → 部署模式 (单台/批量) → 安全认证 → 网络策略 → 实例清单
-type StepId = 'env' | 'mode' | 'security' | 'network' | 'instances'
-const STEPS: readonly StepId[] = ['env', 'mode', 'security', 'network', 'instances'] as const
+type StepId = 'env' | 'mode' | 'skills' | 'security' | 'network' | 'instances'
+const STEPS: readonly StepId[] = ['env', 'mode', 'skills', 'security', 'network', 'instances'] as const
 const currentStep = ref<StepId>('env')
 
 function stepIndex(s: StepId): number { return STEPS.indexOf(s) }
@@ -67,25 +73,67 @@ function stepLabel(s: StepId): string {
     mode: locale.t('deployAgent.section.mode'),
     security: locale.t('deployAgent.section.security'),
     network: locale.t('deployAgent.section.network'),
+    skills: '选择Skill',
     instances: locale.t('deployAgent.section.instances'),
   }[s]
 }
-function goNext() { const i = stepIndex(currentStep.value); if (i < STEPS.length - 1) currentStep.value = STEPS[i + 1] }
+function goNext() {
+  const i = stepIndex(currentStep.value)
+  if (i >= STEPS.length - 1) return
+  // ---- per-step validation ----
+  const s = currentStep.value
+  if (s === 'env') {
+    if (!globalForm.resourcePoolId) { alert(locale.t('deployAgent.err.pool') as string); return }
+    if (!globalForm.versionId) { alert(locale.t('deployAgent.err.version') as string); return }
+    if (!globalForm.placementPool) { alert('请选择 vSphere 放置资源池'); return }
+  }
+  if (s === 'security') {
+    validatePassword()
+    if (pwErr.value) { alert(pwErr.value); return }
+    if (cpwErr.value) { alert(cpwErr.value); return }
+  }
+  if (s === 'network' && deployPolicy.ipMode === 'static') {
+    if (!deployPolicy.netmask) { alert('请填写子网掩码'); return }
+    if (!deployPolicy.gateway) { alert('请填写网关'); return }
+  }
+  if (s === 'instances') {
+    if (deployMode.value === 'single') {
+      if (!instanceList[0]?.hostname.trim()) { alert(locale.t('deployAgent.err.name') as string); return }
+      if (deployPolicy.ipMode === 'static' && !instanceList[0]?.ip) { alert(locale.t('deployAgent.err.ipRequired') as string); return }
+    }
+  }
+  currentStep.value = STEPS[i + 1]
+}
 function goPrev() { const i = stepIndex(currentStep.value); if (i > 0) currentStep.value = STEPS[i - 1] }
 
 /* ---- vSphere 查询 ---- */
 const vVars = computed<VsphereResourcePoolsQueryVars>(() => ({ resourcePoolId: globalForm.resourcePoolId }))
 const vOn = computed(() => props.open && !!globalForm.resourcePoolId)
-const { result: vRes } = useQuery<VsphereResourcePoolsQueryResult, VsphereResourcePoolsQueryVars>(VSPHERE_RESOURCE_POOLS_QUERY, vVars, () => ({ enabled: vOn.value, fetchPolicy: 'cache-and-network' }))
+const { result: vRes } = useQuery<VsphereResourcePoolsQueryResult, VsphereResourcePoolsQueryVars>(VSPHERE_RESOURCE_POOLS_QUERY, vVars, () => ({ enabled: vOn.value, fetchPolicy: 'cache-first' }))
 const vspherePools = computed<VsphereResourcePool[]>(() => vRes.value?.vsphereResourcePools ?? [])
-const { result: nRes } = useQuery<VsphereNetworksQueryResult, VsphereNetworksQueryVars>(VSPHERE_NETWORKS_QUERY, () => ({ resourcePoolId: globalForm.resourcePoolId }), () => ({ enabled: vOn.value, fetchPolicy: 'cache-and-network' }))
+const vspherePoolsLoading = computed(() => vOn.value && vspherePools.value.length === 0)
+const { result: nRes } = useQuery<VsphereNetworksQueryResult, VsphereNetworksQueryVars>(VSPHERE_NETWORKS_QUERY, () => ({ resourcePoolId: globalForm.resourcePoolId }), () => ({ enabled: vOn.value, fetchPolicy: 'cache-first' }))
 const vsphereNetworks = computed<VsphereNetwork[]>(() => nRes.value?.vsphereNetworks ?? [])
 const { result: uRes } = useQuery(UNBOUND_KEYS_QUERY, null, () => ({ enabled: computed(() => props.open), fetchPolicy: 'cache-and-network' }))
 const unboundKeys = computed(() => uRes.value?.unboundKeys ?? [])
+const keySearch = ref('')
+const filteredKeys = computed(() => {
+  if (!keySearch.value) return unboundKeys.value
+  const q = keySearch.value.toLowerCase()
+  return unboundKeys.value.filter(k => (k.name || k.id?.slice(0,8) || '').toLowerCase().includes(q))
+})
 const { result: pRes } = useQuery(INSTANT_CLONE_PARENTS_QUERY, () => ({ resourcePoolId: globalForm.resourcePoolId }), () => ({ enabled: computed(() => globalForm.cloneMode === 'instant' && globalForm.parentSource === 'existing' && !!globalForm.resourcePoolId) }))
 const instantParents = computed(() =>
   ((pRes.value as any)?.instantCloneParents ?? []).filter((v: any) => v.name.startsWith('ic-p'))
 )
+
+// Auto-select "Resources" as the default placement pool when pools load
+watch(vspherePools, (pools) => {
+  if (!globalForm.placementPool && pools.length > 0) {
+    const r = pools.find(p => p.name === 'Resources') || pools[0]
+    globalForm.placementPool = r.path
+  }
+}, { immediate: true })
 
 const versionList = computed(() => props.template ? [...props.template.versions].reverse() : [])
 
@@ -168,9 +216,10 @@ watch(() => props.open, (o) => {
   if (o && props.template) {
     const v = props.template.versions[0]
     Object.assign(globalForm, { versionId: v?.id ?? '', resourcePoolId: props.pools[0]?.id ?? '', placementPool: '', targetNetwork: '', cloneMode: 'full', instantCloneParent: '', parentSource: 'existing', newParents: [{ name: 'ic-p', ip: '' }] })
-    Object.assign(securityForm, { runAsUser: 'svc_robot', password: '', confirmPassword: '', sshKey: '' })
+    Object.assign(securityForm, { runAsUser: 'vmware', password: '', confirmPassword: '', sshKey: '' })
     Object.assign(deployPolicy, { ipMode: 'dhcp', netmask: '255.255.255.0', gateway: '172.16.85.1', dns: '172.16.85.1' })
     deployMode.value = 'single'
+    keySearch.value = ''
     currentStep.value = 'env'
     instanceList.length = 0; instanceList.push({ hostname: '', ip: '', keyBinding: '' })
     batchCount.value = 3; batchPrefix.value = ''; batchStartIP.value = ''; attempted.value = false
@@ -208,7 +257,7 @@ watch(() => props.open, (o) => {
         <div v-if="currentStep==='env'" class="blk"><h3 class="bh">{{ locale.t('deployAgent.section.env') }}</h3><p class="bd">{{ locale.t('deployAgent.section.envDesc') }}</p>
           <div class="g2">
             <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.version') }}</label><select v-model="globalForm.versionId"><option v-for="v in versionList" :key="v.id" :value="v.id">{{ v.version }}</option></select></cds-select>
-            <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.placementPool') }}</label><select v-model="globalForm.placementPool"><option value="">{{ locale.t('deployAgent.inheritDefault') }}</option><option v-for="p in vspherePools" :key="p.path" :value="p.path">{{ p.name }}</option></select></cds-select>
+            <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.placementPool') }}</label><select v-model="globalForm.placementPool"><option value="" disabled>{{ vspherePoolsLoading ? '加载中…' : locale.t('deployAgent.selectPlaceholder') }}</option><option v-for="p in vspherePools" :key="p.path" :value="p.path">{{ p.name }}</option></select></cds-select>
             <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.targetNetwork') }}</label><select v-model="globalForm.targetNetwork"><option value="">{{ locale.t('deployAgent.inheritDefault') }}</option><optgroup v-for="(nets,g) in networksGrouped" :key="g" :label="g"><option v-for="n in nets" :key="n.path" :value="n.path">{{ n.name }}</option></optgroup></select></cds-select>
             <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.cloneMode') }}</label><select v-model="globalForm.cloneMode"><option value="full">{{ locale.t('deployAgent.cloneMode.full') }}</option><option value="instant">{{ locale.t('deployAgent.cloneMode.instant') }}</option></select></cds-select>
           </div>
@@ -222,9 +271,18 @@ watch(() => props.open, (o) => {
         </div>
 
         <!-- ══ 区块2: 全局安全与认证 ══ -->
-        <div v-if="currentStep==='security'" class="blk"><h3 class="bh">{{ locale.t('deployAgent.section.security') }}</h3><p class="bd">{{ locale.t('deployAgent.section.securityDesc') }}</p>
+        <!-- ══ Skills ══ -->
+        <div v-if="currentStep==='skills'" class="blk"><h3 class="bh">选择 Skill（可选）</h3><p class="bd">为智能体预装离线 Skill 包。部署时 cloud-init 自动安装。</p>
+          <div v-if="availableSkills.length===0" style="color:#86909c;font-size:13px">暂无可用 Skill。请先在 Skill 管理中创建。</div>
+          <label v-for="sk in availableSkills" :key="sk.id" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;margin-bottom:6px">
+            <input type="checkbox" :value="sk.id" v-model="selectedSkillIds" />
+            <strong>{{ sk.name }}</strong> <span style="color:#888;font-size:12px">v{{ sk.version }}</span>
+            <span style="color:#666;font-size:12px;flex:1;text-align:right">{{ sk.description || '' }}</span>
+          </label>
+        </div>
+                <div v-if="currentStep==='security'" class="blk"><h3 class="bh">{{ locale.t('deployAgent.section.security') }}</h3><p class="bd">{{ locale.t('deployAgent.section.securityDesc') }}</p>
           <div class="g2">
-            <cds-input><label>RunAs User</label><input v-model="securityForm.runAsUser" placeholder="svc_robot" class="uline"/></cds-input>
+            <cds-input><label>RunAs User</label><input v-model="securityForm.runAsUser" placeholder="vmware" class="uline"/></cds-input>
             <!-- 密码 -->
             <div class="field">
               <label class="fl">{{ locale.t('deployAgent.label.password') }} <span class="rq">*</span></label>
@@ -265,7 +323,7 @@ watch(() => props.open, (o) => {
             <div class="g2">
               <cds-input><label>{{ locale.t('deployAgent.label.agentName') }} <span class="rq">*</span></label><input v-model="instanceList[0].hostname" :placeholder="locale.t('deployAgent.placeholder.agentName')"/></cds-input>
               <cds-input v-if="deployPolicy.ipMode==='static'"><label>{{ locale.t('accessInfo.ip') }} <span class="rq">*</span></label><input v-model="instanceList[0].ip" :placeholder="locale.t('deployAgent.placeholder.startIp')"/></cds-input>
-              <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.keyBinding') }}</label><select v-model="instanceList[0].keyBinding"><option value="">{{ locale.t('deployAgent.placeholder.browseKeys') }}</option><option v-for="k in unboundKeys" :key="k.id" :value="k.id">{{ k.name||k.id.slice(0,8) }}</option></select></cds-select>
+              <div><cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.keyBinding') }}</label><select v-model="instanceList[0].keyBinding"><option value="">{{ locale.t('deployAgent.placeholder.browseKeys') }}</option><option v-for="k in filteredKeys" :key="k.id" :value="k.id">{{ k.name||k.id.slice(0,8) }}</option></select></cds-select><div style="margin-top:2px"><input class="uline" v-model="keySearch" placeholder="搜索密钥…" style="width:100%;font-size:12px;padding:2px 4px"/></div></div>
             </div>
             <p v-if="attempted&&errors.host" class="er">{{errors.host}}</p>
             <p v-if="attempted&&errors.ip0" class="er">{{errors.ip0}}</p>
@@ -275,7 +333,7 @@ watch(() => props.open, (o) => {
             <div class="bt"><cds-input style="width:100px"><label>{{ locale.t('deployAgent.label.count') }}</label><input v-model.number="batchCount" type="number" min="1" max="50"/></cds-input><cds-input style="width:160px"><label>{{ locale.t('deployAgent.label.namePrefix') }}</label><input v-model="batchPrefix" :placeholder="locale.t('deployAgent.placeholder.namePrefix')"/></cds-input><cds-input v-if="deployPolicy.ipMode==='static'" style="width:160px"><label>{{ locale.t('deployAgent.label.startIp') }}</label><input v-model="batchStartIP" :placeholder="locale.t('deployAgent.placeholder.startIp')"/></cds-input><cds-button size="sm" action="outline" @click="generateBatch">{{ locale.t('deployAgent.action.generate') }}</cds-button></div>
             <div class="tw" v-if="instanceList.length">
               <table class="it"><thead><tr><th style="width:50px">#</th><th>{{ locale.t('deployAgent.table.hostname') }} <span class="rq">*</span></th><th v-if="deployPolicy.ipMode==='static'">{{ locale.t('deployAgent.table.ip') }} <span class="rq">*</span></th><th>{{ locale.t('deployAgent.table.keyBinding') }}</th></tr></thead>
-                <tbody><tr v-for="(row,i) in instanceList" :key="i"><td class="ix">{{i+1}}</td><td><input class="ci" v-model="row.hostname" :class="{er2:attempted&&!row.hostname.trim()}"/></td><td v-if="deployPolicy.ipMode==='static'"><input class="ci" v-model="row.ip" :class="{er2:attempted&&!row.ip}"/></td><td><select class="cs" v-model="row.keyBinding"><option value="">{{ locale.t('deployAgent.placeholder.browse') }}</option><option v-for="k in unboundKeys" :key="k.id" :value="k.id">{{k.name||k.id.slice(0,8)}}</option></select></td></tr></tbody>
+                <tbody><tr v-for="(row,i) in instanceList" :key="i"><td class="ix">{{i+1}}</td><td><input class="ci" v-model="row.hostname" :class="{er2:attempted&&!row.hostname.trim()}"/></td><td v-if="deployPolicy.ipMode==='static'"><input class="ci" v-model="row.ip" :class="{er2:attempted&&!row.ip}"/></td><td><select class="cs" v-model="row.keyBinding"><option value="">{{ locale.t('deployAgent.placeholder.browse') }}</option><option v-for="k in filteredKeys" :key="k.id" :value="k.id">{{k.name||k.id.slice(0,8)}}</option></select></td></tr></tbody>
               </table>
               <p v-if="attempted&&errors.ndup" class="er">{{errors.ndup}}</p><p v-if="attempted&&errors.idup" class="er">{{errors.idup}}</p><p v-if="attempted&&errors.ipmiss" class="er">{{errors.ipmiss}}</p>
             </div>

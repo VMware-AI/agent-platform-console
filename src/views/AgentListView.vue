@@ -3,8 +3,12 @@
 import '@/components/icons'
 import { computed, ref, watch } from 'vue'
 import { useToast } from '@/composables/useToast'
+import { Terminal } from 'xterm'
+import { FitAddon } from 'xterm-addon-fit'
+import 'xterm/css/xterm.css'
 import { useAgentExport } from '@/composables/useAgentExport'
-import { useMutation, useQuery } from '@vue/apollo-composable'
+import { useMutation, useQuery, useLazyQuery } from '@vue/apollo-composable'
+import gql from 'graphql-tag'
 import { useLocaleStore } from '@/stores/locale'
 import { useAuthStore } from '@/stores/auth'
 import AppDropdown from '@/components/AppDropdown.vue'
@@ -274,14 +278,14 @@ function onPageSizeSelect(e: Event) {
 
 /* ---------- Row actions ---------- */
 
-type RowActionKey = 'rotateKey' | 'restart' | 'stop' | 'start' | 'update' | 'delete' | 'hardDelete' | 'copyAccess'
+type RowActionKey = 'rotateKey' | 'restart' | 'stop' | 'start' | 'update' | 'delete' | 'hardDelete' | 'copyAccess' | 'installSkill' | 'terminal'
 
 // Actions vary by status so the menu never shows a no-op (e.g. "stop" on
 // an already-stopped agent or "start" on a running one).
 const ACTIONS_BY_STATUS: Partial<Record<StatusKey, RowActionKey[]>> = {
-  running:   ['rotateKey', 'update', 'restart', 'stop', 'delete', 'hardDelete', 'copyAccess'],
-  stopped:   ['rotateKey', 'update', 'start', 'delete', 'hardDelete', 'copyAccess'],
-  exception: ['rotateKey', 'update', 'restart', 'stop', 'delete', 'hardDelete', 'copyAccess'],
+  running:   ['rotateKey', 'update', 'installSkill', 'terminal', 'restart', 'stop', 'delete', 'hardDelete', 'copyAccess'],
+  stopped:   ['rotateKey', 'update', 'installSkill', 'terminal', 'start', 'delete', 'hardDelete', 'copyAccess'],
+  exception: ['rotateKey', 'update', 'installSkill', 'terminal', 'restart', 'stop', 'delete', 'hardDelete', 'copyAccess'],
 }
 
 const ICON_FOR_ACTION: Record<RowActionKey, string> = {
@@ -297,6 +301,8 @@ const ICON_FOR_ACTION: Record<RowActionKey, string> = {
   // styling so the differentiation is mostly the type-to-confirm dialog itself.
   hardDelete: 'ban',
   copyAccess: 'eye',
+  installSkill: 'wrench',
+  terminal: 'pop-out',
 }
 
 const auth = useAuthStore()
@@ -420,6 +426,10 @@ function onRowAction(agent: Agent, key: RowActionKey) {
     openActionConfirm(agent, 'delete')
   } else if (key === 'hardDelete') {
     openActionConfirm(agent, 'hardDelete')
+  } else if (key === 'installSkill') {
+    openSkillInstall(agent)
+  } else if (key === 'terminal') {
+    openTerminal(agent)
   } else {
     console.log(`[agents] row:${key}`, { id: agent.id })
   }
@@ -429,6 +439,91 @@ function onRowAction(agent: Agent, key: RowActionKey) {
 /* Anchors for the cds-dropdown row-actions popup (per row). */
 const rowActionsAnchor = ref<HTMLElement | null>(null)
 const rowActionsTarget = ref<Agent | null>(null)
+const skillInstallAgent = ref<Agent | null>(null)
+const skillInstallOpen = ref(false)
+const skillInstallSelected = ref<string[]>([])
+const skillInstallLoading = ref(false)
+const skillInstallResults = ref<Record<string, 'ok' | 'fail' | 'pending'>>({})
+
+const SKILLS_FOR_INSTALL = gql`query { skills { id name version category packageUrl } }`
+const { result: skillsForInstallResult, load: loadSkills } = useLazyQuery(SKILLS_FOR_INSTALL)
+const installableSkills = computed(() => (skillsForInstallResult.value as any)?.skills?.filter((s: any) => s.packageUrl) ?? [])
+
+// ─── Terminal ───────────────────────────────────────────────────────
+const termAgent = ref<Agent | null>(null)
+const termOpen = ref(false)
+let term: Terminal | null = null
+let termWs: WebSocket | null = null
+
+function openTerminal(agent: Agent) {
+  // Use accessTarget credentials if available (set by "访问信息"), otherwise fetch fresh
+  const creds = agent.credentials || (accessTarget.value?.credentials ?? null)
+  const ip = creds?.ip || agent.credentials?.ip
+  if (ip) { termAgent.value = { ...agent, credentials: creds }; termOpen.value = true; setTimeout(() => initTerminal(ip), 100) }
+  else { termAgent.value = agent; termOpen.value = true
+    apolloClient.query({ query: AGENT_QUERY, variables: { id: agent.id }, fetchPolicy: 'network-only' }).then(({ data }) => {
+      const c = (data as any)?.agent?.credentials
+      if (c?.ip) { termAgent.value = { ...agent, credentials: c }; setTimeout(() => initTerminal(c.ip), 100) }
+      else { term?.writeln('无法获取 Agent IP\r\n') }
+    }).catch((e) => { term?.writeln('获取凭据失败: ' + (e?.message || '') + '\r\n') })
+  }
+}
+
+function initTerminal(ip: string) {
+  if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) { term?.writeln('无效 IP: ' + ip + '\r\n'); return }
+  const el = document.getElementById('terminal-container')
+  if (!el) return
+  el.innerHTML = ''
+  term = new Terminal({ cursorBlink: true, fontSize: 13, theme: { background: '#1a1a2e' } })
+  const fit = new FitAddon()
+  term.loadAddon(fit)
+  term.open(el)
+  fit.fit()
+  const name = termAgent.value?.name || ip
+  const td = new TextDecoder('utf-8', { fatal: false })
+  termWs = new WebSocket(`ws://192.168.15.250:8080/v1/terminal/${ip}`)
+  termWs.binaryType = 'arraybuffer'
+  termWs.onopen = () => { term?.writeln('SSH ' + name + '\r') }
+  termWs.onmessage = (e) => { term?.write(td.decode(e.data, { stream: true })) }
+  termWs.onclose = (e) => { term?.writeln('\r\nDisconnected (' + e.code + ')') }
+  termWs.onerror = () => { term?.writeln('\r\nConnection error') }
+  term.onData((data) => { termWs?.send(data) })
+}
+
+function closeTerminal() {
+  termWs?.close()
+  term?.dispose()
+  term = null; termWs = null
+  termOpen.value = false
+}
+
+function openSkillInstall(agent: Agent) {
+  skillInstallAgent.value = agent
+  skillInstallSelected.value = []
+  loadSkills()
+  skillInstallOpen.value = true
+}
+
+async function doSkillInstall() {
+  if (!skillInstallAgent.value || skillInstallSelected.value.length === 0) return
+  skillInstallLoading.value = true
+  skillInstallResults.value = {}
+  const ip = skillInstallAgent.value.credentials?.ip || ''
+  for (const sid of skillInstallSelected.value) {
+    skillInstallResults.value[sid] = 'pending'
+  }
+  for (const sid of skillInstallSelected.value) {
+    try {
+      const r = await fetch(`/v1/skills/install/${ip}/${sid}`, { method: 'POST' })
+      const data = await r.json()
+      skillInstallResults.value[sid] = data.status === 'ok' ? 'ok' : 'fail'
+    } catch { skillInstallResults.value[sid] = 'fail' }
+  }
+  const ok = Object.values(skillInstallResults.value).filter(v => v === 'ok').length
+  if (ok > 0) toast.success(`安装完成: ${ok}/${skillInstallSelected.value.length} 成功`)
+  skillInstallLoading.value = false
+}
+
 
 function openRowActions(agent: Agent, target: EventTarget | null) {
   rowActionsTarget.value = agent
@@ -1407,7 +1502,45 @@ const summaryText = computed(() => {
         </button>
       </div>
     </cds-dropdown>
-  </section>
+  
+    <!-- Terminal Dialog -->
+    <cds-modal :hidden="!termOpen" closable size="lg" @closeChange="closeTerminal">
+      <cds-modal-header><h2 cds-text="subsection">终端 — {{ termAgent?.name }}</h2></cds-modal-header>
+      <cds-modal-content>
+        <div id="terminal-container" style="height:400px;width:100%"></div>
+      </cds-modal-content>
+    </cds-modal>
+
+    <!-- Skill Install Dialog -->
+    <cds-modal :hidden="!skillInstallOpen" closable size="md" @closeChange="skillInstallOpen = false">
+      <cds-modal-header>
+        <h2 cds-text="subsection">安装 Skill — {{ skillInstallAgent?.name }}</h2>
+      </cds-modal-header>
+      <cds-modal-content>
+        <div v-if="installableSkills.length === 0" cds-text="body" style="color:#888;padding:16px">
+          暂无可用离线 Skill。请先在 Skill 管理中同步离线包。
+        </div>
+        <div v-else cds-layout="vertical gap:sm p:sm">
+          <label v-for="s in installableSkills" :key="s.id" style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer">
+            <input type="checkbox" :value="s.id" v-model="skillInstallSelected" />
+            <div>
+              <strong>{{ s.name }}</strong> <span style="color:#888;font-size:12px">v{{ s.version }}</span>
+              <span v-if="s.category" style="margin-left:8px;font-size:11px;color:#2563EB;background:#eff6ff;padding:1px 6px;border-radius:4px">{{ s.category }}</span>
+              <span v-if="skillInstallResults[s.id] === 'ok'" style="margin-left:auto;color:#059669">✅</span>
+              <span v-else-if="skillInstallResults[s.id] === 'fail'" style="margin-left:auto;color:#dc2626">❌</span>
+              <span v-else-if="skillInstallResults[s.id] === 'pending'" style="margin-left:auto;color:#9ca3af">⏳</span>
+            </div>
+          </label>
+        </div>
+      </cds-modal-content>
+      <cds-modal-actions>
+        <cds-button kind="secondary" @click="skillInstallOpen = false; skillInstallResults = {}">关闭</cds-button>
+        <cds-button kind="primary" :disabled="skillInstallSelected.length === 0 || skillInstallLoading" @click="doSkillInstall">
+          {{ skillInstallLoading ? '安装中...' : `安装 ${ skillInstallSelected.length } 个 Skill` }}
+        </cds-button>
+      </cds-modal-actions>
+    </cds-modal>
+</section>
   <!-- Action confirm dialog (stop/restart/delete) -->
   <ConfirmDialog
     :open="actionConfirmOpen && actionConfirmMode !== 'hardDelete'"
