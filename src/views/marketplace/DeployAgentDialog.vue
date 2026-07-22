@@ -120,7 +120,7 @@ const keySearch = ref('')
 const filteredKeys = computed(() => {
   if (!keySearch.value) return unboundKeys.value
   const q = keySearch.value.toLowerCase()
-  return unboundKeys.value.filter(k => (k.name || k.id?.slice(0,8) || '').toLowerCase().includes(q))
+  return unboundKeys.value.filter((k: { name?: string; id?: string }) => (k.name || k.id?.slice(0,8) || '').toLowerCase().includes(q))
 })
 const { result: pRes } = useQuery(INSTANT_CLONE_PARENTS_QUERY, () => ({ resourcePoolId: globalForm.resourcePoolId }), () => ({ enabled: computed(() => globalForm.cloneMode === 'instant' && globalForm.parentSource === 'existing' && !!globalForm.resourcePoolId) }))
 const instantParents = computed(() =>
