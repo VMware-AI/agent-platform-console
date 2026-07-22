@@ -207,7 +207,7 @@ describe('LoginView — successful submit', () => {
     expect(pushSpy).toHaveBeenCalledWith({ name: 'overview' })
   })
 
-  it('passes remember=false when the checkbox is left unchecked', async () => {
+  it('passes remember=true when the checkbox is left unchecked (default)', async () => {
     loginSpy.mockResolvedValue(true)
     const wrapper = makeWrapper()
 
@@ -215,7 +215,7 @@ describe('LoginView — successful submit', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(loginSpy).toHaveBeenCalledWith(VALID_EMAIL, VALID_PASSWORD, false)
+    expect(loginSpy).toHaveBeenCalledWith(VALID_EMAIL, VALID_PASSWORD, true)
   })
 })
 
@@ -318,7 +318,7 @@ describe('LoginView — interactions', () => {
     await emailInput(wrapper).trigger('keydown.enter')
     await flushPromises()
 
-    expect(loginSpy).toHaveBeenCalledWith(VALID_EMAIL, VALID_PASSWORD, false)
+    expect(loginSpy).toHaveBeenCalledWith(VALID_EMAIL, VALID_PASSWORD, true)
     expect(pushSpy).toHaveBeenCalledWith({ name: 'overview' })
   })
 
@@ -332,6 +332,6 @@ describe('LoginView — interactions', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(loginSpy).toHaveBeenCalledWith(VALID_EMAIL, VALID_PASSWORD, false)
+    expect(loginSpy).toHaveBeenCalledWith(VALID_EMAIL, VALID_PASSWORD, true)
   })
 })

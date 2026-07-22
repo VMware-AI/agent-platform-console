@@ -318,10 +318,12 @@ async function onSubmitDeploy(payload: DeployAgentInput & { _createParents?: Arr
           .replace('{username}', agent.credentials?.username ?? '—'),
       )
       closeDeployDialog()
-      // Surface the issued gateway key ONCE — the backend never returns it again.
-      issuedSecret.value = virtualKeySecret
-      deployedAgentId.value = agent.id
-      secretDialogOpen.value = true
+      // Surface the gateway key ONCE for new keys; reused keys skip the dialog.
+      if (virtualKeySecret) {
+        issuedSecret.value = virtualKeySecret
+        deployedAgentId.value = agent.id
+        secretDialogOpen.value = true
+      }
     }
   } catch (err) {
     // Scrub before logging: this mutation carries the initial password in its
