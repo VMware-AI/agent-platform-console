@@ -447,6 +447,7 @@ const skillInstallResults = ref<Record<string, 'ok' | 'fail' | 'pending'>>({})
 
 const SKILLS_FOR_INSTALL = gql`query { skills { id name version category packageUrl } }`
 const { result: skillsForInstallResult, load: loadSkills } = useLazyQuery(SKILLS_FOR_INSTALL)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const installableSkills = computed(() => (skillsForInstallResult.value as any)?.skills?.filter((s: any) => s.packageUrl) ?? [])
 
 // ─── Terminal ───────────────────────────────────────────────────────
@@ -462,6 +463,7 @@ function openTerminal(agent: Agent) {
   if (ip) { termAgent.value = { ...agent, credentials: creds }; termOpen.value = true; setTimeout(() => initTerminal(ip), 100) }
   else { termAgent.value = agent; termOpen.value = true
     apolloClient.query({ query: AGENT_QUERY, variables: { id: agent.id }, fetchPolicy: 'network-only' }).then(({ data }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const c = (data as any)?.agent?.credentials
       if (c?.ip) { termAgent.value = { ...agent, credentials: c }; setTimeout(() => initTerminal(c.ip), 100) }
       else { term?.writeln('无法获取 Agent IP\r\n') }
