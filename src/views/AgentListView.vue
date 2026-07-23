@@ -1643,7 +1643,7 @@ const summaryText = computed(() => {
       </cds-modal-header>
       <cds-modal-content>
         <div v-if="installableSkills.length === 0" cds-text="body" style="color:#888;padding:16px">
-          暂无可用离线 Skill。请先在 Skill 管理中同步离线包。
+          暂无可用离线 Skill。请先在 Skills 管理中同步离线包。
         </div>
         <div v-else cds-layout="vertical gap:sm p:sm">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;color:#6b7280;font-size:12px">

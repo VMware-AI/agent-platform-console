@@ -39,7 +39,7 @@ export const STRINGS: Dict = {
   'nav.system.resources': { zh: '资源池接入', en: 'Resource Pools' },
   'nav.system.gateway': { zh: '模型网关接入', en: 'Gateway Connections' },
   'nav.system.users': { zh: '用户与权限', en: 'Users & Roles' },
-  'nav.system.skills': { zh: 'Skill 管理', en: 'Skill Management' },
+  'nav.system.skills': { zh: 'Skills 管理', en: 'Skills Management' },
   'user.profile': { zh: '个人资料', en: 'Profile' },
   'user.logout': { zh: '退出登录', en: 'Log out' },
   'theme.light': { zh: '浅色', en: 'Light' },
