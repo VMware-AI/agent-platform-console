@@ -39,7 +39,7 @@ export const STRINGS: Dict = {
   'nav.system.resources': { zh: '资源池接入', en: 'Resource Pools' },
   'nav.system.gateway': { zh: '模型网关接入', en: 'Gateway Connections' },
   'nav.system.users': { zh: '用户与权限', en: 'Users & Roles' },
-  'nav.system.skills': { zh: 'Skill 管理', en: 'Skill Management' },
+  'nav.system.skills': { zh: 'Skills 管理', en: 'Skills Management' },
   'user.profile': { zh: '个人资料', en: 'Profile' },
   'user.logout': { zh: '退出登录', en: 'Log out' },
   'theme.light': { zh: '浅色', en: 'Light' },
@@ -652,6 +652,11 @@ export const STRINGS: Dict = {
     en: 'Name must be 2–64 characters.',
   },
   'gateway.form.endpoint': { zh: '网关地址', en: 'Gateway URL' },
+  'gateway.form.publicUrl': { zh: 'Agent 访问地址', en: 'Agent Access URL' },
+  'gateway.form.publicUrlPlaceholder': {
+    zh: '例如 http://litellm.internal:4000',
+    en: 'e.g. http://litellm.internal:4000',
+  },
   'gateway.form.testConnection': { zh: '测试连接', en: 'Test Connection' },
   'gateway.form.strategyLabel': { zh: '默认路由策略', en: 'Default routing strategy' },
   'gateway.form.testSuccess': {
@@ -1985,6 +1990,10 @@ export const STRINGS: Dict = {
   'supplier.model.form.spec.providerOption.minimax': {
     zh: 'MiniMax',
     en: 'MiniMax',
+  },
+  'supplier.model.form.spec.providerOption.ollama_chat': {
+    zh: 'Ollama Chat',
+    en: 'Ollama Chat',
   },
   'supplier.model.form.spec.providerOption.moonshot': {
     zh: 'Moonshot(月之暗面)',

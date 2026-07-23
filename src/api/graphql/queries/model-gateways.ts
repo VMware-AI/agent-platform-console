@@ -10,6 +10,7 @@ const MODEL_GATEWAY_FIELDS = gql`
     name
     provider
     endpoint
+    publicUrl
     backendModelCount
     loadBalancingStrategy
     lastSyncAt

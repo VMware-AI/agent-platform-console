@@ -1,7 +1,7 @@
 <script setup lang="ts">
  
 import '@/components/icons'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useToast } from '@/composables/useToast'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
@@ -15,6 +15,7 @@ import AppDropdown from '@/components/AppDropdown.vue'
 import AccessInfoDialog from '@/components/AccessInfoDialog.vue'
 import ConfigureAgentDialog from '@/components/ConfigureAgentDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import { buildTerminalWsUrl, isIpv4Address } from '@/utils/terminal'
 
 import {
   AGENTS_QUERY,
@@ -444,11 +445,38 @@ const skillInstallOpen = ref(false)
 const skillInstallSelected = ref<string[]>([])
 const skillInstallLoading = ref(false)
 const skillInstallResults = ref<Record<string, 'ok' | 'fail' | 'pending'>>({})
+const skillInstalled = ref<Record<string, boolean>>({})
+const skillInstalledLoading = ref(false)
+const skillInstallPage = ref(1)
+const SKILL_INSTALL_PAGE_SIZE = 5
 
 const SKILLS_FOR_INSTALL = gql`query { skills { id name version category packageUrl } }`
 const { result: skillsForInstallResult, load: loadSkills } = useLazyQuery(SKILLS_FOR_INSTALL)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const installableSkills = computed(() => (skillsForInstallResult.value as any)?.skills?.filter((s: any) => s.packageUrl) ?? [])
+const skillInstallTotalPages = computed(() =>
+  Math.max(1, Math.ceil(installableSkills.value.length / SKILL_INSTALL_PAGE_SIZE)),
+)
+const pagedInstallableSkills = computed(() => {
+  const start = (skillInstallPage.value - 1) * SKILL_INSTALL_PAGE_SIZE
+  return installableSkills.value.slice(start, start + SKILL_INSTALL_PAGE_SIZE)
+})
+const skillInstallSummary = computed(() => {
+  if (installableSkills.value.length === 0) return '0 / 0'
+  const start = (skillInstallPage.value - 1) * SKILL_INSTALL_PAGE_SIZE + 1
+  const end = Math.min(skillInstallPage.value * SKILL_INSTALL_PAGE_SIZE, installableSkills.value.length)
+  return `${start}-${end} / ${installableSkills.value.length}`
+})
+
+watch(installableSkills, () => {
+  if (skillInstallPage.value > skillInstallTotalPages.value) {
+    skillInstallPage.value = skillInstallTotalPages.value
+  }
+})
+
+watch(skillInstalled, (installed) => {
+  skillInstallSelected.value = skillInstallSelected.value.filter((id) => !installed[id])
+})
 
 // ─── Terminal ───────────────────────────────────────────────────────
 const termAgent = ref<Agent | null>(null)
@@ -456,25 +484,49 @@ const termOpen = ref(false)
 let term: Terminal | null = null
 let termWs: WebSocket | null = null
 
-function openTerminal(agent: Agent) {
+function resetTerminalSession() {
+  termWs?.close()
+  term?.dispose()
+  term = null
+  termWs = null
+}
+
+async function openTerminal(agent: Agent) {
+  resetTerminalSession()
   // Use accessTarget credentials if available (set by "访问信息"), otherwise fetch fresh
   const creds = agent.credentials || (accessTarget.value?.credentials ?? null)
   const ip = creds?.ip || agent.credentials?.ip
-  if (ip) { termAgent.value = { ...agent, credentials: creds }; termOpen.value = true; setTimeout(() => initTerminal(ip), 100) }
-  else { termAgent.value = agent; termOpen.value = true
-    apolloClient.query({ query: AGENT_QUERY, variables: { id: agent.id }, fetchPolicy: 'network-only' }).then(({ data }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const c = (data as any)?.agent?.credentials
-      if (c?.ip) { termAgent.value = { ...agent, credentials: c }; setTimeout(() => initTerminal(c.ip), 100) }
-      else { term?.writeln('无法获取 Agent IP\r\n') }
-    }).catch((e) => { term?.writeln('获取凭据失败: ' + (e?.message || '') + '\r\n') })
+  termAgent.value = { ...agent, credentials: creds }
+  termOpen.value = true
+  await nextTick()
+
+  if (ip) {
+    initTerminal(ip)
+    return
+  }
+
+  try {
+    const { data } = await apolloClient.query({ query: AGENT_QUERY, variables: { id: agent.id }, fetchPolicy: 'network-only' })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const c = (data as any)?.agent?.credentials
+    if (!c?.ip) {
+      writeTerminalMessage('无法获取 Agent IP')
+      return
+    }
+    termAgent.value = { ...agent, credentials: c }
+    initTerminal(c.ip)
+  } catch (e: unknown) {
+    writeTerminalMessage('获取凭据失败: ' + (e instanceof Error ? e.message : String(e)))
   }
 }
 
 function initTerminal(ip: string) {
-  if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) { term?.writeln('无效 IP: ' + ip + '\r\n'); return }
+  if (!isIpv4Address(ip)) { writeTerminalMessage('无效 IP: ' + ip); return }
   const el = document.getElementById('terminal-container')
-  if (!el) return
+  if (!el) {
+    console.warn('[agents] terminal container not mounted')
+    return
+  }
   el.innerHTML = ''
   term = new Terminal({ cursorBlink: true, fontSize: 13, theme: { background: '#1a1a2e' } })
   const fit = new FitAddon()
@@ -483,7 +535,7 @@ function initTerminal(ip: string) {
   fit.fit()
   const name = termAgent.value?.name || ip
   const td = new TextDecoder('utf-8', { fatal: false })
-  termWs = new WebSocket(`ws://192.168.15.250:8080/v1/terminal/${ip}`)
+  termWs = new WebSocket(buildTerminalWsUrl(window.location.origin, ip))
   termWs.binaryType = 'arraybuffer'
   termWs.onopen = () => { term?.writeln('SSH ' + name + '\r') }
   termWs.onmessage = (e) => { term?.write(td.decode(e.data, { stream: true })) }
@@ -492,37 +544,108 @@ function initTerminal(ip: string) {
   term.onData((data) => { termWs?.send(data) })
 }
 
-function closeTerminal() {
-  termWs?.close()
+function writeTerminalMessage(message: string) {
+  const el = document.getElementById('terminal-container')
+  if (!el) {
+    console.warn('[agents] terminal container not mounted', message)
+    return
+  }
+  el.innerHTML = ''
   term?.dispose()
-  term = null; termWs = null
+  term = new Terminal({ cursorBlink: false, fontSize: 13, theme: { background: '#1a1a2e' } })
+  const fit = new FitAddon()
+  term.loadAddon(fit)
+  term.open(el)
+  fit.fit()
+  term.writeln(message + '\r')
+}
+
+function closeTerminal() {
+  resetTerminalSession()
   termOpen.value = false
+}
+
+async function hydrateAgentCredentials(agent: Agent): Promise<Agent> {
+  if (agent.credentials?.ip) return agent
+  if (accessTarget.value?.id === agent.id && accessTarget.value.credentials?.ip) {
+    return { ...agent, credentials: accessTarget.value.credentials }
+  }
+  const { data } = await apolloClient.query<AgentQueryResult, AgentQueryVars>({
+    query: AGENT_QUERY,
+    variables: { id: agent.id },
+    fetchPolicy: 'network-only',
+  })
+  return data?.agent?.credentials ? { ...agent, credentials: data.agent.credentials } : agent
+}
+
+async function refreshInstalledSkills(agent: Agent) {
+  const ip = agent.credentials?.ip
+  if (!ip) return
+  skillInstalledLoading.value = true
+  try {
+    const resp = await fetch(`/v1/skills/installed/${encodeURIComponent(ip)}`)
+    const data = await resp.json()
+    if (resp.ok && data.status === 'ok' && data.installed) {
+      skillInstalled.value = data.installed
+    }
+  } catch (err: unknown) {
+    console.warn('[agents] skill installed check failed', { id: agent.id, err })
+  } finally {
+    skillInstalledLoading.value = false
+  }
 }
 
 function openSkillInstall(agent: Agent) {
   skillInstallAgent.value = agent
   skillInstallSelected.value = []
+  skillInstallResults.value = {}
+  skillInstalled.value = {}
+  skillInstallPage.value = 1
   loadSkills()
   skillInstallOpen.value = true
+  hydrateAgentCredentials(agent)
+    .then((next) => {
+      if (skillInstallAgent.value?.id === agent.id) {
+        skillInstallAgent.value = next
+        refreshInstalledSkills(next)
+      }
+    })
+    .catch((err: unknown) => {
+      console.warn('[agents] skill install credential fetch failed', { id: agent.id, err })
+      toast.error(locale.t('agents.action.accessFetchFail'))
+    })
 }
 
 async function doSkillInstall() {
   if (!skillInstallAgent.value || skillInstallSelected.value.length === 0) return
   skillInstallLoading.value = true
   skillInstallResults.value = {}
-  const ip = skillInstallAgent.value.credentials?.ip || ''
+  const agent = await hydrateAgentCredentials(skillInstallAgent.value).catch((err: unknown) => {
+    console.warn('[agents] skill install credential fetch failed', { id: skillInstallAgent.value?.id, err })
+    return skillInstallAgent.value
+  })
+  if (agent) skillInstallAgent.value = agent
+  const ip = agent?.credentials?.ip || ''
+  if (!ip) {
+    toast.error(locale.t('agents.action.accessFetchFail'))
+    skillInstallLoading.value = false
+    return
+  }
   for (const sid of skillInstallSelected.value) {
     skillInstallResults.value[sid] = 'pending'
   }
   for (const sid of skillInstallSelected.value) {
     try {
-      const r = await fetch(`/v1/skills/install/${ip}/${sid}`, { method: 'POST' })
+      const r = await fetch(`/v1/skills/install/${encodeURIComponent(ip)}/${encodeURIComponent(sid)}`, { method: 'POST' })
       const data = await r.json()
-      skillInstallResults.value[sid] = data.status === 'ok' ? 'ok' : 'fail'
+      const ok = r.ok && data.status === 'ok'
+      skillInstallResults.value[sid] = ok ? 'ok' : 'fail'
+      if (ok) skillInstalled.value = { ...skillInstalled.value, [sid]: true }
     } catch { skillInstallResults.value[sid] = 'fail' }
   }
   const ok = Object.values(skillInstallResults.value).filter(v => v === 'ok').length
   if (ok > 0) toast.success(`安装完成: ${ok}/${skillInstallSelected.value.length} 成功`)
+  if (agent) refreshInstalledSkills(agent)
   skillInstallLoading.value = false
 }
 
@@ -1520,19 +1643,30 @@ const summaryText = computed(() => {
       </cds-modal-header>
       <cds-modal-content>
         <div v-if="installableSkills.length === 0" cds-text="body" style="color:#888;padding:16px">
-          暂无可用离线 Skill。请先在 Skill 管理中同步离线包。
+          暂无可用离线 Skill。请先在 Skills 管理中同步离线包。
         </div>
         <div v-else cds-layout="vertical gap:sm p:sm">
-          <label v-for="s in installableSkills" :key="s.id" style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer">
-            <input type="checkbox" :value="s.id" v-model="skillInstallSelected" />
-            <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;color:#6b7280;font-size:12px">
+            <span>{{ skillInstalledLoading ? '正在检查已安装状态...' : `离线包 ${installableSkills.length} 个` }}</span>
+            <span>{{ skillInstallSummary }}</span>
+          </div>
+          <label v-for="s in pagedInstallableSkills" :key="s.id" style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer">
+            <input type="checkbox" :value="s.id" v-model="skillInstallSelected" :disabled="skillInstalled[s.id] || skillInstallLoading" />
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">
               <strong>{{ s.name }}</strong> <span style="color:#888;font-size:12px">v{{ s.version }}</span>
               <span v-if="s.category" style="margin-left:8px;font-size:11px;color:#2563EB;background:#eff6ff;padding:1px 6px;border-radius:4px">{{ s.category }}</span>
+              <span v-if="skillInstalled[s.id]" style="margin-left:auto;font-size:11px;color:#047857;background:#ecfdf5;padding:1px 6px;border-radius:4px">已安装</span>
+              <span v-else style="margin-left:auto;font-size:11px;color:#6b7280;background:#f3f4f6;padding:1px 6px;border-radius:4px">未安装</span>
               <span v-if="skillInstallResults[s.id] === 'ok'" style="margin-left:auto;color:#059669">✅</span>
               <span v-else-if="skillInstallResults[s.id] === 'fail'" style="margin-left:auto;color:#dc2626">❌</span>
               <span v-else-if="skillInstallResults[s.id] === 'pending'" style="margin-left:auto;color:#9ca3af">⏳</span>
             </div>
           </label>
+          <div v-if="skillInstallTotalPages > 1" style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-top:4px">
+            <cds-button size="sm" kind="secondary" :disabled="skillInstallPage <= 1 || skillInstallLoading" @click="skillInstallPage = Math.max(1, skillInstallPage - 1)">上一页</cds-button>
+            <span style="font-size:12px;color:#6b7280">第 {{ skillInstallPage }} / {{ skillInstallTotalPages }} 页</span>
+            <cds-button size="sm" kind="secondary" :disabled="skillInstallPage >= skillInstallTotalPages || skillInstallLoading" @click="skillInstallPage = Math.min(skillInstallTotalPages, skillInstallPage + 1)">下一页</cds-button>
+          </div>
         </div>
       </cds-modal-content>
       <cds-modal-actions>

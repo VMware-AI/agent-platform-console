@@ -73,7 +73,7 @@ function stepLabel(s: StepId): string {
     mode: locale.t('deployAgent.section.mode'),
     security: locale.t('deployAgent.section.security'),
     network: locale.t('deployAgent.section.network'),
-    skills: '选择Skill',
+    skills: '选择 Skills',
     instances: locale.t('deployAgent.section.instances'),
   }[s]
 }
@@ -203,6 +203,7 @@ function submit() {
       keySource: (r.keyBinding ? 'existing' : 'new') as 'new' | 'existing',
       existingKeyId: r.keyBinding || null, cloneMode: globalForm.cloneMode,
       instantCloneParent: globalForm.cloneMode === 'instant' && globalForm.parentSource === 'existing' ? globalForm.instantCloneParent || null : null,
+      skillIds: selectedSkillIds.value.length > 0 ? [...selectedSkillIds.value] : null,
       _createParents: globalForm.cloneMode === 'instant' && globalForm.parentSource === 'create' ? globalForm.newParents.filter(p => p.name.trim() && p.ip.trim()).map(p => ({ name: p.name.trim(), ip: p.ip.trim() })) : null,
       ovfProperties: ovf.length > 0 ? ovf : null,
     } as any
@@ -221,6 +222,7 @@ watch(() => props.open, (o) => {
     deployMode.value = 'single'
     keySearch.value = ''
     currentStep.value = 'env'
+    selectedSkillIds.value = []
     instanceList.length = 0; instanceList.push({ hostname: '', ip: '', keyBinding: '' })
     batchCount.value = 3; batchPrefix.value = ''; batchStartIP.value = ''; attempted.value = false
   }
@@ -273,7 +275,7 @@ watch(() => props.open, (o) => {
         <!-- ══ 区块2: 全局安全与认证 ══ -->
         <!-- ══ Skills ══ -->
         <div v-if="currentStep==='skills'" class="blk"><h3 class="bh">选择 Skill（可选）</h3><p class="bd">为智能体预装离线 Skill 包。部署时 cloud-init 自动安装。</p>
-          <div v-if="availableSkills.length===0" style="color:#86909c;font-size:13px">暂无可用 Skill。请先在 Skill 管理中创建。</div>
+          <div v-if="availableSkills.length===0" style="color:#86909c;font-size:13px">暂无可用 Skill。请先在 Skills 管理中创建。</div>
           <label v-for="sk in availableSkills" :key="sk.id" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;margin-bottom:6px">
             <input type="checkbox" :value="sk.id" v-model="selectedSkillIds" />
             <strong>{{ sk.name }}</strong> <span style="color:#888;font-size:12px">v{{ sk.version }}</span>

@@ -515,6 +515,7 @@ export interface PrivateModelSpecTestResult {
 export interface TestPrivateModelSpecConnectionInput {
   apiBase: string
   apiKey: string
+  customLlmProvider?: string | null
 }
 export interface TestPrivateModelSpecConnectionVars {
   input: TestPrivateModelSpecConnectionInput

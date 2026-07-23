@@ -7,7 +7,7 @@
  * before the user submits.
  *
  * Backend contract (see Postman § Model Gateways (LITELLM)):
- *   - `ModelGatewayInput` only accepts `name / provider / endpoint / masterKey`.
+ *   - `ModelGatewayInput` accepts `name / provider / endpoint / publicUrl / masterKey`.
  *     `loadBalancingStrategy` and `backendModelCount` are read-only,
  *     populated by sync; `adminUrl` is not an input.
  */
@@ -40,6 +40,7 @@ const toast = useToast()
 /* ---------- form state ---------- */
 const name = ref('')
 const endpoint = ref('')
+const publicUrl = ref('')
 const masterKey = ref('')
 /* Selected gateway type. Only LiteLLM is currently supported, but the
    selector is open (not disabled) so adding more providers is a
@@ -67,10 +68,11 @@ const nameValid = computed(() => {
   return length >= 2 && length <= 64
 })
 const endpointValid = computed(() => isHTTPURL(endpoint.value.trim()))
+const publicUrlValid = computed(() => !publicUrl.value.trim() || isHTTPURL(publicUrl.value.trim()))
 /* Master key is required (create mode only — edit was removed). */
 const masterKeyValid = computed(() => masterKey.value.trim().length > 0)
 const formValid = computed(
-  () => nameValid.value && endpointValid.value && masterKeyValid.value,
+  () => nameValid.value && endpointValid.value && publicUrlValid.value && masterKeyValid.value,
 )
 
 /* The Test Connection button is enabled once the user has supplied enough
@@ -86,6 +88,7 @@ const testButtonEnabled = computed(
 function reset() {
   name.value = ''
   endpoint.value = ''
+  publicUrl.value = ''
   masterKey.value = ''
   provider.value = 'LITELLM'
   testResult.value = null
@@ -164,7 +167,7 @@ function submit() {
   attempted.value = true
   if (!formValid.value || props.saving) return
   /* `ModelGatewayInput` on the backend is a strict subset
-     (`name / provider / endpoint / masterKey`). `loadBalancingStrategy`
+     (`name / provider / endpoint / publicUrl / masterKey`). `loadBalancingStrategy`
      and `backendModelCount` are read-only — populated by sync, never
      accepted as inputs. `adminUrl` is not stored; the UI is
      `${endpoint}/ui` and is computed on read. */
@@ -172,6 +175,7 @@ function submit() {
     name: name.value.trim(),
     provider: provider.value,
     endpoint: normalizeURL(endpoint.value),
+    publicUrl: publicUrl.value.trim() ? normalizeURL(publicUrl.value) : null,
     masterKey: masterKey.value.trim() || null,
   })
 }
@@ -242,6 +246,24 @@ function close() {
               @input="(e: Event) => endpoint = (e.target as HTMLInputElement).value"
             />
             <cds-control-message v-if="attempted && !endpointValid" status="error">
+              {{ locale.t('gateway.form.urlError') }}
+            </cds-control-message>
+          </cds-input>
+        </cds-control>
+
+        <!-- agent-facing gateway URL. Optional unless endpoint is localhost. -->
+        <cds-control>
+          <cds-input :status="attempted && !publicUrlValid ? 'error' : 'neutral'">
+            <label>{{ locale.t('gateway.form.publicUrl') }}</label>
+            <input
+              slot="input"
+              type="url"
+              :value="publicUrl"
+              autocomplete="url"
+              :placeholder="locale.t('gateway.form.publicUrlPlaceholder')"
+              @input="(e: Event) => publicUrl = (e.target as HTMLInputElement).value"
+            />
+            <cds-control-message v-if="attempted && !publicUrlValid" status="error">
               {{ locale.t('gateway.form.urlError') }}
             </cds-control-message>
           </cds-input>
