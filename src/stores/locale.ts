@@ -652,6 +652,11 @@ export const STRINGS: Dict = {
     en: 'Name must be 2–64 characters.',
   },
   'gateway.form.endpoint': { zh: '网关地址', en: 'Gateway URL' },
+  'gateway.form.publicUrl': { zh: 'Agent 访问地址', en: 'Agent Access URL' },
+  'gateway.form.publicUrlPlaceholder': {
+    zh: '例如 http://litellm.internal:4000',
+    en: 'e.g. http://litellm.internal:4000',
+  },
   'gateway.form.testConnection': { zh: '测试连接', en: 'Test Connection' },
   'gateway.form.strategyLabel': { zh: '默认路由策略', en: 'Default routing strategy' },
   'gateway.form.testSuccess': {
@@ -1985,6 +1990,10 @@ export const STRINGS: Dict = {
   'supplier.model.form.spec.providerOption.minimax': {
     zh: 'MiniMax',
     en: 'MiniMax',
+  },
+  'supplier.model.form.spec.providerOption.ollama_chat': {
+    zh: 'Ollama Chat',
+    en: 'Ollama Chat',
   },
   'supplier.model.form.spec.providerOption.moonshot': {
     zh: 'Moonshot(月之暗面)',

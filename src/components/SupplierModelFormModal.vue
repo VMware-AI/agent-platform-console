@@ -496,6 +496,7 @@ async function testConnectionForSpec(index: number, d: SpecDraft) {
         input: {
           apiBase: d.apiBase.trim(),
           apiKey: d.apiKey.trim(),
+          customLlmProvider: effectiveProvider(d) || null,
         },
       },
     })

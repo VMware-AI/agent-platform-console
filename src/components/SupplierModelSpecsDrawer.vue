@@ -254,6 +254,7 @@ async function testAddConnection() {
         input: {
           apiBase: newSpec.value.apiBase.trim(),
           apiKey: newSpec.value.apiKey.trim(),
+          customLlmProvider: effectiveProvider() || null,
         },
       },
     })

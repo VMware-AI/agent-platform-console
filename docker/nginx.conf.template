@@ -76,4 +76,30 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 60s;
     }
+
+    # API proxy for REST endpoints used by the console (/v1/skills/*,
+    # /v1/terminal/*, and future /v1 routes). Keep this separate from /query so
+    # the SPA can reach the backend in production without hardcoding a backend
+    # host into the browser bundle.
+    location ^~ /v1/terminal/ {
+        proxy_pass ${BACKEND_BASE_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "Upgrade";
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+    }
+
+    location ^~ /v1/ {
+        proxy_pass ${BACKEND_BASE_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
 }

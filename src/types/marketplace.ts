@@ -238,6 +238,8 @@ export interface DeployAgentInput {
   departmentId?: string | null
   /** OVF/vApp properties from the template, keyed by property id. */
   ovfProperties?: OVFPropertyInput[] | null
+  /** Skill hub package ids selected in the deploy dialog. */
+  skillIds?: string[] | null
   /** Key source: "new" issues a fresh key; "existing" binds an unbound key. */
   keySource?: KeySource | null
   /** Required when keySource=existing — the unbound virtual key id to reuse. */

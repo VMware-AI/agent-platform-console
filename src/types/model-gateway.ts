@@ -33,6 +33,7 @@ export interface ModelGateway {
   name: string
   provider: ModelGatewayProvider
   endpoint: string
+  publicUrl: string | null
   /** Number of models deployed on the backend gateway, populated by the
    * latest sync. Always non-null — backend projects a NULL DB column as
    * `0` (see internal/graph/gateway_facade.go `toModelGateway`). */
@@ -85,6 +86,7 @@ export interface ModelGatewayInput {
   name: string
   provider: ModelGatewayProvider
   endpoint: string
+  publicUrl?: string | null
   masterKey?: string | null
 }
 
