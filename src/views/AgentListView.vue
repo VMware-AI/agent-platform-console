@@ -1,7 +1,7 @@
 <script setup lang="ts">
  
 import '@/components/icons'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useToast } from '@/composables/useToast'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
@@ -175,6 +175,7 @@ const STATUS_OPTIONS: Array<StatusKey | 'all'> = [
   'stopped',
   'exception',
   'provisioning',
+  'failed',
 ]
 
 const TYPE_OPTIONS: Array<TypeKey | 'all'> = [
@@ -287,6 +288,8 @@ const ACTIONS_BY_STATUS: Partial<Record<StatusKey, RowActionKey[]>> = {
   running:   ['rotateKey', 'update', 'installSkill', 'terminal', 'restart', 'stop', 'delete', 'hardDelete', 'copyAccess'],
   stopped:   ['rotateKey', 'update', 'installSkill', 'terminal', 'start', 'delete', 'hardDelete', 'copyAccess'],
   exception: ['rotateKey', 'update', 'installSkill', 'terminal', 'restart', 'stop', 'delete', 'hardDelete', 'copyAccess'],
+  failed:    ['delete', 'hardDelete'],
+  provisioning: ['delete', 'hardDelete'],
 }
 
 const ICON_FOR_ACTION: Record<RowActionKey, string> = {
@@ -450,10 +453,19 @@ const skillInstalledLoading = ref(false)
 const skillInstallPage = ref(1)
 const SKILL_INSTALL_PAGE_SIZE = 5
 
-const SKILLS_FOR_INSTALL = gql`query { skills { id name version category packageUrl } }`
+const SKILLS_FOR_INSTALL = gql`query { skills { id name version category packageUrl agentTypes } }`
 const { result: skillsForInstallResult, load: loadSkills } = useLazyQuery(SKILLS_FOR_INSTALL)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const installableSkills = computed(() => (skillsForInstallResult.value as any)?.skills?.filter((s: any) => s.packageUrl) ?? [])
+ 
+const installableSkills = computed(() => {
+  const agentType = skillInstallAgent.value?.type
+  const agentTypeUpper = agentType ? String(agentType).toUpperCase() : ''
+  const skills = (skillsForInstallResult.value as { skills?: Array<{ packageUrl?: string; agentTypes?: string[] }> })?.skills ?? []
+  return skills.filter((s) => {
+    if (!s.packageUrl) return false
+    if (!s.agentTypes || s.agentTypes.length === 0) return true
+    return s.agentTypes.includes(agentTypeUpper)
+  })
+})
 const skillInstallTotalPages = computed(() =>
   Math.max(1, Math.ceil(installableSkills.value.length / SKILL_INSTALL_PAGE_SIZE)),
 )
@@ -481,14 +493,36 @@ watch(skillInstalled, (installed) => {
 // ─── Terminal ───────────────────────────────────────────────────────
 const termAgent = ref<Agent | null>(null)
 const termOpen = ref(false)
+const terminalContainer = ref<HTMLElement | null>(null)
 let term: Terminal | null = null
 let termWs: WebSocket | null = null
+let termFit: FitAddon | null = null
+let terminalResizeObserver: ResizeObserver | null = null
 
 function resetTerminalSession() {
   termWs?.close()
+  terminalResizeObserver?.disconnect()
   term?.dispose()
   term = null
   termWs = null
+  termFit = null
+  terminalResizeObserver = null
+}
+
+function fitTerminal() {
+  requestAnimationFrame(() => {
+    try {
+      termFit?.fit()
+    } catch (e) {
+      console.warn('[agents] terminal fit failed', e)
+    }
+  })
+}
+
+function observeTerminalResize(el: HTMLElement) {
+  terminalResizeObserver?.disconnect()
+  terminalResizeObserver = new ResizeObserver(() => fitTerminal())
+  terminalResizeObserver.observe(el)
 }
 
 async function openTerminal(agent: Agent) {
@@ -522,7 +556,7 @@ async function openTerminal(agent: Agent) {
 
 function initTerminal(ip: string) {
   if (!isIpv4Address(ip)) { writeTerminalMessage('无效 IP: ' + ip); return }
-  const el = document.getElementById('terminal-container')
+  const el = terminalContainer.value
   if (!el) {
     console.warn('[agents] terminal container not mounted')
     return
@@ -530,9 +564,11 @@ function initTerminal(ip: string) {
   el.innerHTML = ''
   term = new Terminal({ cursorBlink: true, fontSize: 13, theme: { background: '#1a1a2e' } })
   const fit = new FitAddon()
+  termFit = fit
   term.loadAddon(fit)
   term.open(el)
-  fit.fit()
+  observeTerminalResize(el)
+  fitTerminal()
   const name = termAgent.value?.name || ip
   const td = new TextDecoder('utf-8', { fatal: false })
   termWs = new WebSocket(buildTerminalWsUrl(window.location.origin, ip))
@@ -545,7 +581,7 @@ function initTerminal(ip: string) {
 }
 
 function writeTerminalMessage(message: string) {
-  const el = document.getElementById('terminal-container')
+  const el = terminalContainer.value
   if (!el) {
     console.warn('[agents] terminal container not mounted', message)
     return
@@ -554,9 +590,11 @@ function writeTerminalMessage(message: string) {
   term?.dispose()
   term = new Terminal({ cursorBlink: false, fontSize: 13, theme: { background: '#1a1a2e' } })
   const fit = new FitAddon()
+  termFit = fit
   term.loadAddon(fit)
   term.open(el)
-  fit.fit()
+  observeTerminalResize(el)
+  fitTerminal()
   term.writeln(message + '\r')
 }
 
@@ -564,6 +602,8 @@ function closeTerminal() {
   resetTerminalSession()
   termOpen.value = false
 }
+
+onUnmounted(resetTerminalSession)
 
 async function hydrateAgentCredentials(agent: Agent): Promise<Agent> {
   if (agent.credentials?.ip) return agent
@@ -1629,10 +1669,12 @@ const summaryText = computed(() => {
     </cds-dropdown>
   
     <!-- Terminal Dialog -->
-    <cds-modal :hidden="!termOpen" closable size="lg" @closeChange="closeTerminal">
+    <cds-modal class="terminal-modal" :hidden="!termOpen" closable size="xl" @closeChange="closeTerminal">
       <cds-modal-header><h2 cds-text="subsection">终端 — {{ termAgent?.name }}</h2></cds-modal-header>
-      <cds-modal-content>
-        <div id="terminal-container" style="height:400px;width:100%"></div>
+      <cds-modal-content class="terminal-modal__content">
+        <div class="terminal-shell">
+          <div ref="terminalContainer" id="terminal-container" class="terminal-container"></div>
+        </div>
       </cds-modal-content>
     </cds-modal>
 
@@ -1654,6 +1696,8 @@ const summaryText = computed(() => {
             <input type="checkbox" :value="s.id" v-model="skillInstallSelected" :disabled="skillInstalled[s.id] || skillInstallLoading" />
             <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">
               <strong>{{ s.name }}</strong> <span style="color:#888;font-size:12px">v{{ s.version }}</span>
+              <template v-if="s.agentTypes?.length"><span v-for="at in s.agentTypes" :key="at" style="background:#e8d5f5;color:#6b3a8b;font-size:10px;padding:1px 5px;border-radius:4px;margin-left:2px">{{ at }}</span></template>
+              <span v-else style="background:#e5e7eb;color:#6b7280;font-size:10px;padding:1px 5px;border-radius:4px;margin-left:2px">全部</span>
               <span v-if="s.category" style="margin-left:8px;font-size:11px;color:#2563EB;background:#eff6ff;padding:1px 6px;border-radius:4px">{{ s.category }}</span>
               <span v-if="skillInstalled[s.id]" style="margin-left:auto;font-size:11px;color:#047857;background:#ecfdf5;padding:1px 6px;border-radius:4px">已安装</span>
               <span v-else style="margin-left:auto;font-size:11px;color:#6b7280;background:#f3f4f6;padding:1px 6px;border-radius:4px">未安装</span>
@@ -2102,5 +2146,36 @@ const summaryText = computed(() => {
 }
 .menu-opt.danger cds-icon {
   color: var(--cds-alias-status-danger, #c92100);
+}
+
+/* ---------- Terminal modal ---------- */
+
+.terminal-modal__content {
+  overflow: visible;
+}
+
+.terminal-shell {
+  width: min(86vw, 1120px);
+  height: min(68vh, 680px);
+  min-width: min(520px, calc(100vw - 56px));
+  min-height: 300px;
+  max-width: calc(100vw - 56px);
+  max-height: calc(100vh - 220px);
+  resize: both;
+  overflow: hidden;
+  border: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+  border-radius: 6px;
+  background: #1a1a2e;
+}
+
+.terminal-container {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.terminal-container :deep(.terminal) {
+  height: 100%;
 }
 </style>

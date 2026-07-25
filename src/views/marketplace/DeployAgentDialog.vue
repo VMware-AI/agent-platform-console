@@ -54,6 +54,13 @@ interface InstanceRow { hostname: string; ip: string; keyBinding: string }
 const instanceList = reactive<InstanceRow[]>([{ hostname: '', ip: '', keyBinding: '' }])
 const batchCount = ref(3); const batchPrefix = ref(''); const batchStartIP = ref('')
 const attempted = ref(false)
+const submitting = ref(false)
+// Mirror the parent's deploying state into submitting, so the button stays
+// disabled as long as a deploy is in flight, even after the user closed/reopened
+// the dialog. We don't auto-reset on props.open — the guard is fresh each session.
+watch(() => props.deploying, (d) => {
+  if (!d) submitting.value = false
+})
 
 // Skills selection
 const selectedSkillIds = ref<string[]>([])
@@ -181,7 +188,15 @@ const valid = computed(() => Object.keys(errors.value).length === 0)
 
 /* ---- 提交 ---- */
 function submit() {
-  attempted.value = true; validatePassword(); if (!valid.value || pwErr.value || cpwErr.value) return
+  // Guard against rapid double-click: ignore if already submitting or a deploy
+  // is in progress from the parent.
+  if (submitting.value) return
+  if (props.deploying) return
+  submitting.value = true
+  attempted.value = true; validatePassword(); if (!valid.value || pwErr.value || cpwErr.value) {
+    submitting.value = false
+    return
+  }
   // Final step: collect the right instance rows based on deploy mode
   const rows: InstanceRow[] = deployMode.value === 'single' ? [instanceList[0]] : instanceList
   const mk = (r: InstanceRow): DeployAgentInput => {
@@ -210,6 +225,10 @@ function submit() {
   }
   if (deployMode.value === 'single') emit('submit', mk(instanceList[0]))
   else instanceList.forEach(r => emit('submit', mk(r)))
+  // submitting.value stays true until props.open closes or props.deploying flips
+  // back to false (emitting a new deploy would re-set it). Idempotent under
+  // rapid double-click: the first click sets the guard, subsequent clicks hit
+  // the early-return above.
 }
 
 /* ---- 重置 ---- */
@@ -224,7 +243,7 @@ watch(() => props.open, (o) => {
     currentStep.value = 'env'
     selectedSkillIds.value = []
     instanceList.length = 0; instanceList.push({ hostname: '', ip: '', keyBinding: '' })
-    batchCount.value = 3; batchPrefix.value = ''; batchStartIP.value = ''; attempted.value = false
+    batchCount.value = 3; batchPrefix.value = ''; batchStartIP.value = ''; attempted.value = false; submitting.value = false
   }
 }, { immediate: true })
 </script>
@@ -350,7 +369,7 @@ watch(() => props.open, (o) => {
       <cds-button v-if="stepIndex(currentStep) > 0" action="outline" @click="goPrev">{{ locale.t('deployAgent.action.prev') }}</cds-button>
       <cds-button action="outline" @click="emit('close')">{{ locale.t('deployAgent.action.cancel') }}</cds-button>
       <cds-button v-if="stepIndex(currentStep) < STEPS.length - 1" status="primary" @click="goNext">{{ locale.t('deployAgent.action.next') }}</cds-button>
-      <cds-button v-else :loading-state="props.deploying?'loading':'default'" status="primary" @click="submit">{{ locale.t('deployAgent.action.submit') }}</cds-button>
+      <cds-button v-else :disabled="submitting || props.deploying" :loading-state="(submitting || props.deploying) ? 'loading' : 'default'" status="primary" @click="submit">{{ locale.t('deployAgent.action.submit') }}</cds-button>
     </cds-modal-actions>
   </cds-modal>
 </template>
