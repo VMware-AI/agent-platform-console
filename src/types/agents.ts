@@ -65,14 +65,7 @@ export interface AgentConnection {
   pageInfo: PageInfo
 }
 
-export type AgentSortField =
-  | 'NAME'
-  | 'TYPE'
-  | 'STATUS'
-  | 'API_KEY_NAME'
-  | 'USERNAME'
-  | 'CREATED_AT'
-  | 'UPDATED_AT'
+export type AgentSortField = 'NAME'
 
 export type SortDirection = 'ASC' | 'DESC'
 
