@@ -501,6 +501,7 @@ function goToPage(page: number) {
       </button>
     </div>
 
+    <div class="grid-card">
     <cds-grid
       border="row"
       column-layout="flex"
@@ -739,6 +740,7 @@ function goToPage(page: number) {
         </div>
       </cds-grid-footer>
     </cds-grid>
+    </div>
 
     <cds-dropdown
       v-if="filterMenuAnchor && filterMenuKey"

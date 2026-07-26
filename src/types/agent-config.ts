@@ -29,6 +29,12 @@ export interface AgentConfigNode {
   artifactId: string | null
   knowledge: KnowledgeArtifactNode[]
   createdAt: string
+  /** Optional — backend schema is still rolling this out; table cell
+   *  renders an em-dash placeholder until the field lands. */
+  updatedAt?: string | null
+  /** Optional — same situation as `updatedAt`: table cell falls back to
+   *  `—` until the backend field is exposed. */
+  latestVersion?: string | null
 }
 
 export interface AgentConfigsVars {

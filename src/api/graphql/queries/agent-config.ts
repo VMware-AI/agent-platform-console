@@ -32,6 +32,8 @@ const AGENT_CONFIG_FIELDS = gql`
       ...KnowledgeArtifactFields
     }
     createdAt
+    updatedAt
+    latestVersion
   }
   ${KNOWLEDGE_ARTIFACT_FIELDS}
 `

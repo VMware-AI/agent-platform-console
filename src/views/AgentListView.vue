@@ -1132,29 +1132,6 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.type') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="`sort ${locale.t('agents.col.type')}`"
-              @click="(e: MouseEvent) => onSortClick('TYPE')"
-            >
-              <cds-icon
-                v-if="sortStateFor('TYPE') === 'ascending'"
-                shape="angle"
-                direction="up"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else-if="sortStateFor('TYPE') === 'descending'"
-                shape="angle"
-                direction="down"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else
-                shape="two-way-arrows"
-                class="col-sort-rotated"
-                size="sm"
-              ></cds-icon>
-            </cds-button-action>
-            <cds-button-action
               shape="filter"
               aria-controls="filter-TYPE"
               :aria-label="`filter ${locale.t('agents.col.type')}`"
@@ -1167,29 +1144,6 @@ const summaryText = computed(() => {
         <cds-grid-column :width="'9%'">
           {{ locale.t('agents.col.status') }}
           <span class="col-head-actions">
-            <cds-button-action
-              :aria-label="`sort ${locale.t('agents.col.status')}`"
-              @click="(e: MouseEvent) => onSortClick('STATUS')"
-            >
-              <cds-icon
-                v-if="sortStateFor('STATUS') === 'ascending'"
-                shape="angle"
-                direction="up"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else-if="sortStateFor('STATUS') === 'descending'"
-                shape="angle"
-                direction="down"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else
-                shape="two-way-arrows"
-                class="col-sort-rotated"
-                size="sm"
-              ></cds-icon>
-            </cds-button-action>
             <cds-button-action
               shape="filter"
               aria-controls="filter-STATUS"
@@ -1204,29 +1158,6 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.key') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="`sort ${locale.t('agents.col.key')}`"
-              @click="(e: MouseEvent) => onSortClick('API_KEY_NAME')"
-            >
-              <cds-icon
-                v-if="sortStateFor('API_KEY_NAME') === 'ascending'"
-                shape="angle"
-                direction="up"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else-if="sortStateFor('API_KEY_NAME') === 'descending'"
-                shape="angle"
-                direction="down"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else
-                shape="two-way-arrows"
-                class="col-sort-rotated"
-                size="sm"
-              ></cds-icon>
-            </cds-button-action>
-            <cds-button-action
               shape="filter"
               aria-controls="filter-KEY"
               :aria-label="`filter ${locale.t('agents.col.key')}`"
@@ -1240,29 +1171,6 @@ const summaryText = computed(() => {
           {{ locale.t('agents.col.username') }}
           <span class="col-head-actions">
             <cds-button-action
-              :aria-label="`sort ${locale.t('agents.col.username')}`"
-              @click="(e: MouseEvent) => onSortClick('USERNAME')"
-            >
-              <cds-icon
-                v-if="sortStateFor('USERNAME') === 'ascending'"
-                shape="angle"
-                direction="up"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else-if="sortStateFor('USERNAME') === 'descending'"
-                shape="angle"
-                direction="down"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else
-                shape="two-way-arrows"
-                class="col-sort-rotated"
-                size="sm"
-              ></cds-icon>
-            </cds-button-action>
-            <cds-button-action
               shape="filter"
               aria-controls="filter-USERNAME"
               :aria-label="`filter ${locale.t('agents.col.username')}`"
@@ -1274,60 +1182,10 @@ const summaryText = computed(() => {
 
         <cds-grid-column :width="'11%'">
           {{ locale.t('agents.col.createdAt') }}
-          <span class="col-head-actions">
-            <cds-button-action
-              :aria-label="`sort ${locale.t('agents.col.createdAt')}`"
-              @click="(e: MouseEvent) => onSortClick('CREATED_AT')"
-            >
-              <cds-icon
-                v-if="sortStateFor('CREATED_AT') === 'ascending'"
-                shape="angle"
-                direction="up"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else-if="sortStateFor('CREATED_AT') === 'descending'"
-                shape="angle"
-                direction="down"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else
-                shape="two-way-arrows"
-                class="col-sort-rotated"
-                size="sm"
-              ></cds-icon>
-            </cds-button-action>
-          </span>
         </cds-grid-column>
 
         <cds-grid-column :width="'11%'">
           {{ locale.t('agents.col.updatedAt') }}
-          <span class="col-head-actions">
-            <cds-button-action
-              :aria-label="`sort ${locale.t('agents.col.updatedAt')}`"
-              @click="(e: MouseEvent) => onSortClick('UPDATED_AT')"
-            >
-              <cds-icon
-                v-if="sortStateFor('UPDATED_AT') === 'ascending'"
-                shape="angle"
-                direction="up"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else-if="sortStateFor('UPDATED_AT') === 'descending'"
-                shape="angle"
-                direction="down"
-                size="sm"
-              ></cds-icon>
-              <cds-icon
-                v-else
-                shape="two-way-arrows"
-                class="col-sort-rotated"
-                size="sm"
-              ></cds-icon>
-            </cds-button-action>
-          </span>
         </cds-grid-column>
 
         <cds-grid-column :width="'18%'">

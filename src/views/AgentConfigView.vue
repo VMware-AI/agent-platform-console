@@ -56,7 +56,6 @@ const saving = ref(false)
 const {
   result: configsResult,
   loading: configsLoading,
-  error: configsError,
   refetch: refetchConfigs,
 } = useQuery<AgentConfigsResult, AgentConfigsVars>(AGENT_CONFIGS_QUERY)
 
@@ -234,9 +233,10 @@ async function refresh() {
   }
 }
 
-function formatTimestamp(value: string): string {
+function formatTimestamp(value: string | null | undefined): string {
+  if (!value) return '—'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
+  if (Number.isNaN(date.getTime())) return '—'
   return date.toLocaleString(locale.locale === 'zh' ? 'zh-CN' : 'en-US')
 }
 </script>
@@ -283,7 +283,7 @@ function formatTimestamp(value: string): string {
         role="grid"
         :aria-label="locale.t('agentConfig.table.label')"
       >
-        <cds-grid-column width="46%">
+        <cds-grid-column width="28%">
           <div class="col-head">
             <span>{{ locale.t('agentConfig.col.name') }}</span>
             <span class="col-head-actions">
@@ -310,8 +310,11 @@ function formatTimestamp(value: string): string {
             </span>
           </div>
         </cds-grid-column>
-        <cds-grid-column width="26%">{{ locale.t('agentConfig.col.agentType') }}</cds-grid-column>
-        <cds-grid-column width="28%">{{ locale.t('agentConfig.col.actions') }}</cds-grid-column>
+        <cds-grid-column width="12%">{{ locale.t('agentConfig.col.latestVersion') }}</cds-grid-column>
+        <cds-grid-column width="14%">{{ locale.t('agentConfig.col.agentType') }}</cds-grid-column>
+        <cds-grid-column width="13%">{{ locale.t('agentConfig.col.createdAt') }}</cds-grid-column>
+        <cds-grid-column width="13%">{{ locale.t('agentConfig.col.updatedAt') }}</cds-grid-column>
+        <cds-grid-column width="20%">{{ locale.t('agentConfig.col.actions') }}</cds-grid-column>
 
         <cds-grid-row v-for="config in visibleConfigs" :key="config.id">
           <cds-grid-cell>
@@ -323,7 +326,18 @@ function formatTimestamp(value: string): string {
             </div>
           </cds-grid-cell>
           <cds-grid-cell>
+            <span class="version-cell" :title="config.latestVersion ?? undefined">
+              {{ config.latestVersion ?? '—' }}
+            </span>
+          </cds-grid-cell>
+          <cds-grid-cell>
             <span class="config-type" :title="config.agentType">{{ config.agentType }}</span>
+          </cds-grid-cell>
+          <cds-grid-cell>
+            <span class="time-cell" :title="config.createdAt">{{ formatTimestamp(config.createdAt) }}</span>
+          </cds-grid-cell>
+          <cds-grid-cell>
+            <span class="time-cell" :title="config.updatedAt ?? undefined">{{ formatTimestamp(config.updatedAt) }}</span>
           </cds-grid-cell>
           <cds-grid-cell>
             <div class="row-actions">
@@ -355,16 +369,8 @@ function formatTimestamp(value: string): string {
           <p cds-text="subsection">{{ locale.t('agentConfig.list.loading') }}</p>
         </cds-grid-placeholder>
 
-        <cds-grid-placeholder v-else-if="configsError" role="alert" aria-live="polite">
-          <cds-icon shape="ban" size="xl" aria-hidden="true"></cds-icon>
-          <p cds-text="subsection">{{ locale.t('agentConfig.list.error') }}</p>
-          <cds-button action="outline" size="sm" @click="refresh">
-            {{ locale.t('agentConfig.action.refresh') }}
-          </cds-button>
-        </cds-grid-placeholder>
-
         <cds-grid-placeholder v-else-if="sortedConfigs.length === 0" role="status" aria-live="polite">
-          <cds-icon shape="details" size="xl" aria-hidden="true"></cds-icon>
+          <cds-icon shape="cog" size="xl" aria-hidden="true"></cds-icon>
           <p cds-text="subsection">{{ locale.t('agentConfig.list.empty') }}</p>
         </cds-grid-placeholder>
 
@@ -471,6 +477,10 @@ function formatTimestamp(value: string): string {
             <div class="detail-row">
               <dt>{{ locale.t('agentConfig.detail.createdAt') }}</dt>
               <dd>{{ formatTimestamp(selectedConfig.createdAt) }}</dd>
+            </div>
+            <div class="detail-row">
+              <dt>{{ locale.t('agentConfig.detail.updatedAt') }}</dt>
+              <dd>{{ formatTimestamp(selectedConfig.updatedAt) }}</dd>
             </div>
             <div class="detail-row">
               <dt>{{ locale.t('agentConfig.detail.artifactId') }}</dt>
@@ -622,10 +632,10 @@ function formatTimestamp(value: string): string {
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  /* min-width: 760px reserves the table's natural width (3 columns +
+  /* min-width: 1040px reserves the table's natural width (6 columns +
      row actions); the `.grid-card` wrapper (overflow-x: auto) provides
      the horizontal scrollbar when the viewport drops below this width. */
-  min-width: 760px;
+  min-width: 1040px;
 }
 .name-cell {
   display: flex;
@@ -641,8 +651,26 @@ function formatTimestamp(value: string): string {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Version cell — semver strings ("v1.2.3") are short enough to stay on
+   one line, so just `nowrap` + `tabular-nums` keeps the column from
+   jittering as digits change width across rows. */
+.version-cell {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+}
 .default-badge {
   flex: 0 0 auto;
+}
+/* Timestamp cell — matches the muted, tabular-nums treatment used for
+   created/updated columns in AgentListView.vue and ModelRouteView.vue.
+   Keeps digit widths stable across rows so the column doesn't jitter. */
+.time-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--cds-alias-typography-color-300, #565656);
+  font-size: 12px;
 }
 .col-head {
   display: flex;
