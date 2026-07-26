@@ -139,6 +139,7 @@ export const STRINGS: Dict = {
   'agents.status.provisioning': { zh: '部署中', en: 'Provisioning' },
   'agents.status.exception': { zh: '异常', en: 'Exception' },
   'agents.status.error': { zh: '异常', en: 'Error' },
+  'agents.status.failed': { zh: '部署失败', en: 'Failed' },
   'agents.status.filter.all': { zh: '全部状态', en: 'All statuses' },
   'agents.type.filter.all': { zh: '全部类型', en: 'All types' },
   'agents.type.general-chat': { zh: '通用聊天', en: 'General Chat' },

@@ -9,13 +9,13 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 const toast = useToast()
 
 type SkillStatus = 'enabled' | 'disabled'
-interface SkillView { id: string; name: string; version: string; description: string; uri: string; installMethod: string; packageUrl: string; status: SkillStatus; createdAt: string; category: string }
+interface SkillView { id: string; name: string; version: string; description: string; uri: string; installMethod: string; packageUrl: string; status: SkillStatus; createdAt: string; category: string; agentTypes: string[] }
 
 const SL: Record<SkillStatus, string> = { enabled: '已启用', disabled: '已停用' }
 const CATS = ['开发','运维','办公','安全','数据','AI']
-const IL: Record<string, string> = { pip: 'Python 包', 'pip-requirements': 'requirements.txt', npm: 'NPM 包', binary: '二进制程序' }
+const IL: Record<string, string> = { pip: 'Python 包', 'pip-requirements': 'requirements.txt', npm: 'NPM 包', binary: '二进制程序', 'openclaw-skill': 'OpenClaw Skill', 'opencode-skill': 'OpenCode Skill', 'hermes-plugin': 'Hermes 插件' }
 
-const Q = gql`query Skills { skills { id name version description uri installMethod packageUrl mcpConfig createdAt category } }`
+const Q = gql`query Skills { skills { id name version description uri installMethod packageUrl mcpConfig createdAt category agentTypes } }`
 const MU = gql`mutation UpsertSkill($input: UpsertSkillInput!) { upsertSkill(input: $input) { id name } }`
 const MD = gql`mutation DeleteSkill($id: ID!) { deleteSkill(id: $id) }`
 const { result, loading, error: qe, refetch } = useQuery(Q, null, () => ({ fetchPolicy: 'network-only' }))
@@ -27,7 +27,7 @@ const skills = computed<SkillView[]>(() =>
     id: s.id, name: s.name, version: s.version ?? '', description: s.description ?? '',
     uri: s.uri ?? '', installMethod: s.installMethod ?? '', category: (s as any).category ?? '', packageUrl: s.packageUrl ?? '',
     status: (s.name?.includes('deprecated') || s.name?.includes('_v0')) ? 'disabled' : 'enabled',
-    createdAt: s.createdAt ?? '',
+    createdAt: s.createdAt ?? '', agentTypes: s.agentTypes ?? [],
   })).sort((a: any, b: any) => a.name.localeCompare(b.name))
 )
 
@@ -60,12 +60,12 @@ async function execDel() {
 const dw = ref(false)
 const dm = ref<'create' | 'edit'>('create')
 const ed = ref<SkillView | null>(null)
-const f = reactive({ name: '', dname: '', desc: '', ver: '1.0.0', uri: '', im: 'pip', pkg: '', cfg: '', st: 'enabled' as SkillStatus, cat: '' })
+const f = reactive({ name: '', dname: '', desc: '', ver: '1.0.0', uri: '', im: 'pip', pkg: '', cfg: '', st: 'enabled' as SkillStatus, cat: '', at: [] as string[] })
 const fe = ref('')
 const se = ref('')
 const sv = ref(false)
 
-function reset() { f.name = ''; f.dname = ''; f.desc = ''; f.ver = '1.0.0'; f.uri = ''; f.im = 'pip'; f.pkg = ''; f.cfg = ''; f.st = 'enabled'; f.cat = ''; fe.value = ''; se.value = ''; ed.value = null }
+function reset() { f.name = ''; f.dname = ''; f.desc = ''; f.ver = '1.0.0'; f.uri = ''; f.im = 'pip'; f.pkg = ''; f.cfg = ''; f.st = 'enabled'; f.cat = ''; f.at = []; fe.value = ''; se.value = ''; ed.value = null }
 function openNew() { reset(); dm.value = 'create'; dw.value = true }
 function openEdit(s: SkillView) { reset(); dm.value = 'edit'; ed.value = s; f.name = s.name; f.dname = s.name; f.desc = s.description; f.ver = s.version; f.uri = s.uri; f.im = s.installMethod || 'pip'; f.pkg = s.packageUrl; f.st = s.status; f.cat = (s as any).category || ''; dw.value = true }
 
@@ -88,6 +88,11 @@ async function submit() {
     if (f.pkg.trim()) inp.packageUrl = f.pkg.trim()
     if (f.cat.trim()) { (inp as any).category = f.cat.trim() }
     if (f.cfg.trim()) { try { inp.mcpConfig = JSON.parse(f.cfg) } catch {} }
+    // Agent-specific methods auto-force agentTypes.
+    if (f.im === 'openclaw-skill') inp.agentTypes = ['OPENCLAW']
+    else if (f.im === 'opencode-skill') inp.agentTypes = ['OPENCODE']
+    else if (f.im === 'hermes-plugin') inp.agentTypes = ['HERMES']
+    else if (f.at.length > 0) inp.agentTypes = f.at
     await upsert({ input: inp })
     dw.value = false; toast.success(dm.value === 'create' ? `「${f.name}」已创建` : `「${f.name}」已更新`); await refetch()
   } catch (e: any) { se.value = e?.message || String(e) }
@@ -244,6 +249,7 @@ function em(e: unknown): string {
             <th>Skill</th>
             <th>描述</th>
             <th>分类</th>
+            <th class="th-r">Agent</th>
             <th class="th-r">版本</th>
             <th class="th-r">安装方式</th>
             <th class="th-r">状态</th>
@@ -258,6 +264,7 @@ function em(e: unknown): string {
             </td>
             <td><div class="td-desc">{{ s.description || '—' }}</div></td>
             <td><span v-if="s.category" class="tag tag-blue">{{ s.category }}</span></td>
+            <td class="th-r"><span v-for="at in s.agentTypes" :key="at" class="tag tag-purple" style="margin-right: 2px">{{ at }}</span><span v-if="!s.agentTypes?.length" class="tag tag-gray">全部</span></td>
             <td class="th-r"><span class="tag tag-gray">v{{ s.version || '—' }}</span></td>
             <td class="th-r"><span v-if="s.installMethod" class="tag tag-blue">{{ IL[s.installMethod] || s.installMethod }}</span></td>
             <td class="th-r"><span class="tag" :class="s.status === 'enabled' ? 'tag-green' : 'tag-gray'">{{ SL[s.status] }}</span></td>
@@ -335,12 +342,23 @@ function em(e: unknown): string {
               </select>
             </div>
             <div class="fg-row">
+              <label class="fl">适用 Agent</label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <label v-for="t in ['OPENCLAW','OPENCODE','HERMES']" :key="t" style="display:flex;align-items:center;gap:4px;font-size:13px" :style="{ opacity: ['openclaw-skill','opencode-skill','hermes-plugin'].includes(f.im) ? 0.5 : 1 }">
+                  <input type="checkbox" :value="t" v-model="f.at" :disabled="['openclaw-skill','opencode-skill','hermes-plugin'].includes(f.im)" /> {{ t === 'OPENCLAW' ? 'OpenClaw' : t === 'OPENCODE' ? 'OpenCode' : 'Hermes' }}
+                </label>
+              </div>
+            </div>
+            <div class="fg-row">
               <label class="fl">安装方式</label>
               <select v-model="f.im" class="fi">
                 <option value="pip">Python 包 (pip)</option>
                 <option value="pip-requirements">requirements.txt</option>
                 <option value="npm">NPM 包</option>
                 <option value="binary">二进制程序</option>
+                <option value="openclaw-skill">OpenClaw Skill</option>
+                <option value="opencode-skill">OpenCode Skill</option>
+                <option value="hermes-plugin">Hermes 插件</option>
               </select>
             </div>
             <div class="fg-row">
