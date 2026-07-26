@@ -459,7 +459,7 @@ const { result: skillsForInstallResult, load: loadSkills } = useLazyQuery(SKILLS
 const installableSkills = computed(() => {
   const agentType = skillInstallAgent.value?.type
   const agentTypeUpper = agentType ? String(agentType).toUpperCase() : ''
-  const skills = (skillsForInstallResult.value as { skills?: Array<{ packageUrl?: string; agentTypes?: string[] }> })?.skills ?? []
+  const skills = (skillsForInstallResult.value as { skills?: Array<{ id: string; name: string; version?: string; category?: string; packageUrl?: string; agentTypes?: string[] }> })?.skills ?? []
   return skills.filter((s) => {
     if (!s.packageUrl) return false
     if (!s.agentTypes || s.agentTypes.length === 0) return true
