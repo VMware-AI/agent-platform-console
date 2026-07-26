@@ -320,13 +320,14 @@ function actionLabel(action: string): string {
 }
 
 function actionDescription(log: AuditLogNode): string {
-  const resource = log.resourceId ? shortId(log.resourceId, 12) : ''
+  const resource = log.resourceName
+    ? `"${log.resourceName}"`
+    : log.resourceId
+      ? shortId(log.resourceId, 12)
+      : ''
   const type = log.resourceType ? log.resourceType.replace(/_/g, ' ') : ''
   const base = actionLabel(log.action)
   if (!resource && !type) return base
-  if (locale.locale === 'zh') {
-    return `${base}${type ? ` ${type}` : ''}${resource ? ` ${resource}` : ''}`
-  }
   return `${base}${type ? ` ${type}` : ''}${resource ? ` ${resource}` : ''}`
 }
 
@@ -525,7 +526,7 @@ async function copyResourceId(value: string | null) {
         </cds-grid-column>
         <cds-grid-column width="14%">
           <div class="col-head">
-            <span>{{ locale.t('auditLog.col.resourceId') }}</span>
+            <span>{{ locale.t('auditLog.col.resource') }}</span>
           </div>
         </cds-grid-column>
         <cds-grid-column width="12%">
@@ -559,11 +560,11 @@ async function copyResourceId(value: string | null) {
               v-if="log.resourceId"
               type="button"
               class="resource-copy"
-              :title="log.resourceId"
+              :title="log.resourceName ?? log.resourceId"
               :aria-label="locale.t('auditLog.action.copyResource')"
               @click="copyResourceId(log.resourceId)"
             >
-              <span class="ellipsis">{{ shortId(log.resourceId, 6) }}</span>
+              <span class="ellipsis">{{ log.resourceName ?? shortId(log.resourceId, 6) }}</span>
               <cds-icon shape="copy" size="sm" aria-hidden="true"></cds-icon>
             </button>
             <span v-else class="muted">—</span>
