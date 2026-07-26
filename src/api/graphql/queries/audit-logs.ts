@@ -20,6 +20,7 @@ export const AUDIT_LOGS_QUERY = gql`
         action
         resourceType
         resourceId
+        resourceName
         ip
         result
         detail
@@ -37,6 +38,7 @@ export interface AuditLogNode {
   action: string
   resourceType: string | null
   resourceId: string | null
+  resourceName: string | null
   ip: string | null
   result: string
   detail: string | null
