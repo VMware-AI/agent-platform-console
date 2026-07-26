@@ -56,7 +56,6 @@ const saving = ref(false)
 const {
   result: configsResult,
   loading: configsLoading,
-  error: configsError,
   refetch: refetchConfigs,
 } = useQuery<AgentConfigsResult, AgentConfigsVars>(AGENT_CONFIGS_QUERY)
 
