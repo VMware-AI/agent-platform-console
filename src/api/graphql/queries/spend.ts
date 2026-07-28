@@ -56,7 +56,7 @@ export const BUDGETS_QUERY = gql`
   }
 `
 
-export type SpendGroupBy = 'TEAM' | 'MODEL' | 'API_KEY'
+export type SpendGroupBy = 'TEAM' | 'MODEL' | 'API_KEY' | 'AGENT'
 
 export interface SpendRow {
   key: string

@@ -1967,6 +1967,14 @@ export const STRINGS: Dict = {
     zh: '留空保留原 key',
     en: 'Leave blank to keep existing key',
   },
+  'supplier.model.form.spec.inputCostPerToken': {
+    zh: '输入单价 ($/token)',
+    en: 'Input cost ($/token)',
+  },
+  'supplier.model.form.spec.outputCostPerToken': {
+    zh: '输出单价 ($/token)',
+    en: 'Output cost ($/token)',
+  },
   'supplier.model.form.spec.customLlmProvider': {
     zh: '供应商',
     en: 'Provider',
@@ -2166,6 +2174,8 @@ export const STRINGS: Dict = {
   'metering.spend.dim.team': { zh: '按部门', en: 'By department' },
   'metering.spend.dim.model': { zh: '按模型', en: 'By model' },
   'metering.spend.dim.key': { zh: '按密钥', en: 'By key' },
+  'metering.spend.dim.agent': { zh: '按智能体', en: 'By agent' },
+  'metering.spend.dim.agent.unattributed': { zh: '未归属', en: 'Unattributed' },
   'metering.spend.from': { zh: '起', en: 'From' },
   'metering.spend.to': { zh: '止', en: 'To' },
   'metering.spend.export': { zh: '导出 CSV', en: 'Export CSV' },
@@ -2190,7 +2200,7 @@ export const STRINGS: Dict = {
   'metering.spend.col.prompt': { zh: '输入', en: 'Prompt' },
   'metering.spend.col.completion': { zh: '输出', en: 'Completion' },
   'metering.description': {
-    zh: '按时间范围汇总网关调用量、Token 消耗与成本估算，支持按智能体与模型下钻。',
+    zh: '按时间范围汇总网关调用量、Token 消耗与成本估算，支持按智能体与模型下钻',
     en: 'Aggregated gateway call volume, token usage, and cost estimate over a time range, drill-down by agent and model.',
   },
   'metering.range.label': { zh: '时间范围', en: 'Time Range' },
@@ -2210,6 +2220,17 @@ export const STRINGS: Dict = {
     zh: 'Token 使用排名（按智能体）',
     en: 'Token Usage Ranking (by Agent)',
   },
+  'metering.chart.modelDist': { zh: '模型用量分布', en: 'Model Distribution' },
+  'metering.chart.modelRanking': {
+    zh: 'Token 使用排名（按模型）',
+    en: 'Token Usage Ranking (by Model)',
+  },
+  'metering.chart.modelDailyTrend': { zh: '每日趋势', en: 'Daily Trend' },
+  'metering.chart.modelTokens': { zh: '输入/输出占比', en: 'Input / Output Ratio' },
+  'metering.table.drillHint': { zh: '点击展开该模型详情', en: 'Click to expand details' },
+  'metering.table.estTokens': { zh: '估算 Token', en: 'Est. Tokens' },
+  'metering.kpi.activeAgents': { zh: '活跃智能体', en: 'Active Agents' },
+  'metering.kpi.activeModels': { zh: '活跃模型', en: 'Active Models' },
   'metering.token.input': { zh: '输入', en: 'Input' },
   'metering.token.output': { zh: '输出', en: 'Output' },
   'metering.table.agentTitle': { zh: '按智能体统计', en: 'Usage by Agent' },
@@ -2229,6 +2250,26 @@ export const STRINGS: Dict = {
   'metering.cost.total': { zh: '总计金额', en: 'Total Amount' },
   'metering.cost.monthly': { zh: '月份预计计算的成本', en: 'Estimated Monthly Cost' },
   'metering.cost.month': { zh: '月', en: 'month' },
+
+  // 计量的空 / 错误状态 + 通用操作 (refactor PR A.1)
+  'metering.empty.title': {
+    zh: '当前筛选范围内暂无计量数据',
+    en: 'No metering data in the current range',
+  },
+  'metering.empty.desc': {
+    zh: '试着放宽筛选条件或重置时间范围。',
+    en: 'Try widening the filters or resetting the time range.',
+  },
+  'metering.empty.action': { zh: '重置筛选', en: 'Reset filters' },
+  'metering.error.title': { zh: '数据加载失败', en: 'Failed to load data' },
+  'metering.error.desc': {
+    zh: '请检查网络后重试。如果问题持续存在,请联系管理员。',
+    en: 'Check your network and try again. Contact support if the issue persists.',
+  },
+  'metering.error.retry': { zh: '重新加载', en: 'Retry' },
+  'metering.common.search': { zh: '搜索', en: 'Search' },
+  'metering.common.refresh': { zh: '刷新', en: 'Refresh' },
+  'metering.common.reset': { zh: '重置', en: 'Reset' },
 
   // 请求日志 (request logs)
   'requestLog.title': { zh: '请求日志记录', en: 'Request Log Records' },
