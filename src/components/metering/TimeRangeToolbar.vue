@@ -14,7 +14,7 @@ export interface FilterOption {
 
 import { ref, watch } from 'vue'
 
-const props = defineProps<{
+defineProps<{
   ranges: TimeRange[]
   selectedRange: string
   agentOptions: FilterOption[]
