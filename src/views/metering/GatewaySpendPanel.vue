@@ -5,6 +5,7 @@ import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
 import { csvCell } from '@/utils/csv'
+import { fmtMoney, fmtNumber, fmtPercent, apiKeyMask, truncate } from '@/utils/meter-format'
 import {
   SPEND_REPORT_QUERY,
   BUDGETS_QUERY,
@@ -13,6 +14,9 @@ import {
   type SpendReportVars,
   type BudgetsResult,
 } from '@/api/graphql/queries/spend'
+import MeteringEmptyState from '@/components/metering/MeteringEmptyState.vue'
+import MeteringErrorState from '@/components/metering/MeteringErrorState.vue'
+import GatewayHealthBar from '@/components/metering/GatewayHealthBar.vue'
 import '@/components/icons'
 
 // Gateway-authoritative spend view (LLD-15). Data comes from the backend's
@@ -23,6 +27,7 @@ const toast = useToast()
 
 const DIMENSIONS: { key: SpendGroupBy; label: string }[] = [
   { key: 'TEAM', label: 'metering.spend.dim.team' },
+  { key: 'AGENT', label: 'metering.spend.dim.agent' },
   { key: 'MODEL', label: 'metering.spend.dim.model' },
   { key: 'API_KEY', label: 'metering.spend.dim.key' },
 ]
@@ -46,6 +51,11 @@ function applyQuickRange(days: number) {
   fromLocal.value = toLocalInput(daysAgo(days))
   toLocal.value = toLocalInput(new Date())
 }
+function applyMonthRange() {
+  const now = new Date()
+  fromLocal.value = toLocalInput(new Date(now.getFullYear(), now.getMonth(), 1))
+  toLocal.value = toLocalInput(now)
+}
 
 // Backend Time scalar is RFC3339 — convert the local input to an ISO instant.
 // Guard against a cleared/invalid field (new Date('').toISOString() throws) by
@@ -61,7 +71,7 @@ const variables = computed<SpendReportVars>(() => ({
   input: { from: isoFrom.value, to: isoTo.value, groupBy: groupBy.value },
 }))
 
-const { result, loading, error } = useQuery<SpendReportResult, SpendReportVars>(
+const { result, loading, error, refetch: refetchSpendRaw } = useQuery<SpendReportResult, SpendReportVars>(
   SPEND_REPORT_QUERY,
   variables,
   () => ({ fetchPolicy: 'cache-and-network' }),
@@ -71,7 +81,13 @@ const report = computed(() => result.value?.spendReport ?? null)
 const rows = computed(() => report.value?.rows ?? [])
 const totals = computed(() => report.value?.totals ?? null)
 const byDay = computed(() => report.value?.byDay ?? [])
+
 const failedGateways = computed(() => (report.value?.gateways ?? []).filter((g) => !g.ok))
+const allGatewayStatuses = computed(() => (report.value?.gateways ?? []).map((g) => ({ gatewayName: g.gatewayName, ok: g.ok })))
+
+function refetchSpend() {
+  void refetchSpendRaw?.()?.catch(() => undefined)
+}
 
 /* ---- budgets (TEAM dimension only) ---- */
 const { result: budgetsResult } = useQuery<BudgetsResult>(
@@ -83,14 +99,17 @@ const budgets = computed(() => budgetsResult.value?.budgets ?? [])
 const showBudgets = computed(() => groupBy.value === 'TEAM' && budgets.value.length > 0)
 
 /* ---- formatting ---- */
-function fmtCost(n: number): string {
-  return `$${n.toFixed(2)}`
-}
-function fmtNum(n: number): string {
-  return n.toLocaleString()
-}
-function fmtPct(n: number | null): string {
-  return n == null ? '—' : `${n.toFixed(0)}%`
+// fmtMoney / fmtNumber come from @/utils/meter-format so the platform and
+// gateway tabs render money and counts the same way (spec §3 — same page
+// must never mix "$0.65" and "US$0.65").
+const fmtCost = fmtMoney
+const fmtNum = fmtNumber
+const fmtPct = (n: number | null) => fmtPercent(n, locale.locale)
+
+// For the API_KEY dimension we mask the label so the table never shows a raw
+// key (spec §9.2 / §10).
+function rowLabel(label: string, dim: SpendGroupBy): string {
+  return dim === 'API_KEY' ? apiKeyMask(label) : truncate(label, 48)
 }
 
 /* ---- cost trend SVG (byDay) ---- */
@@ -168,6 +187,7 @@ function exportCsv() {
         </label>
         <button type="button" class="quick" @click="applyQuickRange(7)">7d</button>
         <button type="button" class="quick" @click="applyQuickRange(30)">30d</button>
+        <button type="button" class="quick" @click="applyMonthRange()">本月</button>
         <cds-button action="outline" size="sm" @click="exportCsv">
           <cds-icon shape="export" size="sm" aria-hidden="true"></cds-icon>
           {{ locale.t('metering.spend.export') }}
@@ -182,8 +202,14 @@ function exportCsv() {
       </cds-alert>
     </cds-alert-group>
 
-    <div v-if="error" class="state-msg error">{{ graphqlErrorMessage(error, locale.t('metering.spend.loadFail')) }}</div>
-    <div v-else-if="loading && !report" class="state-msg muted">{{ locale.t('metering.spend.loading') }}</div>
+    <div v-if="error" class="state-slot">
+      <MeteringErrorState
+        :title="locale.t('metering.error.title')"
+        :description="graphqlErrorMessage(error, locale.t('metering.spend.loadFail'))"
+        @retry="refetchSpend"
+      />
+    </div>
+    <div v-else-if="loading && !report" class="state-slot muted">{{ locale.t('metering.spend.loading') }}</div>
 
     <template v-else>
       <!-- KPI cards -->
@@ -191,25 +217,25 @@ function exportCsv() {
         <cds-card class="kpi">
           <div class="card-content">
             <span class="kpi-label">{{ locale.t('metering.spend.totalCost') }}</span>
-            <strong class="kpi-value">{{ fmtCost(totals?.spend ?? 0) }}</strong>
+            <strong class="kpi-value">{{ fmtCost(totals?.spend ?? 0, locale.locale) }}</strong>
           </div>
         </cds-card>
         <cds-card class="kpi">
           <div class="card-content">
             <span class="kpi-label">{{ locale.t('metering.spend.totalTokens') }}</span>
-            <strong class="kpi-value">{{ fmtNum(totals?.totalTokens ?? 0) }}</strong>
+            <strong class="kpi-value">{{ fmtNum(totals?.totalTokens ?? 0, locale.locale) }}</strong>
           </div>
         </cds-card>
         <cds-card class="kpi">
           <div class="card-content">
             <span class="kpi-label">{{ locale.t('metering.spend.promptTokens') }}</span>
-            <strong class="kpi-value">{{ fmtNum(totals?.promptTokens ?? 0) }}</strong>
+            <strong class="kpi-value">{{ fmtNum(totals?.promptTokens ?? 0, locale.locale) }}</strong>
           </div>
         </cds-card>
         <cds-card class="kpi">
           <div class="card-content">
             <span class="kpi-label">{{ locale.t('metering.spend.completionTokens') }}</span>
-            <strong class="kpi-value">{{ fmtNum(totals?.completionTokens ?? 0) }}</strong>
+            <strong class="kpi-value">{{ fmtNum(totals?.completionTokens ?? 0, locale.locale) }}</strong>
           </div>
         </cds-card>
       </div>
@@ -239,7 +265,7 @@ function exportCsv() {
               ></div>
             </div>
             <div class="budget-meta">
-              <span>{{ fmtCost(b.spend) }}{{ b.maxBudget != null ? ` / ${fmtCost(b.maxBudget)}` : '' }}</span>
+              <span>{{ fmtCost(b.spend, locale.locale) }}{{ b.maxBudget != null ? ` / ${fmtCost(b.maxBudget, locale.locale)}` : '' }}</span>
               <span class="muted">{{ fmtPct(b.utilizationPct) }}</span>
             </div>
           </div>
@@ -253,13 +279,15 @@ function exportCsv() {
             <h2>{{ locale.t('metering.spend.topSpend') }}</h2>
             <ul class="rank-list">
               <li v-for="r in topRows" :key="r.key">
-                <span class="rank-label" :title="r.label">{{ r.label }}</span>
+                <span class="rank-label" :title="r.label">{{ rowLabel(r.label, groupBy) }}</span>
                 <span class="rank-bar-wrap">
                   <span class="rank-bar" :style="{ width: `${(r.spend / maxRowSpend) * 100}%` }"></span>
                 </span>
-                <span class="rank-val">{{ fmtCost(r.spend) }}</span>
+                <span class="rank-val">{{ fmtCost(r.spend, locale.locale) }}</span>
               </li>
-              <li v-if="topRows.length === 0" class="muted">{{ locale.t('metering.spend.noData') }}</li>
+              <li v-if="topRows.length === 0" class="rank-empty">
+                <MeteringEmptyState :title="locale.t('metering.spend.noData')" :show-action="false" compact />
+              </li>
             </ul>
           </div>
         </cds-card>
@@ -280,14 +308,16 @@ function exportCsv() {
                 </thead>
                 <tbody>
                   <tr v-for="r in rows" :key="r.key">
-                    <td :title="r.key">{{ r.label }}</td>
-                    <td class="num">{{ fmtCost(r.spend) }}</td>
-                    <td class="num">{{ fmtNum(r.totalTokens) }}</td>
-                    <td class="num">{{ fmtNum(r.promptTokens) }}</td>
-                    <td class="num">{{ fmtNum(r.completionTokens) }}</td>
+                    <td :title="r.key">{{ rowLabel(r.label, groupBy) }}</td>
+                    <td class="num">{{ fmtCost(r.spend, locale.locale) }}</td>
+                    <td class="num">{{ fmtNum(r.totalTokens, locale.locale) }}</td>
+                    <td class="num">{{ fmtNum(r.promptTokens, locale.locale) }}</td>
+                    <td class="num">{{ fmtNum(r.completionTokens, locale.locale) }}</td>
                   </tr>
                   <tr v-if="rows.length === 0">
-                    <td colspan="5" class="muted empty">{{ locale.t('metering.spend.noData') }}</td>
+                    <td colspan="5" class="empty-cell">
+                      <MeteringEmptyState :title="locale.t('metering.spend.noData')" :show-action="false" compact />
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -295,6 +325,7 @@ function exportCsv() {
           </div>
         </cds-card>
       </div>
+      <GatewayHealthBar :gateways="allGatewayStatuses" />
     </template>
   </div>
 </template>
@@ -488,6 +519,21 @@ function exportCsv() {
 .state-msg.error {
   color: var(--cds-alias-status-danger, #e12200);
 }
+.state-slot {
+  padding: 1rem;
+}
+.state-slot.muted {
+  color: var(--cds-global-typography-color-500, #888);
+}
+.empty-cell {
+  padding: 0 !important;
+  background: var(--cds-alias-object-app-background, #f8fafc);
+}
+.rank-empty {
+  list-style: none;
+  display: block;
+  padding: 0;
+}
 .muted {
   color: var(--cds-global-typography-color-500, #888);
 }
@@ -495,12 +541,17 @@ function exportCsv() {
   text-align: center;
   padding: 1rem;
 }
+@media (max-width: 1366px) {
+  .spend-table { font-size: 0.78rem; }
+}
+@media (max-width: 1200px) {
+  .tables { grid-template-columns: 1fr; }
+}
 @media (max-width: 900px) {
   .kpi-row {
     grid-template-columns: repeat(2, 1fr);
   }
-  .tables {
-    grid-template-columns: 1fr;
-  }
+  .controls { flex-direction: column; align-items: stretch; }
+  .time-controls { flex-wrap: wrap; }
 }
 </style>

@@ -67,6 +67,8 @@ const newSpec = ref({
   providerCustom: '',
   apiKey: '',
   apiBase: '',
+  inputCostPerToken: undefined as number | undefined,
+  outputCostPerToken: undefined as number | undefined,
 })
 
 // Resolves the effective provider string for the add modal — same shape
@@ -215,6 +217,8 @@ function openAddModal() {
     providerCustom: '',
     apiKey: '',
     apiBase: '',
+    inputCostPerToken: undefined,
+    outputCostPerToken: undefined,
   }
   addAttempt.value = false
   addSaving.value = false
@@ -315,6 +319,8 @@ async function submitAddSpec() {
               customLlmProvider: provider,
               apiKey: newSpec.value.apiKey.trim() || null,
               apiBase: newSpec.value.apiBase.trim() || null,
+              inputCostPerToken: newSpec.value.inputCostPerToken ?? null,
+              outputCostPerToken: newSpec.value.outputCostPerToken ?? null,
             },
           },
         },
@@ -547,6 +553,30 @@ function statusBadgeKind(s: string): 'success' | 'danger' | 'neutral' {
               @input="newSpec.apiKey = ($event.target as HTMLInputElement).value"
             />
           </cds-input>
+          <div class="cost-row">
+            <cds-input>
+              <label>{{ locale.t('supplier.model.form.spec.inputCostPerToken') }}</label>
+              <input
+                type="number"
+                min="0"
+                step="0.000001"
+                :value="newSpec.inputCostPerToken ?? ''"
+                placeholder="0.000002"
+                @input="newSpec.inputCostPerToken = ($event.target as HTMLInputElement).valueAsNumber || undefined"
+              />
+            </cds-input>
+            <cds-input>
+              <label>{{ locale.t('supplier.model.form.spec.outputCostPerToken') }}</label>
+              <input
+                type="number"
+                min="0"
+                step="0.000001"
+                :value="newSpec.outputCostPerToken ?? ''"
+                placeholder="0.000006"
+                @input="newSpec.outputCostPerToken = ($event.target as HTMLInputElement).valueAsNumber || undefined"
+              />
+            </cds-input>
+          </div>
           <!-- Per-spec test connection — sits between apiKey and model
                so the user can probe credentials + endpoint and get a
                datalist suggestion for the model name. Mirrors the
@@ -719,6 +749,7 @@ function statusBadgeKind(s: string): 'success' | 'danger' | 'neutral' {
    SupplierModelFormModal.test-row, so the button + status badge sit
    on one line and read as a single tool group below the apiKey input. */
 .test-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cost-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .test-status { text-transform: capitalize; }
 /* cds-modal-content defaults to p-x:lg (--δ6 = 24px * 1rem / 20) on
    the host plus the modal-content wrapper's cds-layout="vertical

@@ -1,5 +1,19 @@
 <script setup lang="ts">
+// 智能体管理平台 → 可观测性 → 计量中心
+//
+// Refactor (PR B.1): restructures the page per the metering UX spec:
+//   - Page container with local design-token palette (spec §3 tokens),
+//     layered on top of CDS theme variables for primary / status colors.
+//   - Source tabs use the shared TabStrip component (spec §6 — proper
+//     ARIA tablist + bottom-border accent).
+//   - 4 KPI cards with bigger numbers and clearer hierarchy.
+//   - 2/3 trend + 1/3 model ranking analysis grid (was 1.2 + 1 ≈ ~ uneven).
+//   - Donut + active-agent ranking row.
+//   - 2-col detail table row: by-model and by-date, with right-aligned
+//     numbers, sticky header, ellipsis + tooltip, tabular-nums.
+
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
@@ -14,19 +28,25 @@ import {
   type MeteringTimeRange,
   type ModelUsageRow,
 } from '@/api/graphql/queries/metering'
+import {
+  DASHBOARD_OVERVIEW_QUERY,
+  type DashboardOverviewResult,
+  type DashboardOverviewVars,
+} from '@/api/graphql/queries/dashboard'
+import MeteringLineChart from '@/components/charts/MeteringLineChart.vue'
+import MeteringBarChart from '@/components/charts/MeteringBarChart.vue'
+import MeteringDonutChart from '@/components/charts/MeteringDonutChart.vue'
+import KpiCardRow from '@/components/metering/KpiCardRow.vue'
+import type { KpiCard } from '@/components/metering/KpiCardRow.vue'
+import TimeRangeToolbar from '@/components/metering/TimeRangeToolbar.vue'
+import MeteringEmptyState from '@/components/metering/MeteringEmptyState.vue'
+import TabStrip from '@/components/TabStrip.vue'
 import GatewaySpendPanel from '@/views/metering/GatewaySpendPanel.vue'
+import { fmtMoney, fmtNumber, fmtCompact, truncate, shortDate } from '@/utils/meter-format'
 import '@/components/icons'
 
-// Two data sources (LLD-15): the platform's own TokenUsage aggregate ("平台记录")
-// and litellm's authoritative spend fanned out across gateways ("网关账").
 type MeteringSource = 'platform' | 'gateway'
 const source = ref<MeteringSource>('platform')
-
-// UI time-range keys vs. backend MeteringTimeRange. The backend supports exactly
-// three ranges, so the UI only exposes those three. A "custom" date-range tab is
-// intentionally NOT rendered: it would have no server equivalent today and would
-// silently behave like the 7-day window. Re-introduce it only once the backend
-// accepts explicit from/to dates and a date picker is wired up.
 type TimeRange = '7d' | '30d' | 'month'
 type UsageStatus = 'normal' | 'warning'
 
@@ -38,17 +58,19 @@ interface AgentUsage {
   inputTokens: number
   outputTokens: number
   requests: number
+  /** Per-agent USD cost from meteringOverview.byAgent[].cost. May be 0
+   *  when the backend has no cost row yet for this agent. */
+  cost: number
   status: UsageStatus
 }
-
 interface ModelUsage {
   name: string
   totalTokens: number
   inputTokens: number
   outputTokens: number
+  requests: number
   status: UsageStatus
 }
-
 interface DailyUsage {
   date: string
   totalTokens: number
@@ -59,17 +81,21 @@ interface DailyUsage {
 
 const locale = useLocaleStore()
 const toast = useToast()
-
 const selectedRange = ref<TimeRange>('7d')
-const selectedAgent = ref('ALL')
-const selectedModel = ref('ALL')
+const drillModel = ref<string | null>(null)
+/** Custom date inputs from TimeRangeToolbar — when set, override selectedRange */
+const customFrom = ref('')
+const customTo = ref('')
 
-// Only ranges with a real backend equivalent are offered. The "custom" tab is
-// deliberately omitted — see the TimeRange comment above.
+const sourceTabs = computed(() => [
+  { key: 'platform', label: locale.t('metering.source.platform') },
+  { key: 'gateway', label: locale.t('metering.source.gateway') },
+])
+
 const timeRanges: Array<{ key: TimeRange; label: string }> = [
-  { key: '7d', label: 'metering.range.7d' },
-  { key: '30d', label: 'metering.range.30d' },
-  { key: 'month', label: 'metering.range.month' },
+  { key: '7d', label: locale.t('metering.range.7d') },
+  { key: '30d', label: locale.t('metering.range.30d') },
+  { key: 'month', label: locale.t('metering.range.month') },
 ]
 
 const RANGE_TO_BACKEND: Record<TimeRange, MeteringTimeRange> = {
@@ -78,8 +104,6 @@ const RANGE_TO_BACKEND: Record<TimeRange, MeteringTimeRange> = {
   month: 'THIS_MONTH',
 }
 
-// Reactive GraphQL variables — useQuery re-fetches whenever the selected range
-// changes. `userId` is left null to aggregate across the whole org.
 const variables = computed<MeteringOverviewVars>(() => ({
   range: RANGE_TO_BACKEND[selectedRange.value],
   userId: null,
@@ -89,26 +113,39 @@ const { result, onError } = useQuery<MeteringOverviewResult, MeteringOverviewVar
   METERING_OVERVIEW_QUERY,
   variables,
 )
-
 onError((error) => {
   toast.error(graphqlErrorMessage(error, locale.t('metering.title')))
 })
 
 const overview = computed<MeteringOverview | null>(() => result.value?.meteringOverview ?? null)
 
-// The backend rows carry no status flag; derive a data-driven one so the
-// existing status column keeps rendering — a row with zero requests is flagged
-// as a warning (idle / no traffic), otherwise it is normal.
-function statusFromRequests(requests: number): UsageStatus {
-  return requests > 0 ? 'normal' : 'warning'
+const { result: dashResult } = useQuery<DashboardOverviewResult, DashboardOverviewVars>(
+  DASHBOARD_OVERVIEW_QUERY,
+  { recentLimit: 50, noticeLimit: 0 },
+  () => ({ fetchPolicy: 'cache-and-network' }),
+)
+const dashStats = computed(() => dashResult.value?.dashboardOverview?.stats ?? null)
+
+function statusFromRequests(r: number): UsageStatus {
+  return r > 0 ? 'normal' : 'warning'
 }
 
 const agents = computed<AgentUsage[]>(() =>
   (overview.value?.byAgent ?? []).map((row: AgentUsageRow) => ({
     id: row.agentId,
     name: row.agentName,
-    // Backend metering rows do not expose the agent's OVA template; show a dash.
     template: '—',
+    totalTokens: row.totalTokens,
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    requests: row.requests,
+    cost: row.cost,
+    status: statusFromRequests(row.requests),
+  })),
+)
+const models = computed<ModelUsage[]>(() =>
+  (overview.value?.byModel ?? []).map((row: ModelUsageRow) => ({
+    name: row.model,
     totalTokens: row.totalTokens,
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
@@ -116,17 +153,6 @@ const agents = computed<AgentUsage[]>(() =>
     status: statusFromRequests(row.requests),
   })),
 )
-
-const models = computed<ModelUsage[]>(() =>
-  (overview.value?.byModel ?? []).map((row: ModelUsageRow) => ({
-    name: row.model,
-    totalTokens: row.totalTokens,
-    inputTokens: row.inputTokens,
-    outputTokens: row.outputTokens,
-    status: statusFromRequests(row.requests),
-  })),
-)
-
 const dailyUsage = computed<DailyUsage[]>(() =>
   (overview.value?.byDay ?? []).map((row: DailyUsageRow) => ({
     date: row.date,
@@ -137,861 +163,921 @@ const dailyUsage = computed<DailyUsage[]>(() =>
   })),
 )
 
-// Client-side filters over the fetched rows (the backend query has no per-agent
-// / per-model filter variable). Options are derived from the real result.
-const filteredAgents = computed<AgentUsage[]>(() =>
-  selectedAgent.value === 'ALL'
-    ? agents.value
-    : agents.value.filter((agent) => agent.id === selectedAgent.value),
-)
-
-const filteredModels = computed<ModelUsage[]>(() =>
-  selectedModel.value === 'ALL'
-    ? models.value
-    : models.value.filter((model) => model.name === selectedModel.value),
-)
-
-const agentOptions = computed(() => [
-  { value: 'ALL', label: locale.t('metering.filter.allAgents') },
-  ...agents.value.map((agent) => ({ value: agent.id, label: `${agent.id} · ${agent.name}` })),
-])
-
-const modelOptions = computed(() => [
-  { value: 'ALL', label: locale.t('metering.filter.allModels') },
-  ...models.value.map((model) => ({ value: model.name, label: model.name })),
-])
-
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat(locale.locale === 'zh' ? 'zh-CN' : 'en-US').format(value)
+/* -------------------------------- chart data -------------------------------- */
+const CHART_COLORS = {
+  input: 'var(--chart-color-input, #4b76bd)',
+  output: 'var(--chart-color-output, #9aa8bb)',
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat(locale.locale === 'zh' ? 'zh-CN' : 'en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(value)
-}
+const trendSeries = computed(() => [
+  {
+    name: locale.t('metering.token.input'),
+    color: CHART_COLORS.input,
+    data: dailyUsage.value.map((d) => ({ x: d.date, y: d.inputTokens })),
+  },
+  {
+    name: locale.t('metering.token.output'),
+    color: CHART_COLORS.output,
+    data: dailyUsage.value.map((d) => ({ x: d.date, y: d.outputTokens })),
+  },
+])
 
-// Guard every hop after an optional: `cost` may be absent on a partial result.
-const totalCost = computed(() => formatCurrency(overview.value?.cost?.totalCost ?? 0))
-const monthlyCost = computed(
-  () => `${formatCurrency(overview.value?.cost?.monthlyCost ?? 0)}/${locale.t('metering.cost.month')}`,
+const barBars = computed(() =>
+  models.value.map((m) => ({ label: m.name, value: m.totalTokens })),
 )
 
+const DONUT_PALETTE = [
+  'var(--chart-color-input, #4b76bd)',
+  'var(--cds-alias-status-info, #0072a3)',
+  'var(--cds-alias-status-success, #1b8a4b)',
+  'var(--cds-alias-status-warning, #f90)',
+  'var(--chart-color-output, #9aa8bb)',
+]
+const donutSegments = computed(() =>
+  [...models.value]
+    .sort((a, b) => b.totalTokens - a.totalTokens)
+    .slice(0, 5)
+    .map((m, i) => ({
+      label: m.name,
+      value: m.totalTokens,
+      color: DONUT_PALETTE[i] ?? DONUT_PALETTE[0],
+    })),
+)
+
+// "Agent calls by rank" — REMOVED (PR B.1 retraction). Reason:
+// `overview.byAgent` only contains agents whose token usage was recorded in
+// the current metering window, while the existing dashboard-sourced
+// `dashRecentAgents` table always shows the most recently-active agents
+// regardless of metering window. Mixing the two in adjacent cards produced a
+// contradictory empty state (Top 5 "暂无计量数据" beside a non-empty agent
+// table). The bottom `metering.table.agentTitle` table is the canonical view
+// for that data — re-doing it as a Top-5 bar chart here added no information
+// beyond ranking and confused users. Drop it; if we ever add per-key meter
+// data on the platform tab, re-introduce here against that source.
+
+/* ----------------------------- drill-down panel ---------------------------- */
+const drillModelData = computed(() => {
+  if (!drillModel.value) return null
+  const m = models.value.find((x) => x.name === drillModel.value)
+  if (!m || m.totalTokens === 0) return null
+  const total = models.value.reduce((s, x) => s + x.totalTokens, 0) || 1
+  const share = m.totalTokens / total
+  return {
+    input: m.inputTokens,
+    output: m.outputTokens,
+    daily: dailyUsage.value.map((d) => ({
+      date: d.date,
+      in: Math.round(d.inputTokens * share),
+      out: Math.round(d.outputTokens * share),
+    })),
+  }
+})
+const drillSeries = computed(() => {
+  const d = drillModelData.value
+  if (!d) return []
+  return [
+    {
+      name: locale.t('metering.token.input'),
+      color: CHART_COLORS.input,
+      data: d.daily.map((p) => ({ x: p.date, y: p.in })),
+    },
+    {
+      name: locale.t('metering.token.output'),
+      color: CHART_COLORS.output,
+      data: d.daily.map((p) => ({ x: p.date, y: p.out })),
+    },
+  ]
+})
+const drillDonutSegments = computed(() => {
+  const d = drillModelData.value
+  if (!d) return []
+  return [
+    { label: locale.t('metering.token.input'), value: d.input, color: CHART_COLORS.input },
+    { label: locale.t('metering.token.output'), value: d.output, color: CHART_COLORS.output },
+  ]
+})
+const drillTotalTokens = computed(() => {
+  const d = drillModelData.value
+  return d ? d.input + d.output : 0
+})
+function toggleDrillModel(name: string) {
+  drillModel.value = drillModel.value === name ? null : name
+}
+
+const router = useRouter()
+
+function onModelRowClick(modelName: string) {
+  // Drill into model detail (路由 + 范围保持). spec §10 第 2 条: model Top 5
+  // 点击进入模型详情。
+  void router.push({
+    name: 'obs.metering.drill',
+    params: { kind: 'model', id: modelName },
+    query: { range: selectedRange.value, dimension: 'model' },
+  })
+}
+
+function onAgentRowClick(agentId: string, agentName: string) {
+  void router.push({
+    name: 'obs.metering.drill',
+    params: { kind: 'agent', id: agentId },
+    query: { range: selectedRange.value, dimension: 'agent', agentName },
+  })
+}
+
+/* --------------------------------- KPI cards -------------------------------- */
+const kpiCards = computed<KpiCard[]>(() => {
+  const ov = overview.value
+  const st = dashStats.value
+  return [
+    { label: locale.t('metering.spend.totalCost'), value: fmtMoney(ov?.cost?.totalCost ?? 0, locale.locale) },
+    { label: locale.t('metering.spend.totalTokens'), value: fmtNumber(ov?.totalTokens ?? 0, locale.locale) },
+    {
+      label: locale.t('metering.kpi.activeAgents'),
+      value: st
+        ? fmtNumber(st.runningAgents, locale.locale)
+        : fmtNumber(agents.value.filter((a) => a.requests > 0).length, locale.locale),
+    },
+    {
+      label: locale.t('metering.kpi.activeModels'),
+      value: fmtNumber(models.value.filter((m) => m.requests > 0).length, locale.locale),
+    },
+  ]
+})
+
+/* ------------------------------ table formatting --------------------------- */
 function statusText(status: UsageStatus): string {
   return locale.t(`metering.status.${status}`)
 }
-
-// Footer text: real row count, no fabricated paginator. Reuses the existing
-// `metering.table.showing` key ("显示中"/"Showing") and composes the count in the
-// component, since the locale helper does not interpolate placeholders.
 function footerText(count: number): string {
-  // zh has no plural ("条" for both 1 and N); en uses "row" / "rows".
-  const unit = locale.locale === 'zh'
-    ? locale.t('metering.spend.unit')
-    : count === 1
-      ? locale.t('metering.spend.unit').replace(/s$/, '')
-      : locale.t('metering.spend.unit')
-  return `${locale.t('metering.table.showing')} ${formatNumber(count)} ${unit}`
+  const unit = locale.t('metering.spend.unit')
+  return `${locale.t('metering.table.showing')} ${fmtNumber(count, locale.locale)} ${unit}`
 }
 
-// ---- SVG chart geometry (data-driven) -------------------------------------
-// Both charts share the same viewBox (0 0 560 190). The plot area is the box
-// bounded by the existing grid lines: x ∈ [PLOT_LEFT, PLOT_RIGHT],
-// y ∈ [PLOT_TOP, PLOT_BOTTOM]. Values are scaled linearly against the max value
-// present in the real data, so the highest point/bar always reaches the top.
-const PLOT_LEFT = 44
-const PLOT_RIGHT = 545
-const PLOT_TOP = 25
-const PLOT_BOTTOM = 165
-const TICK_COUNT = 4 // gridlines below the top line → 5 labelled ticks incl. 0
-
-// Round a max value up to a "nice" number so axis ticks read cleanly.
-function niceCeil(value: number): number {
-  if (value <= 0) return 0
-  const exponent = Math.floor(Math.log10(value))
-  const magnitude = Math.pow(10, exponent)
-  const fraction = value / magnitude
-  const niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10
-  return niceFraction * magnitude
-}
-
-// Map a value in [0, max] to a y coordinate (inverted: 0 at bottom).
-function scaleY(value: number, max: number): number {
-  if (max <= 0) return PLOT_BOTTOM
-  const ratio = Math.min(Math.max(value / max, 0), 1)
-  return PLOT_BOTTOM - ratio * (PLOT_BOTTOM - PLOT_TOP)
-}
-
-// Render the short M/D label the design uses (e.g. "6/22") from an ISO date.
-function shortDate(iso: string): string {
-  const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return iso
-  return `${parsed.getMonth() + 1}/${parsed.getDate()}`
-}
-
-const hasTrendData = computed(() => dailyUsage.value.length > 0)
-
-// Nice max across both series so the input and output lines share one scale.
-const trendMax = computed(() =>
-  niceCeil(
-    dailyUsage.value.reduce(
-      (max, day) => Math.max(max, day.inputTokens, day.outputTokens),
-      0,
-    ),
-  ),
-)
-
-// Y-axis ticks (top → 0). Values from the real max, positions on the grid.
-const trendTicks = computed(() =>
-  Array.from({ length: TICK_COUNT + 1 }, (_, i) => {
-    const value = (trendMax.value / TICK_COUNT) * (TICK_COUNT - i)
-    return { value, y: scaleY(value, trendMax.value) }
-  }),
-)
-
-// Evenly spaced x for each day across the plot width (single point → centred).
-function trendX(index: number, length: number): number {
-  if (length <= 1) return (PLOT_LEFT + PLOT_RIGHT) / 2
-  return PLOT_LEFT + (index / (length - 1)) * (PLOT_RIGHT - PLOT_LEFT)
-}
-
-interface TrendPoint {
-  x: number
-  inputY: number
-  outputY: number
-  label: string
-}
-
-const trendPoints = computed<TrendPoint[]>(() => {
-  const days = dailyUsage.value
-  return days.map((day, index) => ({
-    x: trendX(index, days.length),
-    inputY: scaleY(day.inputTokens, trendMax.value),
-    outputY: scaleY(day.outputTokens, trendMax.value),
-    label: shortDate(day.date),
-  }))
+// Used by model / agent cost cells: cached lookup so we don't re-scan the
+// array per row.
+const costByModel = computed(() => {
+  const map = new Map<string, number>()
+  for (const r of overview.value?.byModel ?? []) map.set(r.model, r.cost)
+  return map
 })
 
-const trendInputLine = computed(() =>
-  trendPoints.value.map((p) => `${p.x},${p.inputY}`).join(' '),
-)
-const trendOutputLine = computed(() =>
-  trendPoints.value.map((p) => `${p.x},${p.outputY}`).join(' '),
-)
-
-// Filled area under the input line, closed back along the baseline.
-const trendAreaPath = computed(() => {
-  const points = trendPoints.value
-  if (points.length === 0) return ''
-  const top = points.map((p) => `${p.x} ${p.inputY}`).join(' L ')
-  const first = points[0]
-  const last = points[points.length - 1]
-  return `M ${first.x} ${first.inputY} L ${top} L ${last.x} ${PLOT_BOTTOM} L ${first.x} ${PLOT_BOTTOM} Z`
+const costByAgent = computed(() => {
+  const map = new Map<string, number>()
+  for (const r of overview.value?.byAgent ?? []) map.set(r.agentId, r.cost)
+  return map
 })
 
-// ---- Ranking bar chart -----------------------------------------------------
-const RANKING_TOP_N = 5
-const BAR_WIDTH = 52
-
-const rankedAgents = computed(() =>
-  [...agents.value].sort((a, b) => b.totalTokens - a.totalTokens).slice(0, RANKING_TOP_N),
-)
-
-const hasRankingData = computed(() => rankedAgents.value.length > 0)
-
-const rankingMax = computed(() =>
-  niceCeil(rankedAgents.value.reduce((max, agent) => Math.max(max, agent.totalTokens), 0)),
-)
-
-const rankingTicks = computed(() =>
-  Array.from({ length: TICK_COUNT + 1 }, (_, i) => {
-    const value = (rankingMax.value / TICK_COUNT) * (TICK_COUNT - i)
-    return { value, y: scaleY(value, rankingMax.value) }
-  }),
-)
-
-interface RankingBar {
-  x: number
-  y: number
-  height: number
-  centerX: number
-  label: string
+function modelCost(name: string): number {
+  return costByModel.value.get(name) ?? 0
 }
 
-const rankingBars = computed<RankingBar[]>(() => {
-  const list = rankedAgents.value
-  if (list.length === 0) return []
-  // Distribute bars evenly across the plot width, centring each slot.
-  const slot = (PLOT_RIGHT - PLOT_LEFT) / list.length
-  return list.map((agent, index) => {
-    const centerX = PLOT_LEFT + slot * (index + 0.5)
-    const top = scaleY(agent.totalTokens, rankingMax.value)
-    return {
-      x: centerX - BAR_WIDTH / 2,
-      y: top,
-      height: Math.max(PLOT_BOTTOM - top, 0),
-      centerX,
-      label: agent.name,
-    }
-  })
-})
+function agentCost(id: string): number {
+  return costByAgent.value.get(id) ?? 0
+}
+
+/* ------------------------------ empty / reset ----------------------------- */
+function resetFilters() {
+  drillModel.value = null
+}
 </script>
 
 <template>
   <section class="metering-page">
+    <!-- 1. Page header — spec §5 -->
     <header class="page-head">
-      <h1 cds-text="title" class="heading" :title="locale.t('metering.title')">
-        {{ locale.t('metering.title') }}
-      </h1>
-      <p cds-text="body" class="desc muted">{{ locale.t('metering.description') }}</p>
+      <div class="head-title-row">
+        <span class="head-icon" aria-hidden="true">
+          <cds-icon shape="dashboard" size="md"></cds-icon>
+        </span>
+        <h1 class="heading">{{ locale.t('metering.title') }}</h1>
+      </div>
+      <p class="head-desc">{{ locale.t('metering.description') }}</p>
     </header>
 
-    <div class="source-switch" role="group" :aria-label="locale.t('metering.source.label')">
-      <button
-        type="button"
-        class="source-tab"
-        :class="{ active: source === 'platform' }"
-        :aria-pressed="source === 'platform'"
-        @click="source = 'platform'"
-      >
-        {{ locale.t('metering.source.platform') }}
-      </button>
-      <button
-        type="button"
-        class="source-tab"
-        :class="{ active: source === 'gateway' }"
-        :aria-pressed="source === 'gateway'"
-        @click="source = 'gateway'"
-      >
-        {{ locale.t('metering.source.gateway') }}
-      </button>
-    </div>
+    <!-- 2. Source tabs — spec §6 -->
+    <TabStrip v-model="source" :tabs="sourceTabs" />
 
+    <!-- 2b. Gateway tab content -->
     <GatewaySpendPanel v-if="source === 'gateway'" />
 
+    <!-- 3-7. Platform tab content -->
     <template v-if="source === 'platform'">
-    <div class="filter-toolbar">
-      <div class="range-group" role="group" :aria-label="locale.t('metering.range.label')">
-        <button
-          v-for="range in timeRanges"
-          :key="range.key"
+      <!-- 3. Filter toolbar — spec §7: dim + time on one toolbar -->
+      <div class="filter-row">
+        <TimeRangeToolbar
+          :ranges="timeRanges"
+          :selected-range="selectedRange"
+          :agent-options="[]"
+          :selected-agent="'ALL'"
+          :model-options="[]"
+          :selected-model="'ALL'"
+          :agent-filter-label="''"
+          :model-filter-label="''"
+          show-custom
+          @update:selected-range="(v: string) => (selectedRange = v as TimeRange)"
+          @update:custom-from="(v) => customFrom = v"
+          @update:custom-to="(v) => customTo = v"
+        />
+        <button v-if="drillModel"
           type="button"
-          class="range-button"
-          :class="{ active: selectedRange === range.key }"
-          :aria-pressed="selectedRange === range.key"
-          @click="selectedRange = range.key"
-        >
-          <cds-icon v-if="range.key === '7d'" shape="calendar" size="sm"></cds-icon>
-          {{ locale.t(range.label) }}
+          class="reset-btn"
+          @click="resetFilters">
+          {{ locale.t('metering.common.reset') }}
         </button>
       </div>
 
-      <div class="filter-selects">
-        <label class="inline-filter">
-          <span>{{ locale.t('metering.filter.agent') }}</span>
-          <cds-select control-width="shrink">
-            <select v-model="selectedAgent" :aria-label="locale.t('metering.filter.agent')">
-              <option v-for="option in agentOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-          </cds-select>
-        </label>
-        <label class="inline-filter">
-          <span>{{ locale.t('metering.filter.model') }}</span>
-          <cds-select control-width="shrink">
-            <select v-model="selectedModel" :aria-label="locale.t('metering.filter.model')">
-              <option v-for="option in modelOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-          </cds-select>
-        </label>
-      </div>
-    </div>
+      <!-- 4. KPI cards — spec §8 / §11 row 1 -->
+      <KpiCardRow :cards="kpiCards" />
 
-    <div class="chart-grid">
-      <cds-card class="chart-card">
-        <div class="card-content chart-content">
-          <div class="card-heading-row">
-            <h2>{{ locale.t('metering.chart.trend') }}</h2>
-            <div class="chart-legend">
-              <span><i class="legend-mark input"></i>{{ locale.t('metering.token.input') }}</span>
-              <span><i class="legend-mark output"></i>{{ locale.t('metering.token.output') }}</span>
+      <!-- 5. Analysis grid: 2/3 trend + 1/3 model ranking — spec §11 row 2 -->
+      <div class="analysis-grid">
+        <cds-card class="card span-2">
+          <div class="card-pad chart-pad">
+            <header class="card-head">
+              <h2>{{ locale.t('metering.chart.trend') }}</h2>
+              <span class="card-sub">{{ shortDate(dailyUsage[0]?.date, locale.locale) }} – {{ shortDate(dailyUsage[dailyUsage.length - 1]?.date, locale.locale) }}</span>
+            </header>
+            <div class="chart-host">
+              <MeteringLineChart
+                :series="trendSeries"
+                :area-series-index="0"
+                :format-x="(v: string) => shortDate(v, locale.locale)"
+                :empty-text="locale.t('metering.empty.title')"
+              />
             </div>
           </div>
-          <svg
-            class="line-chart"
-            viewBox="0 0 560 190"
-            role="img"
-            :aria-label="locale.t('metering.chart.trend')"
-          >
-            <defs>
-              <linearGradient id="meteringArea" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stop-color="var(--chart-color-input, #4b76bd)" stop-opacity="0.32" />
-                <stop offset="100%" stop-color="var(--chart-color-input, #4b76bd)" stop-opacity="0.04" />
-              </linearGradient>
-            </defs>
-            <g class="grid-lines">
-              <line x1="44" y1="25" x2="545" y2="25" />
-              <line x1="44" y1="60" x2="545" y2="60" />
-              <line x1="44" y1="95" x2="545" y2="95" />
-              <line x1="44" y1="130" x2="545" y2="130" />
-              <line x1="44" y1="165" x2="545" y2="165" />
-            </g>
-            <template v-if="hasTrendData">
-              <g class="axis-labels">
-                <text v-for="tick in trendTicks" :key="`ty-${tick.value}`" x="4" :y="tick.y + 4">
-                  {{ formatNumber(Math.round(tick.value)) }}
-                </text>
-                <text
-                  v-for="point in trendPoints"
-                  :key="`tx-${point.label}-${point.x}`"
-                  :x="point.x"
-                  y="184"
-                  class="date-label"
-                >
-                  {{ point.label }}
-                </text>
-              </g>
-              <path :d="trendAreaPath" fill="url(#meteringArea)" />
-              <polyline class="trend-line input-line" :points="trendInputLine" />
-              <polyline class="trend-line output-line" :points="trendOutputLine" />
-            </template>
-            <text v-else class="chart-empty" x="280" y="95">
-              {{ locale.t('agents.empty') }}
-            </text>
-          </svg>
-        </div>
-      </cds-card>
-
-      <cds-card class="chart-card">
-        <div class="card-content chart-content">
-          <h2>{{ locale.t('metering.chart.ranking') }}</h2>
-          <svg
-            class="bar-chart"
-            viewBox="0 0 560 190"
-            role="img"
-            :aria-label="locale.t('metering.chart.ranking')"
-          >
-            <g class="grid-lines">
-              <line x1="45" y1="25" x2="545" y2="25" />
-              <line x1="45" y1="53" x2="545" y2="53" />
-              <line x1="45" y1="81" x2="545" y2="81" />
-              <line x1="45" y1="109" x2="545" y2="109" />
-              <line x1="45" y1="137" x2="545" y2="137" />
-              <line x1="45" y1="165" x2="545" y2="165" />
-            </g>
-            <template v-if="hasRankingData">
-              <g class="axis-labels">
-                <text v-for="tick in rankingTicks" :key="`ry-${tick.value}`" x="7" :y="tick.y + 4">
-                  {{ formatNumber(Math.round(tick.value)) }}
-                </text>
-              </g>
-              <g class="bars">
-                <rect
-                  v-for="bar in rankingBars"
-                  :key="`bar-${bar.label}-${bar.x}`"
-                  :x="bar.x"
-                  :y="bar.y"
-                  :width="BAR_WIDTH"
-                  :height="bar.height"
-                />
-              </g>
-              <g class="bar-labels">
-                <text
-                  v-for="bar in rankingBars"
-                  :key="`barlabel-${bar.label}-${bar.centerX}`"
-                  :x="bar.centerX"
-                  y="184"
-                >
-                  <title>{{ bar.label }}</title>
-                  {{ bar.label }}
-                </text>
-              </g>
-            </template>
-            <text v-else class="chart-empty" x="280" y="95">
-              {{ locale.t('agents.empty') }}
-            </text>
-          </svg>
-        </div>
-      </cds-card>
-    </div>
-
-    <div class="table-grid">
-      <cds-card class="table-card agent-table-card">
-        <div class="card-content table-content">
-          <h2>{{ locale.t('metering.table.agentTitle') }}</h2>
-          <div class="table-scroll">
-            <table class="usage-table agent-usage-table">
-              <thead>
-                <tr>
-                  <th>{{ locale.t('metering.table.agentId') }}</th>
-                  <th>{{ locale.t('metering.table.name') }}</th>
-                  <th>{{ locale.t('metering.table.template') }}</th>
-                  <th>{{ locale.t('metering.table.totalToken') }}</th>
-                  <th>{{ locale.t('metering.token.input') }}</th>
-                  <th>{{ locale.t('metering.token.output') }}</th>
-                  <th>{{ locale.t('metering.table.requests') }}</th>
-                  <th>{{ locale.t('metering.table.status') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="agent in filteredAgents" :key="agent.id">
-                  <td :title="agent.id">{{ agent.id }}</td>
-                  <td :title="agent.name">{{ agent.name }}</td>
-                  <td>{{ agent.template }}</td>
-                  <td>{{ formatNumber(agent.totalTokens) }}</td>
-                  <td>{{ formatNumber(agent.inputTokens) }}</td>
-                  <td>{{ formatNumber(agent.outputTokens) }}</td>
-                  <td>{{ agent.requests }}</td>
-                  <td><span class="usage-status" :class="agent.status">● {{ statusText(agent.status) }}</span></td>
-                </tr>
-              </tbody>
-            </table>
+        </cds-card>
+        <cds-card class="card">
+          <div class="card-pad chart-pad">
+            <header class="card-head">
+              <h2>{{ locale.t('metering.chart.modelRanking') }}</h2>
+            </header>
+            <div class="rank-host">
+              <MeteringBarChart
+                :bars="barBars"
+                :top-n="5"
+                :format-value="(v: number) => fmtCompact(v, locale.locale)"
+                :label-max-chars="22"
+                :empty-text="locale.t('metering.empty.title')"
+                @item-click="onModelRowClick"
+              />
+            </div>
           </div>
-          <div class="table-footer">
-            <span>{{ footerText(filteredAgents.length) }}</span>
-          </div>
-        </div>
-      </cds-card>
-
-      <cds-card class="table-card">
-        <div class="card-content table-content">
-          <h2>{{ locale.t('metering.table.modelTitle') }}</h2>
-          <div class="table-scroll">
-            <table class="usage-table">
-              <thead>
-                <tr>
-                  <th>{{ locale.t('metering.filter.model') }}</th>
-                  <th>{{ locale.t('metering.table.totalToken') }}</th>
-                  <th>{{ locale.t('metering.token.input') }}</th>
-                  <th>{{ locale.t('metering.token.output') }}</th>
-                  <th>{{ locale.t('metering.table.status') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="model in filteredModels" :key="model.name">
-                  <td>{{ model.name }}</td>
-                  <td>{{ formatNumber(model.totalTokens) }}</td>
-                  <td>{{ formatNumber(model.inputTokens) }}</td>
-                  <td>{{ formatNumber(model.outputTokens) }}</td>
-                  <td><span class="usage-status" :class="model.status">● {{ statusText(model.status) }}</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="table-footer">
-            <span>{{ footerText(filteredModels.length) }}</span>
-          </div>
-        </div>
-      </cds-card>
-
-      <cds-card class="table-card">
-        <div class="card-content table-content">
-          <h2>{{ locale.t('metering.table.dailyTitle') }}</h2>
-          <div class="table-scroll">
-            <table class="usage-table">
-              <thead>
-                <tr>
-                  <th>{{ locale.t('metering.table.date') }}</th>
-                  <th>{{ locale.t('metering.table.totalToken') }}</th>
-                  <th>{{ locale.t('metering.token.input') }}</th>
-                  <th>{{ locale.t('metering.token.output') }}</th>
-                  <th>{{ locale.t('metering.table.status') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="day in dailyUsage" :key="day.date">
-                  <td>{{ day.date }}</td>
-                  <td>{{ formatNumber(day.totalTokens) }}</td>
-                  <td>{{ formatNumber(day.inputTokens) }}</td>
-                  <td>{{ formatNumber(day.outputTokens) }}</td>
-                  <td><span class="usage-status" :class="day.status">● {{ statusText(day.status) }}</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="table-footer">
-            <span>{{ footerText(dailyUsage.length) }}</span>
-          </div>
-        </div>
-      </cds-card>
-    </div>
-
-    <cds-card class="cost-card">
-      <div class="card-content cost-content">
-        <h2>{{ locale.t('metering.cost.title') }}</h2>
-        <div class="cost-grid">
-          <div class="cost-summary">
-            <span>{{ locale.t('metering.cost.total') }}</span>
-            <strong>{{ totalCost }}</strong>
-          </div>
-          <div class="cost-summary">
-            <span>{{ locale.t('metering.cost.monthly') }}</span>
-            <strong>{{ monthlyCost }}</strong>
-          </div>
-        </div>
+        </cds-card>
       </div>
-    </cds-card>
+
+      <!-- 6. Donut distribution + agent usage table — column structure
+           mirrors the by-model table below per spec §5. Width split
+           (32/68 above 1600px → 35/65 → 36/64 → stacked below 1200px)
+           lives in .overview-grid so the trend + ranking row above
+           (which also uses .analysis-grid) keeps its 2fr 1fr split. -->
+      <div class="overview-grid">
+        <cds-card class="card">
+          <div class="card-pad chart-pad donut-card-pad">
+            <header class="card-head">
+              <h2>{{ locale.t('metering.chart.modelDist') }}</h2>
+            </header>
+            <div class="model-distribution-content">
+              <div class="donut-host">
+                <MeteringDonutChart
+                  :segments="donutSegments"
+                  :size="180"
+                  :center-label="locale.t('metering.kpi.activeModels')"
+                  :center-value="String(models.filter((m) => m.totalTokens > 0).length)"
+                  :empty-text="locale.t('metering.empty.title')"
+                />
+              </div>
+            </div>
+          </div>
+        </cds-card>
+        <cds-card class="card span-2">
+          <div class="card-pad table-pad">
+            <header class="card-head">
+              <h2>{{ locale.t('metering.table.agentTitle') }}</h2>
+              <!-- Spec §9: keep ONE count expression. Footer below already
+                   says "显示中 N 条", so the right-aligned count here is
+                   intentionally omitted (was the unclear bare "0"). -->
+            </header>
+            <div class="table-host">
+              <table class="data-table agent-usage-table">
+                <thead>
+                  <tr>
+                    <th class="col-name">{{ locale.t('metering.table.name') }}</th>
+                    <th class="num">{{ locale.t('metering.spend.col.spend') }}</th>
+                    <th class="num">{{ locale.t('metering.table.totalToken') }}</th>
+                    <th class="num">{{ locale.t('metering.token.input') }}</th>
+                    <th class="num">{{ locale.t('metering.token.output') }}</th>
+                    <th class="num">{{ locale.t('metering.table.requests') }}</th>
+                    <th>{{ locale.t('metering.table.status') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="ag in agents"
+                    :key="ag.id"
+                    class="drill-row"
+                    :title="`${ag.name} · ${ag.id} — 点击查看详情`"
+                    @click="onAgentRowClick(ag.id, ag.name)"
+                  >
+                    <td class="col-name">
+                      <span class="cell-name-primary">{{ ag.name }}</span>
+                      <span class="cell-name-secondary">{{ ag.id }}</span>
+                    </td>
+                    <td class="num">{{ fmtMoney(agentCost(ag.id), locale.locale) }}</td>
+                    <td class="num">{{ fmtNumber(ag.totalTokens, locale.locale) }}</td>
+                    <td class="num">{{ fmtNumber(ag.inputTokens, locale.locale) }}</td>
+                    <td class="num">{{ fmtNumber(ag.outputTokens, locale.locale) }}</td>
+                    <td class="num">{{ fmtNumber(ag.requests, locale.locale) }}</td>
+                    <td>
+                      <span class="usage-status" :class="ag.status">
+                        ● {{ statusText(ag.status) }}
+                      </span>
+                    </td>
+                  </tr>
+                  <tr v-if="agents.length === 0">
+                    <td colspan="7" class="empty-cell">
+                      <MeteringEmptyState :title="locale.t('metering.empty.title')" :show-action="false" compact />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-footer">
+              <span>{{ footerText(agents.length) }}</span>
+            </div>
+          </div>
+        </cds-card>
+      </div>
+
+      <!-- 7. Drill-down panel — only when a model is selected -->
+      <div v-if="drillModel" class="analysis-grid">
+        <cds-card class="card">
+          <div class="card-pad chart-pad">
+            <header class="card-head">
+              <h2>{{ locale.t('metering.chart.modelDailyTrend') }} — {{ truncate(drillModel, 22) }}</h2>
+              <span class="card-sub">{{ locale.t('metering.table.drillHint') }}</span>
+            </header>
+            <div class="chart-host">
+              <MeteringLineChart
+                :series="drillSeries"
+                :area-series-index="0"
+                :format-x="(v: string) => shortDate(v, locale.locale)"
+                :empty-text="locale.t('metering.empty.title')"
+              />
+            </div>
+          </div>
+        </cds-card>
+        <cds-card class="card">
+          <div class="card-pad chart-pad">
+            <header class="card-head">
+              <h2>{{ locale.t('metering.chart.modelTokens') }} — {{ truncate(drillModel, 22) }}</h2>
+            </header>
+            <div class="donut-host">
+              <MeteringDonutChart
+                :segments="drillDonutSegments"
+                :center-label="locale.t('metering.token.input')"
+                :center-value="fmtNumber(drillTotalTokens, locale.locale)"
+                :empty-text="locale.t('metering.empty.title')"
+              />
+            </div>
+          </div>
+        </cds-card>
+      </div>
+
+      <!-- 8. Detail tables — spec §11 row 4: by-model + by-date -->
+      <div class="tables-grid">
+        <cds-card class="card">
+          <div class="card-pad table-pad">
+            <header class="card-head">
+              <h2>{{ locale.t('metering.table.modelTitle') }}</h2>
+              <span class="card-sub">{{ fmtNumber(models.length, locale.locale) }}</span>
+            </header>
+            <div class="table-host">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>{{ locale.t('metering.filter.model') }}</th>
+                    <th class="num">{{ locale.t('metering.spend.col.spend') }}</th>
+                    <th class="num">{{ locale.t('metering.table.totalToken') }}</th>
+                    <th class="num">{{ locale.t('metering.token.input') }}</th>
+                    <th class="num">{{ locale.t('metering.token.output') }}</th>
+                    <th class="num">{{ locale.t('metering.table.requests') }}</th>
+                    <th>{{ locale.t('metering.table.status') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="model in models"
+                    :key="model.name"
+                    class="drill-row"
+                    :class="{ active: drillModel === model.name }"
+                    :title="locale.t('metering.table.drillHint')"
+                    @click="toggleDrillModel(model.name)"
+                  >
+                    <td>
+                      <span class="drill-icon">{{ drillModel === model.name ? '▼' : '▶' }}</span>
+                      <span :title="model.name">{{ truncate(model.name, 36) }}</span>
+                    </td>
+                    <td class="num">{{ fmtMoney(modelCost(model.name), locale.locale) }}</td>
+                    <td class="num">{{ fmtNumber(model.totalTokens, locale.locale) }}</td>
+                    <td class="num">{{ fmtNumber(model.inputTokens, locale.locale) }}</td>
+                    <td class="num">{{ fmtNumber(model.outputTokens, locale.locale) }}</td>
+                    <td class="num">{{ fmtNumber(model.requests, locale.locale) }}</td>
+                    <td>
+                      <span class="usage-status" :class="model.status">
+                        ● {{ statusText(model.status) }}
+                      </span>
+                    </td>
+                  </tr>
+                  <tr v-if="models.length === 0">
+                    <td colspan="7" class="empty-cell">
+                      <MeteringEmptyState :title="locale.t('metering.empty.title')" :show-action="false" compact />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-footer"><span>{{ footerText(models.length) }}</span></div>
+          </div>
+        </cds-card>
+        <cds-card class="card">
+          <div class="card-pad table-pad">
+            <header class="card-head">
+              <h2>{{ locale.t('metering.table.dailyTitle') }}</h2>
+              <span class="card-sub">{{ fmtNumber(dailyUsage.length, locale.locale) }}</span>
+            </header>
+            <div class="table-host">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>{{ locale.t('metering.table.date') }}</th>
+                    <th class="num">{{ locale.t('metering.table.totalToken') }}</th>
+                    <th class="num">{{ locale.t('metering.token.input') }}</th>
+                    <th class="num">{{ locale.t('metering.token.output') }}</th>
+                    <th>{{ locale.t('metering.table.status') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="day in dailyUsage" :key="day.date">
+                    <td>{{ day.date }}</td>
+                    <td class="num">{{ fmtNumber(day.totalTokens, locale.locale) }}</td>
+                    <td class="num">{{ fmtNumber(day.inputTokens, locale.locale) }}</td>
+                    <td class="num">{{ fmtNumber(day.outputTokens, locale.locale) }}</td>
+                    <td>
+                      <span class="usage-status" :class="day.status">
+                        ● {{ statusText(day.status) }}
+                      </span>
+                    </td>
+                  </tr>
+                  <tr v-if="dailyUsage.length === 0">
+                    <td colspan="5" class="empty-cell">
+                      <MeteringEmptyState :title="locale.t('metering.empty.title')" :show-action="false" compact />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-footer"><span>{{ footerText(dailyUsage.length) }}</span></div>
+          </div>
+        </cds-card>
+      </div>
+
+      <!-- 9. Cost summary — spec §11 keeps this as a final-row summary -->
+      <cds-card class="card cost-card">
+        <div class="card-pad">
+          <header class="card-head">
+            <h2>{{ locale.t('metering.cost.title') }}</h2>
+          </header>
+          <div class="cost-grid">
+            <div class="cost-summary">
+              <span class="cost-label">{{ locale.t('metering.cost.total') }}</span>
+              <strong class="cost-value">{{ fmtMoney(overview?.cost?.totalCost ?? 0, locale.locale) }}</strong>
+            </div>
+            <div class="cost-summary">
+              <span class="cost-label">{{ locale.t('metering.cost.monthly') }}</span>
+              <strong class="cost-value">
+                {{ fmtMoney(overview?.cost?.monthlyCost ?? 0, locale.locale) }}
+                <span class="cost-suffix">/ {{ locale.t('metering.cost.month') }}</span>
+              </strong>
+            </div>
+          </div>
+        </div>
+      </cds-card>
     </template>
   </section>
 </template>
 
 <style scoped>
-.source-switch {
-  display: inline-flex;
-  margin-bottom: 1rem;
-  border: 1px solid var(--cds-alias-object-interaction-border, #ccc);
-  border-radius: 0.25rem;
-  overflow: hidden;
-}
-.source-tab {
-  padding: 0.4rem 1.1rem;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-.source-tab.active {
-  background: var(--cds-alias-status-info, #0072a3);
-  color: #fff;
-}
-:root,
-[cds-theme] {
+/* -----------------------------------------------------------------------
+   Design tokens — spec §3. Scoped locally to .metering-page so the rest
+   of the app's light/dark theme is unaffected; primary / success colors
+   still resolve through CDS theme variables via fallbacks.
+   ----------------------------------------------------------------------- */
+.metering-page {
+  /* Spec tokens — keep in sync with §3 of the metering UX spec. */
+  --meter-page-bg: #f5f7fa;
+  --meter-card-bg: #ffffff;
+  --meter-text: #1d2939;
+  --meter-text-muted: #667085;
+  --meter-border: #e4e7ec;
+  --meter-bg-weak: #f8fafc;
+  --meter-radius: 8px;
+  --meter-success: #12b76a;
+  --meter-warning: #f79009;
+  --meter-danger: #f04438;
+  --meter-primary: var(--cds-alias-status-info, #0072a3);
+
+  /* Chart color tokens -- also referenced by MeteringLineChart / BarChart. */
   --chart-color-input: #4b76bd;
   --chart-color-output: #9aa8bb;
-}
-:global([cds-theme='dark']) {
-  --chart-color-input: #7aaee8;
-  --chart-color-output: #b0bec5;
-}
-.metering-page {
+
+  background: var(--meter-page-bg);
+  color: var(--meter-text);
   height: 100%;
   min-height: 0;
   min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  overflow: visible;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  gap: 16px;
+  padding: 20px 24px 32px;
+  overflow: auto;
+  font-family: inherit;
+  box-sizing: border-box;
 }
+
+/* ---------------------------- 1. page header ---------------------------- */
 .page-head {
   flex: 0 0 auto;
-  padding-top: 4px;
+}
+.head-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.head-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--cds-alias-status-info-tint, rgba(0, 114, 163, 0.08));
+  color: var(--meter-primary);
 }
 .heading {
   margin: 0;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
+  color: var(--meter-text);
 }
-.desc {
-  margin: 12px 0 0;
-  color: var(--cds-alias-typography-color-300, #565656);
-  font-size: 14px;
+.head-desc {
+  margin: 6px 0 0;
+  font-size: 13px;
   line-height: 1.5;
+  color: var(--meter-text-muted);
   max-width: 720px;
 }
-.muted {
-  color: var(--cds-alias-typography-color-300, #565656);
-}
-.filter-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+
+/* ---------------------------- filter row ---------------------------- */
+.filter-row {
   flex: 0 0 auto;
-}
-.range-group {
-  display: inline-flex;
-  align-items: stretch;
-}
-.range-button {
-  min-height: 32px;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.reset-btn {
   padding: 5px 11px;
-  border: 1px solid var(--cds-alias-object-border-color, #b3b3b3);
-  border-right: 0;
-  background: var(--cds-alias-object-container-background, #fff);
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font: inherit;
   font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--meter-border);
+  border-radius: 6px;
+  background: var(--meter-card-bg);
+  color: var(--meter-text);
   cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-.range-button:first-child { border-radius: 4px 0 0 4px; }
-.range-button:last-child {
-  border-right: 1px solid var(--cds-alias-object-border-color, #b3b3b3);
-  border-radius: 0 4px 4px 0;
+.reset-btn:hover {
+  border-color: var(--meter-primary);
+  box-shadow: 0 0 0 3px rgba(0, 114, 163, 0.1);
 }
-.range-button:hover,
-.range-button.active {
-  color: var(--cds-alias-object-interaction-color, #006e9c);
-  background: var(--cds-alias-object-app-background, #f0f5f8);
-}
-.range-button.active {
-  box-shadow: inset 0 -2px 0 var(--cds-alias-object-interaction-color, #0072a3);
-}
-.filter-selects {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 16px;
-  min-width: 0;
-}
-.inline-filter {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.inline-filter cds-select {
-  width: 220px;
-  font-weight: 400;
-}
+
+/* ---------------------------- cards ---------------------------- */
 .metering-page :deep(cds-card) {
   --padding: 0;
   --overflow: hidden;
   display: block;
   box-sizing: border-box;
   min-width: 0;
-  background: var(--cds-alias-object-container-background, #fff);
-  border: 1px solid var(--cds-alias-object-border-color, #b3b3b3);
-  border-radius: 6px;
-  box-shadow: none;
+  background: var(--meter-card-bg);
+  border: 1px solid var(--meter-border);
+  border-radius: var(--meter-radius);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 }
-.card-content {
+.card-pad {
   box-sizing: border-box;
   min-width: 0;
-  padding: 10px 12px;
-}
-.card-content h2 {
-  margin: 0;
-  font-size: 15px;
-  line-height: 1.3;
-  font-weight: 600;
-}
-.chart-grid {
-  min-height: 190px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  flex: 1 1 38%;
-}
-.chart-card,
-.table-card {
-  height: 100%;
-  min-height: 0;
-}
-.chart-content {
-  height: 100%;
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
-.card-heading-row {
+.card-head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 8px;
 }
-.chart-legend {
-  display: inline-flex;
-  gap: 12px;
-  font-size: 11px;
+.card-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--meter-text);
 }
-.chart-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.card-sub {
+  font-size: 12px;
+  color: var(--meter-text-muted);
+  font-variant-numeric: tabular-nums;
 }
-.legend-mark {
-  width: 9px;
-  height: 9px;
-  display: inline-block;
-  border-radius: 50%;
-}
-.legend-mark.input { background: var(--chart-color-input, #4b76bd); }
-.legend-mark.output { background: var(--chart-color-output, #9aa8bb); }
-.line-chart,
-.bar-chart {
-  width: 100%;
-  min-height: 0;
-  flex: 1;
-  overflow: visible;
-}
-.grid-lines line {
-  stroke: currentColor;
-  stroke-opacity: 0.12;
-  stroke-width: 1;
-}
-.axis-labels text,
-.bar-labels text {
-  fill: currentColor;
-  opacity: 0.72;
-  font-size: 10px;
-  font-family: inherit;
-}
-.bar-labels text {
-  text-anchor: middle;
-  font-size: 9px;
-}
-.axis-labels .date-label {
-  text-anchor: middle;
-}
-.chart-empty {
-  fill: currentColor;
-  opacity: 0.55;
-  font-size: 11px;
-  text-anchor: middle;
-}
-.trend-line {
-  fill: none;
-  stroke-width: 2;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-}
-.input-line { stroke: var(--chart-color-input, #4b76bd); }
-.output-line { stroke: var(--chart-color-output, #9aa8bb); }
-.bars rect {
-  fill: var(--chart-color-input, #4f78bd);
-}
-.table-grid {
-  min-height: 168px;
+.card.span-2 { /* visual marker for 2/3 grid spans */ }
+
+/* ---------------------------- analysis grid ---------------------------- */
+.analysis-grid {
   display: grid;
-  grid-template-columns: 1.45fr 0.82fr 0.82fr;
-  gap: 10px;
-  flex: 1 1 34%;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  flex: 0 0 auto;
 }
-.table-content {
-  height: 100%;
+.analysis-grid + .analysis-grid { margin-top: 0; }
+.span-2 { min-width: 0; }
+
+/* Donut + agent-table row — narrower donut, wider table (spec §2/§3).
+   Default 35/65; promoted to 32/68 at >=1600px; drops to stacked below
+   1200px. The .analysis-grid class above is intentionally untouched so
+   the trend + ranking row keeps its 2fr 1fr split. */
+.overview-grid {
+  display: grid;
+  grid-template-columns: minmax(380px, 35fr) minmax(0, 65fr);
+  gap: 16px;
+  flex: 0 0 auto;
+  align-items: stretch;
+}
+.overview-grid + .analysis-grid { margin-top: 0; }
+@media (min-width: 1600px) {
+  .overview-grid {
+    grid-template-columns: minmax(420px, 32fr) minmax(0, 68fr);
+  }
+}
+@media (min-width: 1366px) and (max-width: 1599px) {
+  .overview-grid { grid-template-columns: minmax(380px, 35fr) minmax(0, 65fr); }
+}
+@media (min-width: 1200px) and (max-width: 1365px) {
+  .overview-grid {
+    grid-template-columns: minmax(360px, 36fr) minmax(0, 64fr);
+  }
+}
+@media (max-width: 1199px) {
+  .overview-grid { grid-template-columns: 1fr; }
+}
+
+.chart-host {
+  flex: 1;
+  min-height: 280px;
+  display: flex;
+}
+.chart-host > * { flex: 1; }
+.rank-host {
+  flex: 1;
+  min-height: 200px;
   display: flex;
   flex-direction: column;
-  padding: 8px 9px;
 }
-.table-scroll {
-  min-width: 0;
-  margin-top: 6px;
+.rank-host > * { flex: 1; }
+.donut-host {
+  flex: 1;
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.donut-host > * { flex: 1; }
+.chart-pad {
+  min-height: 320px;
+}
+/* Donut card inner layout per spec §4 — donut 180px fixed, legend flows
+   into remaining width; cards stretch to match the right-side table
+   height so the two stay aligned. */
+.donut-card-pad {
+  display: flex;
+  flex-direction: column;
+}
+.model-distribution-content {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  flex: 1;
+  min-height: 0;
+}
+.model-distribution-content .donut-host {
+  min-height: 0;
+  height: 100%;
+}
+
+/* ---------------------------- single-row ---------------------------- */
+.single-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+/* ---------------------------- tables ---------------------------- */
+.tables-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 16px;
+  flex: 0 0 auto;
+}
+.table-pad {
+  min-height: 260px;
+}
+.table-host {
+  flex: 1;
+  min-height: 200px;
   overflow: auto;
+  margin-top: 4px;
+  border: 1px solid var(--meter-border);
+  border-radius: var(--meter-radius);
 }
-.usage-table {
+.data-table {
   width: 100%;
-  min-width: 240px;
-  border-collapse: collapse;
-  table-layout: fixed;
-  font-size: 9px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  background: var(--meter-card-bg);
+  min-width: 360px;
 }
-.agent-usage-table {
-  min-width: 440px;
-}
-.usage-table th,
-.usage-table td {
-  padding: 4px 5px;
-  overflow: hidden;
+.data-table th,
+.data-table td {
+  padding: 10px 12px;
   text-align: left;
-  text-overflow: ellipsis;
+  border-bottom: 1px solid var(--meter-border);
+  vertical-align: middle;
   white-space: nowrap;
-  border-bottom: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
 }
-.usage-table th {
-  background: var(--cds-alias-object-app-background, #e9eaee);
+.data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--meter-bg-weak);
   font-weight: 600;
+  font-size: 12px;
+  color: var(--meter-text-muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
-.usage-table td:nth-child(n + 4),
-.usage-table th:nth-child(n + 4) {
+.data-table td.num,
+.data-table th.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.usage-table td:last-child,
-.usage-table th:last-child {
-  text-align: left;
+.data-table tbody tr:hover { background: var(--meter-bg-weak); }
+.data-table tbody tr:last-child td { border-bottom: 0; }
+.data-table .drill-row { cursor: pointer; transition: background 0.15s; }
+.data-table .drill-row.active { background: var(--meter-bg-weak); font-weight: 600; }
+
+/* Agent-table cell layout (spec §8): primary line = agent name, secondary
+   line = agentId. Two stacked spans inside one td keeps the column at
+   ~220-260px while still showing both pieces of identifying info. */
+.col-name {
+  white-space: normal;
+  vertical-align: middle;
+}
+.cell-name-primary {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--meter-text);
+}
+.cell-name-secondary {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--meter-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  margin-top: 2px;
+}
+
+/* Agent-table column widths (spec §7). Applied as fixed table-layout so the
+   widths hold against the wide right card and the table scrolls
+   horizontally if the card ever narrows below the sum. */
+.agent-usage-table {
+  table-layout: fixed;
+  min-width: 820px;
+}
+.agent-usage-table th.col-name,
+.agent-usage-table td.col-name { width: 240px; }
+.agent-usage-table th:nth-child(2),
+.agent-usage-table td:nth-child(2) { width: 96px; }
+.agent-usage-table th:nth-child(3),
+.agent-usage-table td:nth-child(3) { width: 116px; }
+.agent-usage-table th:nth-child(4),
+.agent-usage-table td:nth-child(4) { width: 110px; }
+.agent-usage-table th:nth-child(5),
+.agent-usage-table td:nth-child(5) { width: 110px; }
+.agent-usage-table th:nth-child(6),
+.agent-usage-table td:nth-child(6) { width: 96px; }
+.agent-usage-table th:nth-child(7),
+.agent-usage-table td:nth-child(7) { width: 84px; }
+@media (max-width: 1365px) {
+  /* At narrower screens allow the agent table to scroll horizontally instead
+     of squeezing fonts (spec §3 1200-1365 + §7 §8). */
+  .agent-usage-table { min-width: 720px; }
+}
+.drill-icon {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 10px;
+  opacity: 0.6;
 }
 .usage-status {
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 600;
 }
-.usage-status.normal { color: var(--cds-alias-status-success, #1b8a4b); }
-.usage-status.warning { color: var(--cds-alias-status-danger, #c92100); }
+.usage-status.normal { color: var(--meter-success); }
+.usage-status.warning { color: var(--meter-danger); }
+.empty-cell { padding: 0 !important; background: var(--meter-bg-weak); }
 .table-footer {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 3px;
-  margin-top: auto;
-  padding-top: 5px;
-  font-size: 8px;
+  padding-top: 8px;
+  font-size: 12px;
+  color: var(--meter-text-muted);
 }
-.cost-card {
-  --height: auto;
-  height: auto;
-  min-height: 102px;
-  flex: 0 0 auto;
-}
-.cost-content {
-  min-height: 100px;
-  display: flex;
-  flex-direction: column;
-}
-.cost-grid {
+
+/* ---------------------------- cost summary ---------------------------- */
+.cost-card .cost-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 8px;
+  gap: 16px;
+  margin-top: 12px;
 }
 .cost-summary {
-  min-height: 60px;
-  padding: 10px 12px;
+  padding: 14px 16px;
+  background: var(--meter-bg-weak);
+  border: 1px solid var(--meter-border);
+  border-radius: var(--meter-radius);
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  border: 1px solid var(--cds-alias-object-border-color, #b3b3b3);
-  border-radius: 5px;
+  gap: 4px;
+  min-width: 0;
 }
-.cost-summary span {
-  font-size: 12px;
-}
-.cost-summary strong {
-  margin-top: 2px;
-  font-size: 24px;
-  line-height: 1.1;
+.cost-label { font-size: 12px; color: var(--meter-text-muted); }
+.cost-value {
+  font-size: 22px;
+  font-weight: 700;
   letter-spacing: -0.02em;
+  color: var(--meter-text);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
 }
-@media (max-width: 1120px) {
-  .filter-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .filter-selects {
-    width: 100%;
-    justify-content: flex-start;
-  }
-  .chart-grid,
-  .table-grid {
-    grid-template-columns: 1fr;
-  }
-  .chart-card { min-height: 240px; }
-  .table-card { min-height: 210px; }
+.cost-suffix {
+  font-size: 13px;
+  color: var(--meter-text-muted);
+  font-weight: 400;
 }
-@media (max-width: 650px) {
-  .range-group {
-    width: 100%;
-    overflow-x: auto;
-  }
-  .range-button { flex: 1 0 auto; }
-  .filter-selects {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .inline-filter {
-    justify-content: space-between;
-  }
-  .inline-filter cds-select { width: min(220px, 70vw); }
+
+/* ---------------------------- responsive ---------------------------- */
+@media (max-width: 1366px) {
+  .analysis-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 1200px) {
+  .analysis-grid,
+  .tables-grid { grid-template-columns: 1fr; }
+  .span-2 { /* no 2/3 split under 1200 */ }
+  .data-table { min-width: 480px; }
+}
+@media (max-width: 900px) {
+  .metering-page { padding: 16px; }
+  .filter-row { flex-direction: column; align-items: stretch; }
   .cost-grid { grid-template-columns: 1fr; }
 }
 </style>

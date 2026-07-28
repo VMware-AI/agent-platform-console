@@ -1587,7 +1587,7 @@ const summaryText = computed(() => {
     :confirm-text="locale.t('common.confirm')"
     :cancel-text="locale.t('common.cancel')"
     @confirm="confirmAction"
-    @cancel="closeActionConfirm"
+    @close="closeActionConfirm"
   />
 
   <!-- Hard-delete confirm dialog: type-to-confirm, agent name must match exactly.
@@ -1601,7 +1601,7 @@ const summaryText = computed(() => {
     :expected-input="actionTarget?.name ?? ''"
     danger
     @confirm="confirmAction"
-    @cancel="closeActionConfirm"
+    @close="closeActionConfirm"
   />
 
   <!-- Batch soft-delete (recycle): single-step confirm listing the count. -->
@@ -1612,7 +1612,7 @@ const summaryText = computed(() => {
     :confirm-text="locale.t('common.confirm')"
     :cancel-text="locale.t('common.cancel')"
     @confirm="confirmBatchAction"
-    @cancel="closeBatchConfirm"
+    @close="closeBatchConfirm"
   />
 
   <!-- Batch hard-delete (admin only): type-to-confirm with the full name list
@@ -1626,7 +1626,7 @@ const summaryText = computed(() => {
     :expected-input="batchExpectedInput"
     danger
     @confirm="confirmBatchAction"
-    @cancel="closeBatchConfirm"
+    @close="closeBatchConfirm"
   />
 </template>
 

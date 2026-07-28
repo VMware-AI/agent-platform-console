@@ -74,6 +74,21 @@ const router = createRouter({
           component: () => import('@/views/MeteringCenterView.vue'),
           meta: { roles: ['admin', 'read_only'] },
         },
+        // 计量中心 drill-down 子路由 (Phase 3). 三个 mode 通过 `:kind` + `:id`
+        // 区分;组合详情走单独路由避免 query 串式拼接。单文件共享组件 `MeteringDrillView.vue`
+        // 处理三种 mode,以减少复制。
+        {
+          path: 'observability/metering/drill/:kind(agent|model)/:id',
+          name: 'obs.metering.drill',
+          component: () => import('@/views/MeteringDrillWrapper.vue'),
+          meta: { roles: ['admin', 'read_only'] },
+        },
+        {
+          path: 'observability/metering/pair/:agentId/:model',
+          name: 'obs.metering.pair',
+          component: () => import('@/views/MeteringDrillWrapper.vue'),
+          meta: { roles: ['admin', 'read_only'] },
+        },
         {
           path: 'observability/monitor',
           name: 'obs.monitor',
