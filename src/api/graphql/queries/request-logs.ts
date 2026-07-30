@@ -12,6 +12,7 @@ const REQUEST_LOG_FIELDS = gql`
     requestId
     userId
     agentId
+    agentName
     model
     inputTokens
     outputTokens
@@ -39,6 +40,7 @@ export interface RequestLogNode {
   requestId: string
   userId: string | null
   agentId: string | null
+  agentName: string | null
   model: string | null
   inputTokens: number
   outputTokens: number
@@ -53,6 +55,7 @@ export type RequestStatusClass = 'SUCCESS' | 'CLIENT_ERROR' | 'SERVER_ERROR'
 export interface RequestLogFilterInput {
   statusCode?: number | null
   agentId?: string | null
+  agentName?: string | null
   model?: string | null
   requestId?: string | null
   userId?: string | null

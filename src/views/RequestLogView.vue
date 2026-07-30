@@ -23,14 +23,19 @@ type PageSize = (typeof PAGE_SIZE_OPTIONS)[number]
 type TimeWindow = '1h' | '6h' | 'custom'
 type StatusFilter = 'all' | '200' | '4xx' | '5xx'
 
+// Used to disambiguate an "agent" toolbar input: a UUID → exact agentId
+// filter; anything else → agentName substring (so users can paste "billing"
+// and find the matching agents by name).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 const timeWindow = ref<TimeWindow>('1h')
 const statusFilter = ref<StatusFilter>('all')
 const modelInput = ref('')
-const agentIdInput = ref('')
+const agentInput = ref('')
 const requestIdInput = ref('')
 
 const appliedModel = ref('')
-const appliedAgentId = ref('')
+const appliedAgentFilter = ref('')
 const appliedRequestId = ref('')
 
 const pageSize = ref<PageSize>(10)
@@ -63,7 +68,13 @@ const filter = computed<RequestLogFilterInput | null>(() => {
   else if (statusFilter.value === '4xx') next.statusClass = 'CLIENT_ERROR'
   else if (statusFilter.value === '5xx') next.statusClass = 'SERVER_ERROR'
   if (appliedModel.value.trim()) next.model = appliedModel.value.trim()
-  if (appliedAgentId.value.trim()) next.agentId = appliedAgentId.value.trim()
+  // Agent input: paste a UUID → exact filter; otherwise treat as a name
+  // substring so users can type "billing" and find the matching agents.
+  if (appliedAgentFilter.value.trim()) {
+    const raw = appliedAgentFilter.value.trim()
+    if (UUID_RE.test(raw)) next.agentId = raw
+    else next.agentName = raw
+  }
   if (appliedRequestId.value.trim()) next.requestId = appliedRequestId.value.trim()
   if (appliedUserId.value.trim()) next.userId = appliedUserId.value.trim()
   const w = serverWindow.value
@@ -174,14 +185,14 @@ const anyFilterActive = computed(
     statusFilter.value !== 'all' ||
     timeWindow.value !== '1h' ||
     Boolean(appliedModel.value.trim()) ||
-    Boolean(appliedAgentId.value.trim()) ||
+    Boolean(appliedAgentFilter.value.trim()) ||
     Boolean(appliedRequestId.value.trim()) ||
     Boolean(appliedUserId.value.trim()),
 )
 
 function applyToolbarFilters() {
   appliedModel.value = modelInput.value.trim()
-  appliedAgentId.value = agentIdInput.value.trim()
+  appliedAgentFilter.value = agentInput.value.trim()
   appliedRequestId.value = requestIdInput.value.trim()
   appliedUserId.value = userInput.value.trim()
   currentPage.value = 1
@@ -191,11 +202,11 @@ function clearAllFilters() {
   timeWindow.value = '1h'
   statusFilter.value = 'all'
   modelInput.value = ''
-  agentIdInput.value = ''
+  agentInput.value = ''
   requestIdInput.value = ''
   userInput.value = ''
   appliedModel.value = ''
-  appliedAgentId.value = ''
+  appliedAgentFilter.value = ''
   appliedRequestId.value = ''
   appliedUserId.value = ''
   customFrom.value = ''
@@ -401,7 +412,7 @@ async function copyRequestId(value: string) {
         <div class="toolbar-spacer"></div>
 
         <input
-          v-model="agentIdInput"
+          v-model="agentInput"
           class="control-input agent-input"
           type="text"
           :placeholder="locale.t('requestLog.filter.agentPlaceholder')"
@@ -567,7 +578,7 @@ async function copyRequestId(value: string) {
             </button>
           </cds-grid-cell>
           <cds-grid-cell>
-            <span class="ellipsis" :title="dash(log.agentId)">{{ dash(log.agentId) }}</span>
+            <span class="ellipsis" :title="dash(log.agentId)">{{ log.agentName ?? dash(log.agentId) }}</span>
           </cds-grid-cell>
           <cds-grid-cell>
             <span class="ellipsis mono" :title="dash(log.userId)">{{ log.userId ? log.userId.slice(0, 8) : '—' }}</span>
