@@ -320,11 +320,6 @@ const detailModalLog = computed<RequestLogNode | null>(() => {
   return visibleLogs.value.find((l) => l.id === detailModalId.value) ?? null
 })
 
-function openDetail(log: RequestLogNode) {
-  if (!log.detail) return
-  detailModalId.value = log.id
-}
-
 function closeDetail() {
   detailModalId.value = null
 }
