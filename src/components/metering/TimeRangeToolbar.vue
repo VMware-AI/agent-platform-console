@@ -1,14 +1,9 @@
 <script setup lang="ts">
-// Caller: MeteringCenterView.vue (replacing inline filter-toolbar at lines 374-412)
+// Caller: MeteringCenterView.vue
 // Pure presentational — emits on user interaction, no data I/O
 
 export interface TimeRange {
   key: string
-  label: string
-}
-
-export interface FilterOption {
-  value: string
   label: string
 }
 
@@ -17,19 +12,11 @@ import { ref, watch } from 'vue'
 defineProps<{
   ranges: TimeRange[]
   selectedRange: string
-  agentOptions: FilterOption[]
-  selectedAgent: string
-  modelOptions: FilterOption[]
-  selectedModel: string
-  agentFilterLabel: string
-  modelFilterLabel: string
   showCustom?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:selectedRange': [value: string]
-  'update:selectedAgent': [value: string]
-  'update:selectedModel': [value: string]
   'update:customFrom': [value: string]
   'update:customTo': [value: string]
 }>()
@@ -74,32 +61,6 @@ watch(customTo, (v) => emit('update:customTo', v))
           <input type="datetime-local" :value="customTo" @input="customTo = ($event.target as HTMLInputElement).value" />
         </label>
       </template>
-      <label class="inline-filter">
-        <span>{{ agentFilterLabel }}</span>
-        <cds-select control-width="shrink">
-          <select
-            :value="selectedAgent"
-            @change="emit('update:selectedAgent', ($event.target as HTMLSelectElement).value)"
-          >
-            <option v-for="opt in agentOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </cds-select>
-      </label>
-      <label class="inline-filter">
-        <span>{{ modelFilterLabel }}</span>
-        <cds-select control-width="shrink">
-          <select
-            :value="selectedModel"
-            @change="emit('update:selectedModel', ($event.target as HTMLSelectElement).value)"
-          >
-            <option v-for="opt in modelOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </cds-select>
-      </label>
     </div>
   </div>
 </template>
@@ -108,13 +69,15 @@ watch(customTo, (v) => emit('update:customTo', v))
 .filter-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
   flex: 0 0 auto;
 }
 .range-group {
   display: inline-flex;
   align-items: stretch;
+  min-width: 0;
 }
 .range-button {
   min-height: 32px;
@@ -153,21 +116,35 @@ watch(customTo, (v) => emit('update:customTo', v))
 .inline-filter {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
 }
-.inline-filter cds-select { width: 220px; font-weight: 400; }
-@media (max-width: 1120px) {
-  .filter-toolbar { align-items: flex-start; flex-direction: column; }
-  .filter-selects { width: 100%; justify-content: flex-start; }
+.inline-filter input[type='datetime-local'] {
+  width: 220px;
+  max-width: 220px;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--cds-alias-object-border-color, #b3b3b3);
+  border-radius: 4px;
+  background: var(--cds-alias-object-container-background, #fff);
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
+/* Match the platform-records time selector (RequestLogView / AuditLogView):
+   keep the preset buttons and the custom from/to inputs on a single row
+   whenever the surrounding container has room. Wrap to a second row only
+   at the very narrow breakpoint (≤650px), which mirrors what
+   `.time-tabs` does in the log views. The previous 1120px column break
+   made the from/to inputs drop below the preset buttons even at desktop
+   widths, which doesn't match the rest of the console. */
 @media (max-width: 650px) {
   .range-group { width: 100%; overflow-x: auto; }
   .range-button { flex: 1 0 auto; }
-  .filter-selects { align-items: stretch; flex-direction: column; }
+  .filter-toolbar { align-items: flex-start; flex-direction: column; }
+  .filter-selects { width: 100%; justify-content: flex-start; }
   .inline-filter { justify-content: space-between; }
-  .inline-filter cds-select { width: min(220px, 70vw); }
 }
 </style>
