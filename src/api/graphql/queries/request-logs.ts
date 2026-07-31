@@ -11,6 +11,7 @@ const REQUEST_LOG_FIELDS = gql`
     id
     requestId
     userId
+    userName
     agentId
     agentName
     model
@@ -39,6 +40,7 @@ export interface RequestLogNode {
   id: string
   requestId: string
   userId: string | null
+  userName: string | null
   agentId: string | null
   agentName: string | null
   model: string | null
@@ -59,6 +61,7 @@ export interface RequestLogFilterInput {
   model?: string | null
   requestId?: string | null
   userId?: string | null
+  userName?: string | null
   from?: string | null
   to?: string | null
   statusClass?: RequestStatusClass | null

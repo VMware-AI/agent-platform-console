@@ -71,6 +71,10 @@ import {
   folderIcon,
   connectIcon,
   networkGlobeIcon,
+  zoomInIcon,
+  playIcon,
+  pauseIcon,
+  exportIcon,
 } from '@cds/core/icon'
 
 // Register once at module load. Idempotent — safe to import multiple times.
@@ -145,4 +149,8 @@ ClarityIcons.addIcons(
   folderIcon,
   connectIcon,
   networkGlobeIcon,
+  zoomInIcon,
+  playIcon,
+  pauseIcon,
+  exportIcon,
 )

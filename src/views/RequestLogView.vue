@@ -30,13 +30,48 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 const timeWindow = ref<TimeWindow>('1h')
 const statusFilter = ref<StatusFilter>('all')
+
+// Column header filter dropdowns reuse a single state machine — one anchor
+// + one open key — so opening a different filter auto-closes the previous
+// one. Mirrors ResourcePoolListView's single-dropdown pattern; AgentListView
+// uses a per-field record, but for 4 mutually-exclusive popovers the
+// single-anchor approach is simpler and identical from the user's POV.
+type ColumnFilterKey = 'agent' | 'model' | 'requestId' | 'status' | 'user'
+const openFilterKey = ref<ColumnFilterKey | null>(null)
+const openFilterAnchor = ref<HTMLElement | null>(null)
+
+// Status filter options. Mirrors AgentListView's STATUS_OPTIONS pattern:
+// a single dropdown anchored on the 状态 column header exposes one option
+// per band; "all" clears the filter.
+const STATUS_OPTIONS = ['all', '200', '4xx', '5xx'] as const satisfies readonly StatusFilter[]
+
+function openFilter(key: ColumnFilterKey, target: EventTarget | null) {
+  openFilterKey.value = key
+  // cds-button-action dispatches the click from its inner element; anchor
+  // cds-dropdown against the outer host so positioning is stable.
+  const host = (target as HTMLElement | null)?.closest('cds-button-action') as HTMLElement | null
+  openFilterAnchor.value = host ?? (target as HTMLElement | null)
+}
+function closeFilter() {
+  openFilterAnchor.value = null
+  openFilterKey.value = null
+}
+
+function onKeywordInput(e: Event, target: 'model' | 'requestId' | 'user') {
+  const value = (e.target as HTMLInputElement).value
+  if (target === 'model') modelInput.value = value
+  else if (target === 'requestId') requestIdInput.value = value
+  else userInput.value = value
+  currentPage.value = 1
+}
+
+function onAgentKeywordInput(e: Event) {
+  agentInput.value = (e.target as HTMLInputElement).value
+  currentPage.value = 1
+}
 const modelInput = ref('')
 const agentInput = ref('')
 const requestIdInput = ref('')
-
-const appliedModel = ref('')
-const appliedAgentFilter = ref('')
-const appliedRequestId = ref('')
 
 const pageSize = ref<PageSize>(10)
 const currentPage = ref(1)
@@ -44,7 +79,6 @@ const detailModalId = ref<string | null>(null)
 const customFrom = ref('')
 const customTo = ref('')
 const userInput = ref('')
-const appliedUserId = ref('')
 
 const offset = computed(() => (currentPage.value - 1) * pageSize.value)
 
@@ -67,16 +101,16 @@ const filter = computed<RequestLogFilterInput | null>(() => {
   if (statusFilter.value === '200') next.statusCode = 200
   else if (statusFilter.value === '4xx') next.statusClass = 'CLIENT_ERROR'
   else if (statusFilter.value === '5xx') next.statusClass = 'SERVER_ERROR'
-  if (appliedModel.value.trim()) next.model = appliedModel.value.trim()
+  if (modelInput.value.trim()) next.model = modelInput.value.trim()
   // Agent input: paste a UUID → exact filter; otherwise treat as a name
   // substring so users can type "billing" and find the matching agents.
-  if (appliedAgentFilter.value.trim()) {
-    const raw = appliedAgentFilter.value.trim()
+  if (agentInput.value.trim()) {
+    const raw = agentInput.value.trim()
     if (UUID_RE.test(raw)) next.agentId = raw
     else next.agentName = raw
   }
-  if (appliedRequestId.value.trim()) next.requestId = appliedRequestId.value.trim()
-  if (appliedUserId.value.trim()) next.userId = appliedUserId.value.trim()
+  if (requestIdInput.value.trim()) next.requestId = requestIdInput.value.trim()
+  if (userInput.value.trim()) next.userId = userInput.value.trim()
   const w = serverWindow.value
   if (w.from) next.from = w.from
   if (w.to) next.to = w.to
@@ -180,48 +214,13 @@ const rangeText = computed(() => {
     .replace('{total}', String(totalCount.value))
 })
 
-const anyFilterActive = computed(
-  () =>
-    statusFilter.value !== 'all' ||
-    timeWindow.value !== '1h' ||
-    Boolean(appliedModel.value.trim()) ||
-    Boolean(appliedAgentFilter.value.trim()) ||
-    Boolean(appliedRequestId.value.trim()) ||
-    Boolean(appliedUserId.value.trim()),
-)
-
-function applyToolbarFilters() {
-  appliedModel.value = modelInput.value.trim()
-  appliedAgentFilter.value = agentInput.value.trim()
-  appliedRequestId.value = requestIdInput.value.trim()
-  appliedUserId.value = userInput.value.trim()
-  currentPage.value = 1
-}
-
-function clearAllFilters() {
-  timeWindow.value = '1h'
-  statusFilter.value = 'all'
-  modelInput.value = ''
-  agentInput.value = ''
-  requestIdInput.value = ''
-  userInput.value = ''
-  appliedModel.value = ''
-  appliedAgentFilter.value = ''
-  appliedRequestId.value = ''
-  appliedUserId.value = ''
-  customFrom.value = ''
-  customTo.value = ''
-  currentPage.value = 1
-}
-
 function selectTimeWindow(next: TimeWindow) {
   timeWindow.value = next
   currentPage.value = 1
 }
 
-function selectStatusFilter(next: StatusFilter) {
-  // Toggle: clicking the active band clears back to "all".
-  statusFilter.value = statusFilter.value === next ? 'all' : next
+function setStatusFilter(next: StatusFilter) {
+  statusFilter.value = next
   currentPage.value = 1
 }
 
@@ -265,7 +264,6 @@ function goToPage(page: number) {
 
 async function refreshLogs() {
   if (loading.value) return
-  applyToolbarFilters()
   try {
     await refetch()
     toast.success(locale.t('requestLog.toast.refreshed'))
@@ -411,76 +409,6 @@ async function copyRequestId(value: string) {
 
         <div class="toolbar-spacer"></div>
 
-        <input
-          v-model="agentInput"
-          class="control-input agent-input"
-          type="text"
-          :placeholder="locale.t('requestLog.filter.agentPlaceholder')"
-          :aria-label="locale.t('requestLog.filter.agentPlaceholder')"
-          @keyup.enter="applyToolbarFilters"
-          @change="applyToolbarFilters"
-        />
-        <input
-          v-model="modelInput"
-          class="control-input model-input"
-          type="text"
-          :placeholder="locale.t('requestLog.filter.modelPlaceholder')"
-          :aria-label="locale.t('requestLog.filter.modelPlaceholder')"
-          @keyup.enter="applyToolbarFilters"
-          @change="applyToolbarFilters"
-        />
-        <div class="status-chips" :aria-label="locale.t('requestLog.filter.statusGroup')">
-          <button
-            type="button"
-            class="status-chip"
-            :class="{ active: statusFilter === '200' }"
-            :aria-pressed="statusFilter === '200'"
-            @click="selectStatusFilter('200')"
-          >
-            <span class="chip-check" aria-hidden="true"></span>
-            200
-          </button>
-          <button
-            type="button"
-            class="status-chip"
-            :class="{ active: statusFilter === '4xx' }"
-            :aria-pressed="statusFilter === '4xx'"
-            @click="selectStatusFilter('4xx')"
-          >
-            <span class="chip-check" aria-hidden="true"></span>
-            4xx
-          </button>
-          <button
-            type="button"
-            class="status-chip"
-            :class="{ active: statusFilter === '5xx' }"
-            :aria-pressed="statusFilter === '5xx'"
-            @click="selectStatusFilter('5xx')"
-          >
-            <span class="chip-check" aria-hidden="true"></span>
-            5xx
-          </button>
-        </div>
-        <label class="search-box">
-          <cds-icon shape="search" size="sm" aria-hidden="true"></cds-icon>
-          <input
-            v-model="requestIdInput"
-            type="search"
-            :placeholder="locale.t('requestLog.filter.requestPlaceholder')"
-            :aria-label="locale.t('requestLog.filter.requestPlaceholder')"
-            @keyup.enter="applyToolbarFilters"
-            @change="applyToolbarFilters"
-          />
-        </label>
-        <input
-          v-model="userInput"
-          class="control-input"
-          type="text"
-          :placeholder="locale.t('requestLog.filter.userPlaceholder')"
-          :aria-label="locale.t('requestLog.filter.userPlaceholder')"
-          @keyup.enter="applyToolbarFilters"
-          @change="applyToolbarFilters"
-        />
         <cds-button action="outline" size="sm" :disabled="exportingCsv" @click="exportCsv">
           <cds-icon shape="download" size="sm" aria-hidden="true"></cds-icon>
           {{ exportingCsv ? locale.t('requestLog.export.inProgress') : locale.t('requestLog.action.export') }}
@@ -498,13 +426,6 @@ async function copyRequestId(value: string) {
         </label>
       </div>
 
-      <div v-if="anyFilterActive" class="filter-summary">
-        <span>{{ locale.t('requestLog.filter.activeHint') }}</span>
-        <button type="button" class="link-button" @click="clearAllFilters">
-          {{ locale.t('requestLog.filter.clearAll') }}
-        </button>
-      </div>
-
     <div class="grid-card">
       <cds-grid
         border="row"
@@ -520,21 +441,53 @@ async function copyRequestId(value: string) {
         <cds-grid-column width="13%">
           <div class="col-head">
             <span>{{ locale.t('requestLog.col.requestId') }}</span>
+            <span class="col-head-actions">
+              <cds-button-action
+                shape="filter"
+                :aria-label="locale.t('requestLog.col.requestId.search')"
+                :expanded="!!requestIdInput.trim()"
+                @click="(e: MouseEvent) => openFilter('requestId', e.target)"
+              ></cds-button-action>
+            </span>
           </div>
         </cds-grid-column>
         <cds-grid-column width="16%">
           <div class="col-head">
-            <span>{{ locale.t('requestLog.col.agentId') }}</span>
+            <span>{{ locale.t('requestLog.col.agent') }}</span>
+            <span class="col-head-actions">
+              <cds-button-action
+                shape="filter"
+                :aria-label="locale.t('requestLog.col.agent.search')"
+                :expanded="!!agentInput.trim()"
+                @click="(e: MouseEvent) => openFilter('agent', e.target)"
+              ></cds-button-action>
+            </span>
           </div>
         </cds-grid-column>
-        <cds-grid-column width="10%">
+        <cds-grid-column width="13%">
           <div class="col-head">
             <span>{{ locale.t('requestLog.col.user') }}</span>
+            <span class="col-head-actions">
+              <cds-button-action
+                shape="filter"
+                :aria-label="locale.t('requestLog.col.user.search')"
+                :expanded="!!userInput.trim()"
+                @click="(e: MouseEvent) => openFilter('user', e.target)"
+              ></cds-button-action>
+            </span>
           </div>
         </cds-grid-column>
         <cds-grid-column width="11%">
           <div class="col-head">
             <span>{{ locale.t('requestLog.col.model') }}</span>
+            <span class="col-head-actions">
+              <cds-button-action
+                shape="filter"
+                :aria-label="locale.t('requestLog.col.model.search')"
+                :expanded="!!modelInput.trim()"
+                @click="(e: MouseEvent) => openFilter('model', e.target)"
+              ></cds-button-action>
+            </span>
           </div>
         </cds-grid-column>
         <cds-grid-column width="8%">
@@ -552,14 +505,17 @@ async function copyRequestId(value: string) {
             <span>{{ locale.t('requestLog.col.latencyMs') }}</span>
           </div>
         </cds-grid-column>
-        <cds-grid-column width="6%">
+        <cds-grid-column width="9%">
           <div class="col-head">
             <span>{{ locale.t('requestLog.col.status') }}</span>
-          </div>
-        </cds-grid-column>
-        <cds-grid-column width="6%">
-          <div class="col-head">
-            <span>{{ locale.t('requestLog.col.actions') }}</span>
+            <span class="col-head-actions">
+              <cds-button-action
+                shape="filter"
+                :aria-label="locale.t('requestLog.col.status.filter')"
+                :expanded="statusFilter !== 'all'"
+                @click="(e: MouseEvent) => openFilter('status', e.target)"
+              ></cds-button-action>
+            </span>
           </div>
         </cds-grid-column>
 
@@ -594,18 +550,6 @@ async function copyRequestId(value: string) {
               <span class="status-dot" aria-hidden="true"></span>
               {{ log.statusCode }}
             </span>
-          </cds-grid-cell>
-          <cds-grid-cell class="action-cell">
-            <button
-              type="button"
-              class="row-action"
-              :disabled="!log.detail"
-              :title="locale.t('requestLog.action.toggleDetail')"
-              :aria-label="locale.t('requestLog.action.toggleDetail')"
-              @click="openDetail(log)"
-            >
-              <cds-icon shape="zoom" size="sm"></cds-icon>
-            </button>
           </cds-grid-cell>
         </cds-grid-row>
 
@@ -679,6 +623,76 @@ async function copyRequestId(value: string) {
         </cds-grid-footer>
       </cds-grid>
 
+      <!-- Column filter dropdowns: a single cds-dropdown reused across the
+           four filterable columns. `openFilterKey` selects which input to
+           render; `openFilterAnchor` is the cds-button-action host the
+           dropdown positions itself against. Each input applies on every
+           keystroke (see onKeywordInput / onAgentKeywordInput). Mirrors
+           ResourcePoolListView's name-column filter pattern. -->
+      <cds-dropdown
+        v-if="openFilterAnchor"
+        :hidden="!openFilterKey"
+        :anchor="openFilterAnchor"
+        closable
+        @closeChange="closeFilter"
+      >
+        <div cds-layout="vertical align:stretch p:xs">
+          <cds-input v-if="openFilterKey === 'agent'">
+            <label slot="label">{{ locale.t('requestLog.col.agent.search') }}</label>
+            <input
+              type="text"
+              :value="agentInput"
+              :placeholder="locale.t('requestLog.col.agent.search')"
+              :aria-label="locale.t('requestLog.col.agent.search')"
+              @input="onAgentKeywordInput"
+            />
+          </cds-input>
+          <cds-input v-else-if="openFilterKey === 'model'">
+            <label slot="label">{{ locale.t('requestLog.col.model.search') }}</label>
+            <input
+              type="text"
+              :value="modelInput"
+              :placeholder="locale.t('requestLog.col.model.search')"
+              :aria-label="locale.t('requestLog.col.model.search')"
+              @input="(e: Event) => onKeywordInput(e, 'model')"
+            />
+          </cds-input>
+          <cds-input v-else-if="openFilterKey === 'requestId'">
+            <label slot="label">{{ locale.t('requestLog.col.requestId.search') }}</label>
+            <input
+              type="text"
+              :value="requestIdInput"
+              :placeholder="locale.t('requestLog.col.requestId.search')"
+              :aria-label="locale.t('requestLog.col.requestId.search')"
+              @input="(e: Event) => onKeywordInput(e, 'requestId')"
+            />
+          </cds-input>
+          <cds-input v-else-if="openFilterKey === 'user'">
+            <label slot="label">{{ locale.t('requestLog.col.user.search') }}</label>
+            <input
+              type="text"
+              :value="userInput"
+              :placeholder="locale.t('requestLog.col.user.search')"
+              :aria-label="locale.t('requestLog.col.user.search')"
+              @input="(e: Event) => onKeywordInput(e, 'user')"
+            />
+          </cds-input>
+          <div v-else-if="openFilterKey === 'status'" class="menu-list">
+            <button
+              v-for="opt in STATUS_OPTIONS"
+              :key="opt"
+              type="button"
+              class="menu-opt"
+              :class="{ active: statusFilter === opt }"
+              @click="setStatusFilter(opt)"
+            >
+              <span>{{ opt === 'all' ? locale.t('requestLog.status.all') : opt }}</span>
+              <cds-icon v-if="statusFilter === opt" shape="check" size="sm" aria-hidden="true"></cds-icon>
+            </button>
+          </div>
+        </div>
+      </cds-dropdown>
+
       <!-- Detail modal — replaces the inline expandable row pattern that
            the raw HTML <table> supported. cds-grid doesn't have a
            built-in row-span mechanism, so we promote the detail to a
@@ -709,17 +723,30 @@ async function copyRequestId(value: string) {
 <style scoped>
 .custom-range {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin: 0 0 0.5rem;
 }
 .custom-range .time-field {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   font-size: 0.7rem;
-  gap: 0.15rem;
+  gap: 0.4rem;
 }
 .custom-range .time-field input {
   padding: 0.25rem 0.4rem;
+  /* Match GatewaySpendPanel so the platform log toolbar reads as one
+     design system across the metering center. 220px is enough to show
+     "2026/07/24 23:45" + the calendar picker chrome without truncation. */
+  width: 220px;
+  max-width: 220px;
+  font-family: inherit;
+  font-size: 0.75rem;
+  border: 1px solid var(--cds-alias-object-border-color, #ccc);
+  border-radius: 4px;
+  background: var(--cds-alias-object-container-background, #fff);
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
 .request-log-page {
   height: 100%;
@@ -760,8 +787,7 @@ async function copyRequestId(value: string) {
   background: var(--cds-alias-object-container-background, #fff);
   overflow-x: auto;
 }
-.time-tabs,
-.status-chips {
+.time-tabs {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
@@ -775,14 +801,14 @@ async function copyRequestId(value: string) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 28px;
-  padding: 0 10px;
+  min-height: 32px;
+  padding: 5px 11px;
   border: 0;
   border-right: 1px solid var(--cds-alias-object-border-color, #c8c8c8);
   background: var(--cds-alias-object-container-background, #fff);
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -823,9 +849,11 @@ async function copyRequestId(value: string) {
   flex: 1 1 auto;
   min-width: 24px;
 }
-.control-input,
-.search-box {
+.control-input {
   min-height: 30px;
+  flex: 0 0 auto;
+  width: 160px;
+  padding: 5px 9px;
   border: 1px solid var(--cds-alias-object-border-color, #c8c8c8);
   border-radius: 3px;
   background: var(--cds-alias-object-container-background, #fff);
@@ -833,91 +861,60 @@ async function copyRequestId(value: string) {
   font: inherit;
   font-size: 13px;
 }
-.control-input {
-  flex: 0 0 auto;
-  width: 160px;
-  padding: 5px 9px;
-}
-.agent-input {
-  width: 210px;
-}
-.model-input {
-  width: 110px;
-}
-.control-input:focus,
-.search-box:focus-within {
+.control-input:focus {
   border-color: var(--cds-alias-object-interaction-color, #0072a3);
   outline: 2px solid color-mix(in srgb, var(--cds-alias-object-interaction-color, #0072a3) 20%, transparent);
   outline-offset: 1px;
 }
-.status-chips {
-  gap: 4px;
-}
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 28px;
-  padding: 0 8px;
-  border: 1px solid var(--cds-alias-object-border-color, #c8c8c8);
-  border-radius: 3px;
-  background: var(--cds-alias-object-container-background, #fff);
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-.status-chip.active {
-  border-color: var(--cds-alias-object-interaction-color, #0072a3);
-  background: var(--cds-alias-object-interaction-background-selected, #e5f1f6);
-}
-.chip-check {
-  width: 10px;
-  height: 10px;
-  border: 1px solid var(--cds-alias-object-border-color, #a5a5a5);
-  border-radius: 2px;
-  background: var(--cds-alias-object-container-background, #fff);
-}
-.status-chip.active .chip-check {
-  border-color: var(--cds-alias-object-interaction-color, #0072a3);
-  background: var(--cds-alias-object-interaction-color, #0072a3);
-  box-shadow: inset 0 0 0 2px var(--cds-alias-object-container-background, #fff);
-}
-.search-box {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  gap: 6px;
-  width: 190px;
-  padding: 0 8px;
-}
-.search-box input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-}
-.filter-summary {
+/* Column header actions (filter buttons). Same shape as
+   ResourcePoolListView's `.col-head-actions` so the filter icons sit on
+   the right side of the column title and the `:expanded` state highlights
+   when a filter is active. */
+.col-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--cds-alias-object-border-color, #e5e5e5);
-  color: var(--cds-alias-typography-color-300, #565656);
-  font-size: 12px;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
 }
-.link-button {
-  border: 0;
+.col-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Column-filter option list (the menu items inside the dropdown). Mirrors
+   AgentListView's `.menu-opt` pattern: each option is a row that fills the
+   dropdown width, with a leading label and an optional trailing check
+   icon when the option is currently selected. */
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  /* Cap the dropdown height so longer option lists (e.g. audit's 14+
+     action-type entries) don't fill the viewport — user scrolls within
+     the list to reach lower entries. Status filter only has 4, so the
+     cap is harmless there. */
+  max-height: 320px;
+  overflow-y: auto;
+}
+.menu-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
   background: transparent;
-  color: var(--cds-alias-object-interaction-color, #006e9c);
+  border: 0;
   font: inherit;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  text-align: left;
   cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
+  width: 100%;
+}
+.menu-opt:hover {
+  background: var(--cds-alias-object-app-background, #f1f5f8);
+}
+.menu-opt.active {
+  font-weight: 600;
 }
 .grid-card {
   /* Mirrors ModelGatewayView's `.grid-card` wrapper: provides the
@@ -1047,29 +1044,6 @@ async function copyRequestId(value: string) {
 .status-pill[data-tone='danger'] .status-dot {
   background: var(--cds-alias-status-danger, #b53d35);
 }
-.action-cell {
-  text-align: center;
-}
-.row-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  cursor: pointer;
-}
-.row-action:hover:not(:disabled) {
-  background: var(--cds-alias-object-app-background, #edf2f5);
-}
-.row-action:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-/* Detail modal — JSON pretty-print, monospaced, scrollable. */
 .detail-text {
   margin: 0;
   min-height: 72px;
@@ -1099,20 +1073,6 @@ async function copyRequestId(value: string) {
 @keyframes request-log-spin {
   to {
     transform: rotate(360deg);
-  }
-}
-@media (max-width: 1080px) {
-  .toolbar {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-  .toolbar-spacer {
-    display: none;
-  }
-  .agent-input,
-  .model-input,
-  .search-box {
-    flex: 1 1 180px;
   }
 }
 @media (max-width: 720px) {
