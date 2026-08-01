@@ -118,12 +118,14 @@ const previewStyle = computed(() => ({ '--brand-primary': primaryColor.value || 
 
 <template>
   <section class="br" :style="previewStyle">
-    <div class="br-head">
-      <div><h1>{{ locale.t('branding.title') }}</h1><p class="ds">{{ locale.t('branding.desc') }}</p></div>
-      <div class="br-save">
-        <span v-if="isDirty" class="dirty-badge">{{ locale.t('branding.unsaved') }}</span>
-        <cds-button status="primary" @click="onSave" :disabled="saving" :loading="saving">{{ locale.t('branding.save') }}</cds-button>
-      </div>
+    <header class="page-head">
+      <h1 cds-text="title" class="heading">{{ locale.t('branding.title') }}</h1>
+      <p cds-text="body" class="desc muted">{{ locale.t('branding.desc') }}</p>
+    </header>
+
+    <div class="br-toolbar">
+      <span v-if="isDirty" class="dirty-badge">{{ locale.t('branding.unsaved') }}</span>
+      <cds-button status="primary" @click="onSave" :disabled="saving" :loading="saving">{{ locale.t('branding.save') }}</cds-button>
     </div>
 
     <div class="br-layout">
@@ -148,7 +150,7 @@ const previewStyle = computed(() => ({ '--brand-primary': primaryColor.value || 
             <label class="fld"><span>{{ locale.t('branding.primaryColor') }}</span><input type="color" v-model="primaryColor" style="width:48px;height:32px;border:1px solid #e4e7ec;border-radius:4px;cursor:pointer"/><span class="mu">{{ primaryColor }}</span></label>
             <label class="fld"><span>{{ locale.t('branding.overlay') }}</span><input type="range" min="0" max="80" v-model.number="overlayOpacity" style="width:120px"/><span class="mu">{{ overlayOpacity }}%</span></label>
           </div>
-          <label class="fld"><input type="checkbox" v-model="overlayEnabled" :aria-label="locale.t('branding.overlayEnable')"/><span>{{ locale.t('branding.overlayEnable') }}</span></label>
+          <label class="fld fld-inline"><input type="checkbox" v-model="overlayEnabled" :aria-label="locale.t('branding.overlayEnable')"/><span>{{ locale.t('branding.overlayEnable') }}</span></label>
           <label class="fld"><span>{{ locale.t('branding.cardPos') }}</span><select v-model="loginCardPosition" class="fctl" :aria-label="locale.t('branding.cardPos')"><option value="center">居中</option><option value="left">左侧</option><option value="right">右侧</option></select></label>
         </div></cds-card>
 
@@ -181,14 +183,17 @@ const previewStyle = computed(() => ({ '--brand-primary': primaryColor.value || 
 
 <style scoped>
 .br{padding:20px 24px 32px;color:var(--cds-alias-object-app-foreground,#1d2939);max-width:100%}
-.br-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:20px;flex-wrap:wrap}
-.br-head h1{font-size:22px;font-weight:600;margin:0}.ds{font-size:13px;color:#667085;margin:4px 0 0}
-.br-save{display:flex;align-items:center;gap:8px}.dirty-badge{font-size:11px;color:#f79009;font-weight:600}
+.page-head{flex-shrink:0;margin-bottom:16px}
+.heading{margin:0;color:var(--cds-alias-object-app-foreground,#1b1b1b);font-size:28px;line-height:1.3;font-weight:600;letter-spacing:-0.01em}
+.desc{margin:12px 0 0;color:var(--cds-alias-typography-color-300,#565656);font-size:14px;line-height:1.5;max-width:720px}
+.muted{color:var(--cds-alias-typography-color-300,#565656)}
+.br-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:20px}
+.dirty-badge{font-size:11px;color:#f79009;font-weight:600}
 .br-layout{display:grid;grid-template-columns:7fr 5fr;gap:20px;align-items:start}
 .br-config{display:flex;flex-direction:column;gap:16px;min-width:0;position:relative;z-index:1;pointer-events:auto}
 .br-preview{min-width:0}
 .card{overflow:hidden}.cp{padding:18px;display:flex;flex-direction:column;gap:12px}.cp h2{margin:0;font-size:14px;font-weight:600}
-.fld{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#667085}.fld-row{display:flex;gap:24px;flex-wrap:wrap}
+.fld{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#667085}.fld-row{display:flex;gap:24px;flex-wrap:wrap}.fld-inline{flex-direction:row;align-items:center;gap:8px}
 .fctl{display:block;width:100%;min-height:36px;padding:6px 4px;color:var(--cds-alias-object-app-foreground,#1d2939);background:transparent;border:0;border-bottom:1px solid var(--cds-alias-object-border-color,#d0d5dd);outline:none;pointer-events:auto;cursor:text;font:inherit;font-size:13px;box-sizing:border-box}
 .fctl:focus{border-bottom-width:2px;border-bottom-color:var(--cds-alias-object-interaction-color,#0072a3)}
 .asset-box{border:1px dashed #d0d5dd;border-radius:8px;padding:12px;background:#f8fafc;display:flex;flex-direction:column;gap:8px}.asset-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
