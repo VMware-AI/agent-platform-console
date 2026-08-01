@@ -700,6 +700,20 @@ function submit() {
   text-transform: capitalize;
   font-size: 11px;
 }
+/* shuttle 状态徽章文字对比度 —— Clarity cds-badge 默认 --color 为白,
+   但 src/styles/global.css 注入 cds-badge { --color:
+   var(--cds-alias-object-app-foreground) } 把本应用前景色（浅色主题
+   下 #1b1b1b）强行覆盖到了所有 cds-badge,导致 success(绿底) /
+   danger(红底) 上的标签文字变深、看不清。这里只覆盖本组件 shuttle
+   徽章的 success / warning / danger 三态,不影响其它视图的 cds-badge。
+   写法选择 cds-badge host + class + [status] 属性选择器,是因为
+   cds-badge 内部 slot 不暴露 ::part(…), 从 shadow DOM 外唯一能稳的
+   就是重新声明它的 --color CSS 变量。 */
+.shuttle-status[status='success'],
+.shuttle-status[status='warning'],
+.shuttle-status[status='danger'] {
+  --color: #fff;
+}
 .advanced-section {
   border: 1px solid var(--cds-alias-object-border-color, #e8e8e8);
   border-radius: 4px;

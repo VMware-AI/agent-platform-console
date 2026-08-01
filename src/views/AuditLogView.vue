@@ -57,13 +57,51 @@ const currentPage = ref(1)
 const actionPrefix = ref<ActionPrefix | null>(null)
 const searchInput = ref('')
 const actorInput = ref('')
-const appliedSearch = ref('')
-const appliedActorUserId = ref('')
 const resultFilter = ref<'all' | 'success' | 'fail'>('all')
 const resourceTypeInput = ref('')
-const appliedResourceType = ref('')
 const customFrom = ref('')
 const customTo = ref('')
+
+// Column header filter dropdowns (操作者 / 操作类型 / 资源 / 描述 / 结果) —
+// mirrors RequestLogView's single-anchor / single-key pattern. One
+// cds-dropdown is reused; the anchor + key state machine auto-closes the
+// previous popover when a different header is clicked. All five filters
+// apply on keystroke (text inputs) or click (select-like menus).
+type ColumnFilterKey = 'actor' | 'actionType' | 'resourceType' | 'description' | 'result'
+const openFilterKey = ref<ColumnFilterKey | null>(null)
+const openFilterAnchor = ref<HTMLElement | null>(null)
+
+function openFilter(key: ColumnFilterKey, target: EventTarget | null) {
+  openFilterKey.value = key
+  // cds-button-action dispatches the click from its inner element; anchor
+  // cds-dropdown against the outer host so positioning is stable.
+  const host = (target as HTMLElement | null)?.closest('cds-button-action') as HTMLElement | null
+  openFilterAnchor.value = host ?? (target as HTMLElement | null)
+}
+function closeFilter() {
+  openFilterAnchor.value = null
+  openFilterKey.value = null
+}
+
+type SelectableFilter = 'actor' | 'resourceType' | 'description'
+function onKeywordInput(e: Event, target: SelectableFilter) {
+  const value = (e.target as HTMLInputElement).value
+  if (target === 'actor') actorInput.value = value
+  else if (target === 'resourceType') resourceTypeInput.value = value
+  else searchInput.value = value
+  currentPage.value = 1
+}
+
+const RESULT_OPTIONS = ['all', 'success', 'fail'] as const
+
+function setActionPrefix(next: ActionPrefix | null) {
+  actionPrefix.value = next
+  currentPage.value = 1
+}
+function setResultFilter(next: 'all' | 'success' | 'fail') {
+  resultFilter.value = next
+  currentPage.value = 1
+}
 
 // Time window pushed to the server (from/to) instead of filtering client-side —
 // client-side filtering + offset pagination gave uneven pages and wrong counts.
@@ -82,12 +120,12 @@ const serverWindow = computed<{ from: string | null; to: string | null }>(() => 
 const queryVars = computed<AuditLogsVars>(() => ({
   filter: {
     actionPrefix: actionPrefix.value,
-    search: appliedSearch.value.trim() || null,
-    actorUserId: appliedActorUserId.value.trim() || null,
+    search: searchInput.value.trim() || null,
+    actorUserId: actorInput.value.trim() || null,
     from: serverWindow.value.from,
     to: serverWindow.value.to,
     result: resultFilter.value === 'all' ? null : resultFilter.value,
-    resourceType: appliedResourceType.value.trim() || null,
+    resourceType: resourceTypeInput.value.trim() || null,
   },
   page: {
     limit: pageSize.value,
@@ -127,9 +165,9 @@ const hasActiveFilters = computed(
     actionPrefix.value !== null ||
     timeWindow.value !== '1d' ||
     resultFilter.value !== 'all' ||
-    Boolean(appliedResourceType.value.trim()) ||
-    Boolean(appliedSearch.value.trim()) ||
-    Boolean(appliedActorUserId.value.trim()),
+    Boolean(resourceTypeInput.value.trim()) ||
+    Boolean(searchInput.value.trim()) ||
+    Boolean(actorInput.value.trim()),
 )
 
 watch(totalPages, (pages) => {
@@ -139,33 +177,6 @@ watch(totalPages, (pages) => {
 const errorMessage = computed(() =>
   error.value ? graphqlErrorMessage(error.value, locale.t('auditLog.error.load')) : null,
 )
-
-function applyFilters() {
-  appliedSearch.value = searchInput.value.trim()
-  appliedActorUserId.value = actorInput.value.trim()
-  appliedResourceType.value = resourceTypeInput.value.trim()
-  currentPage.value = 1
-}
-
-function clearFilters() {
-  timeWindow.value = '1d'
-  actionPrefix.value = null
-  searchInput.value = ''
-  actorInput.value = ''
-  appliedSearch.value = ''
-  appliedActorUserId.value = ''
-  resultFilter.value = 'all'
-  resourceTypeInput.value = ''
-  appliedResourceType.value = ''
-  customFrom.value = ''
-  customTo.value = ''
-  currentPage.value = 1
-}
-
-function onResultChange(event: Event) {
-  resultFilter.value = (event.target as HTMLSelectElement).value as 'all' | 'success' | 'fail'
-  currentPage.value = 1
-}
 
 // Export streams EVERY row matching the active filters (not just the visible
 // page) via one-shot apolloClient.query() paging, capped so a huge range can't
@@ -242,15 +253,8 @@ function selectTimeWindow(next: TimeWindow) {
   currentPage.value = 1
 }
 
-function onActionPrefixChange(event: Event) {
-  const next = (event.target as HTMLSelectElement).value
-  actionPrefix.value = next ? (next as ActionPrefix) : null
-  currentPage.value = 1
-}
-
 async function refresh() {
   if (loading.value) return
-  applyFilters()
   try {
     await refetch()
     toast.success(locale.t('auditLog.toast.refreshed'))
@@ -420,59 +424,6 @@ async function copyResourceId(value: string | null) {
 
         <div class="toolbar-break"></div>
 
-        <input
-          v-model="actorInput"
-          class="control-input actor-input"
-          type="text"
-          :placeholder="locale.t('auditLog.filter.actorPlaceholder')"
-          :aria-label="locale.t('auditLog.filter.actorPlaceholder')"
-          @keyup.enter="applyFilters"
-          @change="applyFilters"
-        />
-
-        <cds-select control-width="shrink" class="action-select">
-          <select
-            :value="actionPrefix ?? ''"
-            :aria-label="locale.t('auditLog.filter.actionType')"
-            @change="onActionPrefixChange"
-          >
-            <option value="">{{ locale.t('auditLog.filter.allActionTypes') }}</option>
-            <option v-for="prefix in ACTION_PREFIXES" :key="prefix" :value="prefix">
-              {{ actionPrefixLabel(prefix) }}
-            </option>
-          </select>
-        </cds-select>
-
-        <label class="search-box">
-          <cds-icon shape="search" size="sm" aria-hidden="true"></cds-icon>
-          <input
-            v-model="searchInput"
-            type="search"
-            :placeholder="locale.t('auditLog.filter.searchPlaceholder')"
-            :aria-label="locale.t('auditLog.filter.searchPlaceholder')"
-            @keyup.enter="applyFilters"
-            @change="applyFilters"
-          />
-        </label>
-
-        <cds-select control-width="shrink" class="action-select">
-          <select :value="resultFilter" :aria-label="locale.t('auditLog.filter.result')" @change="onResultChange">
-            <option value="all">{{ locale.t('auditLog.filter.allResults') }}</option>
-            <option value="success">{{ locale.t('auditLog.result.success') }}</option>
-            <option value="fail">{{ locale.t('auditLog.result.fail') }}</option>
-          </select>
-        </cds-select>
-
-        <input
-          v-model="resourceTypeInput"
-          class="control-input actor-input"
-          type="text"
-          :placeholder="locale.t('auditLog.filter.resourceTypePlaceholder')"
-          :aria-label="locale.t('auditLog.filter.resourceTypePlaceholder')"
-          @keyup.enter="applyFilters"
-          @change="applyFilters"
-        />
-
         <cds-button action="outline" size="sm" :disabled="exportingCsv" @click="exportCsv">
           <cds-icon shape="download" size="sm" aria-hidden="true"></cds-icon>
           {{ exportingCsv ? locale.t('auditLog.export.inProgress') : locale.t('auditLog.action.export') }}
@@ -488,13 +439,6 @@ async function copyResourceId(value: string | null) {
           <span>{{ locale.t('auditLog.filter.to') }}</span>
           <input type="datetime-local" v-model="customTo" @change="currentPage = 1" />
         </label>
-      </div>
-
-      <div v-if="hasActiveFilters" class="filter-summary">
-        <span>{{ locale.t('auditLog.filter.activeHint') }}</span>
-        <button type="button" class="link-button" @click="clearFilters">
-          {{ locale.t('auditLog.filter.clear') }}
-        </button>
       </div>
 
       <div v-if="errorMessage" class="error-banner" role="alert">
@@ -517,16 +461,40 @@ async function copyResourceId(value: string | null) {
         <cds-grid-column width="13%">
           <div class="col-head">
             <span>{{ locale.t('auditLog.col.actor') }}</span>
+            <span class="col-head-actions">
+              <cds-button-action
+                shape="filter"
+                :aria-label="locale.t('auditLog.col.actor.search')"
+                :expanded="!!actorInput.trim()"
+                @click="(e: MouseEvent) => openFilter('actor', e.target)"
+              ></cds-button-action>
+            </span>
           </div>
         </cds-grid-column>
         <cds-grid-column width="12%">
           <div class="col-head">
             <span>{{ locale.t('auditLog.col.actionType') }}</span>
+            <span class="col-head-actions">
+              <cds-button-action
+                shape="filter"
+                :aria-label="locale.t('auditLog.col.actionType.search')"
+                :expanded="actionPrefix !== null"
+                @click="(e: MouseEvent) => openFilter('actionType', e.target)"
+              ></cds-button-action>
+            </span>
           </div>
         </cds-grid-column>
         <cds-grid-column width="14%">
           <div class="col-head">
             <span>{{ locale.t('auditLog.col.resource') }}</span>
+            <span class="col-head-actions">
+              <cds-button-action
+                shape="filter"
+                :aria-label="locale.t('auditLog.col.resourceType.search')"
+                :expanded="!!resourceTypeInput.trim()"
+                @click="(e: MouseEvent) => openFilter('resourceType', e.target)"
+              ></cds-button-action>
+            </span>
           </div>
         </cds-grid-column>
         <cds-grid-column width="12%">
@@ -537,11 +505,27 @@ async function copyResourceId(value: string | null) {
         <cds-grid-column width="22%">
           <div class="col-head">
             <span>{{ locale.t('auditLog.col.description') }}</span>
+            <span class="col-head-actions">
+              <cds-button-action
+                shape="filter"
+                :aria-label="locale.t('auditLog.col.description.search')"
+                :expanded="!!searchInput.trim()"
+                @click="(e: MouseEvent) => openFilter('description', e.target)"
+              ></cds-button-action>
+            </span>
           </div>
         </cds-grid-column>
         <cds-grid-column width="13%">
           <div class="col-head">
             <span>{{ locale.t('auditLog.col.result') }}</span>
+            <span class="col-head-actions">
+              <cds-button-action
+                shape="filter"
+                :aria-label="locale.t('auditLog.col.result.search')"
+                :expanded="resultFilter !== 'all'"
+                @click="(e: MouseEvent) => openFilter('result', e.target)"
+              ></cds-button-action>
+            </span>
           </div>
         </cds-grid-column>
 
@@ -658,6 +642,93 @@ async function copyResourceId(value: string | null) {
           </div>
         </cds-grid-footer>
       </cds-grid>
+
+      <!-- Column filter dropdowns: a single cds-dropdown reused across the
+           five filterable columns. `openFilterKey` selects which input /
+           menu to render; `openFilterAnchor` is the cds-button-action host
+           the dropdown positions itself against. Three text columns
+           (操作者 / 资源 / 描述) get a keypress-immediate input; two
+           select-like columns (操作类型 / 结果) get a menu-opt list.
+           Mirrors RequestLogView's column-filter pattern. -->
+      <cds-dropdown
+        v-if="openFilterAnchor"
+        :hidden="!openFilterKey"
+        :anchor="openFilterAnchor"
+        closable
+        @closeChange="closeFilter"
+      >
+        <div cds-layout="vertical align:stretch p:xs">
+          <cds-input v-if="openFilterKey === 'actor'">
+            <label slot="label">{{ locale.t('auditLog.col.actor.search') }}</label>
+            <input
+              type="text"
+              :value="actorInput"
+              :placeholder="locale.t('auditLog.col.actor.search')"
+              :aria-label="locale.t('auditLog.col.actor.search')"
+              @input="(e: Event) => onKeywordInput(e, 'actor')"
+            />
+          </cds-input>
+          <cds-input v-else-if="openFilterKey === 'resourceType'">
+            <label slot="label">{{ locale.t('auditLog.col.resourceType.search') }}</label>
+            <input
+              type="text"
+              :value="resourceTypeInput"
+              :placeholder="locale.t('auditLog.col.resourceType.search')"
+              :aria-label="locale.t('auditLog.col.resourceType.search')"
+              @input="(e: Event) => onKeywordInput(e, 'resourceType')"
+            />
+          </cds-input>
+          <cds-input v-else-if="openFilterKey === 'description'">
+            <label slot="label">{{ locale.t('auditLog.col.description.search') }}</label>
+            <input
+              type="text"
+              :value="searchInput"
+              :placeholder="locale.t('auditLog.col.description.search')"
+              :aria-label="locale.t('auditLog.col.description.search')"
+              @input="(e: Event) => onKeywordInput(e, 'description')"
+            />
+          </cds-input>
+          <div v-else-if="openFilterKey === 'actionType'" class="menu-list">
+            <button
+              type="button"
+              class="menu-opt"
+              :class="{ active: actionPrefix === null }"
+              @click="setActionPrefix(null)"
+            >
+              <span>{{ locale.t('auditLog.filter.allActionTypes') }}</span>
+              <cds-icon v-if="actionPrefix === null" shape="check" size="sm" aria-hidden="true"></cds-icon>
+            </button>
+            <button
+              v-for="prefix in ACTION_PREFIXES"
+              :key="prefix"
+              type="button"
+              class="menu-opt"
+              :class="{ active: actionPrefix === prefix }"
+              @click="setActionPrefix(prefix)"
+            >
+              <span>{{ actionPrefixLabel(prefix) }}</span>
+              <cds-icon v-if="actionPrefix === prefix" shape="check" size="sm" aria-hidden="true"></cds-icon>
+            </button>
+          </div>
+          <div v-else-if="openFilterKey === 'result'" class="menu-list">
+            <button
+              v-for="opt in RESULT_OPTIONS"
+              :key="opt"
+              type="button"
+              class="menu-opt"
+              :class="{ active: resultFilter === opt }"
+              @click="setResultFilter(opt)"
+            >
+              <span>{{
+                opt === 'all'
+                  ? locale.t('auditLog.result.all')
+                  : locale.t(`auditLog.result.${opt}`)
+              }}</span>
+              <cds-icon v-if="resultFilter === opt" shape="check" size="sm" aria-hidden="true"></cds-icon>
+            </button>
+          </div>
+        </div>
+      </cds-dropdown>
     </div>
   </section>
 </template>
@@ -665,17 +736,30 @@ async function copyResourceId(value: string | null) {
 <style scoped>
 .custom-range {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin: 0 0 0.5rem;
 }
 .custom-range .time-field {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   font-size: 0.7rem;
-  gap: 0.15rem;
+  gap: 0.4rem;
 }
 .custom-range .time-field input {
   padding: 0.25rem 0.4rem;
+  /* Match GatewaySpendPanel so the platform log toolbar reads as one
+     design system across the metering center. 220px is enough to show
+     "2026/07/24 23:45" + the calendar picker chrome without truncation. */
+  width: 220px;
+  max-width: 220px;
+  font-family: inherit;
+  font-size: 0.75rem;
+  border: 1px solid var(--cds-alias-object-border-color, #ccc);
+  border-radius: 4px;
+  background: var(--cds-alias-object-container-background, #fff);
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
 .audit-page {
   height: 100%;
@@ -728,14 +812,14 @@ async function copyResourceId(value: string | null) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 28px;
-  padding: 0 10px;
+  min-height: 32px;
+  padding: 5px 11px;
   border: 0;
   border-right: 1px solid var(--cds-alias-object-border-color, #c8c8c8);
   background: var(--cds-alias-object-container-background, #fff);
   color: var(--cds-alias-object-app-foreground, #1b1b1b);
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -776,66 +860,6 @@ async function copyResourceId(value: string | null) {
   flex: 1 1 auto;
   min-width: 24px;
 }
-.control-input,
-.search-box {
-  min-height: 30px;
-  border: 1px solid var(--cds-alias-object-border-color, #c8c8c8);
-  border-radius: 3px;
-  background: var(--cds-alias-object-container-background, #fff);
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font: inherit;
-  font-size: 13px;
-}
-.control-input {
-  flex: 0 0 auto;
-  width: 230px;
-  padding: 5px 9px;
-}
-.action-select {
-  flex: 0 0 auto;
-}
-.search-box {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  gap: 6px;
-  width: 240px;
-  padding: 0 8px;
-}
-.search-box input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-}
-.control-input:focus,
-.search-box:focus-within {
-  border-color: var(--cds-alias-object-interaction-color, #0072a3);
-  outline: 2px solid color-mix(in srgb, var(--cds-alias-object-interaction-color, #0072a3) 20%, transparent);
-  outline-offset: 1px;
-}
-.filter-summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--cds-alias-object-border-color, #e5e5e5);
-  color: var(--cds-alias-typography-color-300, #565656);
-  font-size: 12px;
-}
-.link-button {
-  border: 0;
-  background: transparent;
-  color: var(--cds-alias-object-interaction-color, #006e9c);
-  font: inherit;
-  cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
-}
 .error-banner {
   flex: 0 0 auto;
   display: flex;
@@ -846,6 +870,54 @@ async function copyResourceId(value: string | null) {
   color: var(--cds-alias-status-danger, #c92100);
   background: color-mix(in srgb, var(--cds-alias-status-danger, #c92100) 8%, transparent);
   font-size: 13px;
+}
+/* Column header layout: title on the left, filter action(s) on the right.
+   Mirrors RequestLogView / ResourcePoolListView — `.col-head` flexes with
+   `space-between` so the title and the `.col-head-actions` group sit at
+   opposite ends of the header cell. */
+.col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+}
+.col-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Column-filter option list (inside the dropdown). Mirrors RequestLogView /
+   AgentListView's `.menu-opt` pattern. */
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  /* Cap the action-type dropdown's height so the 14+ entries don't fill
+     the viewport on small windows — the user can scroll within the list
+     to reach the lower entries. 320px ≈ 9 menu-opt rows at our padding
+     + font-size, enough to keep the most-used entries visible at once. */
+  max-height: 320px;
+  overflow-y: auto;
+}
+.menu-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+.menu-opt:hover {
+  background: var(--cds-alias-object-app-background, #f1f5f8);
+}
+.menu-opt.active {
+  font-weight: 600;
 }
 .grid-card {
   /* Mirrors ModelGatewayView's `.grid-card` wrapper: provides the
@@ -864,6 +936,25 @@ async function copyResourceId(value: string | null) {
      page flex layout. Growing too would push the scrollbar to the
      bottom of the page instead of keeping it under the table. */
   flex: 0 0 auto;
+}
+
+/* The cds-grid inside uses overflow-x: auto + min-width: 1180px so the
+   header row and the body rows stay pixel-aligned at every viewport
+   width. Without an explicit floor the percentage widths on
+   <cds-grid-column> recalculate against the shrinking parent on narrow
+   viewports while the header shadow DOM keeps a different base, which
+   reads as the two rows sliding apart. Same shape as
+   ModelGatewayView + RequestLogView — cds-grid-column sums to 100%, so
+   1180px is wide enough that all 7 columns keep their declared shares
+   without clipping. */
+.audit-page cds-grid {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 1180px;
 }
 
 /* Hand-assembled pager that lives inside cds-grid-footer. cds-grid
@@ -966,10 +1057,6 @@ async function copyResourceId(value: string | null) {
   }
   .toolbar-break {
     display: none;
-  }
-  .actor-input,
-  .search-box {
-    flex: 1 1 220px;
   }
 }
 @media (max-width: 720px) {

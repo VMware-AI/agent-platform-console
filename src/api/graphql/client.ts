@@ -69,7 +69,6 @@ export const apolloClient = new ApolloClient({
       RequestLog: { keyFields: ['id'] },
       AuditLog: { keyFields: ['id'] },
       AgentConfig: { keyFields: ['id'] },
-      PlatformBrandConfig: { keyFields: ['ref'] },
     },
   }),
   defaultOptions: {
