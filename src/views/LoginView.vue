@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { useBrandStore } from '@/stores/brand'
 import { useLocaleStore } from '@/stores/locale'
 import '@/components/icons'
 import '@/styles/login.css'
@@ -120,20 +119,8 @@ function onKeydownEnter(e: KeyboardEvent) {
   onSubmit(e)
 }
 
-const brand = useBrandStore()
-
-// Keep document.title in sync with the brand store reactively — the brand
-// query resolves asynchronously, so a one-shot onMounted read would pin the
-// default title even after saved settings arrive.
-watch(
-  () => brand.title.value,
-  (t) => {
-    document.title = t || locale.t('app.title')
-  },
-  { immediate: true },
-)
-
 onMounted(() => {
+  document.title = locale.t('app.title')
   // Pre-fill the email field from the last "remember me" login so the
   // operator doesn't retype their identifier every visit. Also re-check
   // the box to match the state that originally saved the email — if the
@@ -223,10 +210,10 @@ onMounted(() => {
     <div class="login-card" role="region" :aria-label="locale.t('login.heading')">
       <aside class="login-brand">
         <div>
-          <h1 class="login-brand-title">{{ brand.title.value || locale.t('app.title') }}</h1>
-          <p class="login-brand-tagline">{{ brand.subtitle.value || locale.t('login.tagline') }}</p>
+          <h1 class="login-brand-title">{{ locale.t('app.title') }}</h1>
+          <p class="login-brand-tagline">{{ locale.t('login.tagline') }}</p>
         </div>
-        <small class="login-brand-meta">{{ brand.copyright.value || locale.t('login.copyright') }}</small>
+        <small class="login-brand-meta">{{ locale.t('login.copyright') }}</small>
       </aside>
 
       <form class="login-form-wrap" @submit="onSubmit" @keydown.enter="onKeydownEnter" novalidate>

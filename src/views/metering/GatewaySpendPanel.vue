@@ -189,7 +189,7 @@ function exportCsv() {
         <button type="button" class="quick" @click="applyQuickRange(30)">30d</button>
         <button type="button" class="quick" @click="applyMonthRange()">本月</button>
         <cds-button action="outline" size="sm" @click="exportCsv">
-          <cds-icon shape="export" size="sm" aria-hidden="true"></cds-icon>
+          <cds-icon shape="download" size="sm" aria-hidden="true"></cds-icon>
           {{ locale.t('metering.spend.export') }}
         </cds-button>
       </div>
@@ -368,12 +368,27 @@ function exportCsv() {
 }
 .time-field {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   font-size: 0.7rem;
-  gap: 0.15rem;
+  gap: 0.4rem;
 }
 .time-field input {
   padding: 0.25rem 0.4rem;
+  /* Cap datetime-local's natural width so 起 / 止 don't push the quick
+     buttons (7d / 30d / 本月 / 导出 CSV) onto a second row at desktop
+     widths. Matches the cap applied in TimeRangeToolbar so the two
+     controls stay visually consistent across the metering center.
+     220px is enough for "2026/07/24 23:45" + calendar picker chrome
+     without truncating the value. */
+  width: 220px;
+  max-width: 220px;
+  font-family: inherit;
+  font-size: 0.75rem;
+  border: 1px solid var(--cds-alias-object-border-color, #ccc);
+  border-radius: 4px;
+  background: var(--cds-alias-object-container-background, #fff);
+  color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
 .quick {
   padding: 0.35rem 0.6rem;

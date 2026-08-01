@@ -7,12 +7,10 @@
  */
 export function graphqlErrorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === 'object') {
-    const gqlErrors = (error as { graphQLErrors?: ReadonlyArray<{ message?: string }> })
-      .graphQLErrors
+    const gqlErrors = (error as { graphQLErrors?: ReadonlyArray<{ message?: string }> }).graphQLErrors
     const first = gqlErrors?.find((e) => e?.message)?.message
     if (first) return first
     const message = (error as { message?: string }).message
-    if (message && /status code 422/.test(message)) return ''
     if (message) return message
   }
   return fallback
