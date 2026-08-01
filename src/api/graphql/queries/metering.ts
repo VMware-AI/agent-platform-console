@@ -30,6 +30,8 @@ export const METERING_OVERVIEW_QUERY = gql`
         totalTokens
         requests
         cost
+        inputPricePerToken
+        outputPricePerToken
       }
       byDay {
         date
@@ -66,6 +68,8 @@ export interface ModelUsageRow {
   totalTokens: number
   requests: number
   cost: number
+  inputPricePerToken?: number | null
+  outputPricePerToken?: number | null
 }
 
 export interface DailyUsageRow {

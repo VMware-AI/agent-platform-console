@@ -1,666 +1,165 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, watch, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
-import {
-  DASHBOARD_OVERVIEW_QUERY,
-  type DashboardAgentStatus,
-  type DashboardNotice,
-  type DashboardOverviewResult,
-  type DashboardOverviewVars,
-  type DashboardRecentAgent,
-  type DashboardStats,
-} from '@/api/graphql/queries/dashboard'
+import { fmtMoney, fmtNumber, fmtCompact, fmtPercent } from '@/utils/meter-format'
+import { DASHBOARD_OVERVIEW_QUERY, type DashboardOverviewResult, type DashboardOverviewVars } from '@/api/graphql/queries/dashboard'
 import '@/components/icons'
 
-const locale = useLocaleStore()
-const toast = useToast()
-
-const RECENT_LIMIT = 5
-const NOTICE_LIMIT = 5
-
-// Read-only overview page: a single query feeds every stat card, the status
-// donut, the recent-agents table, and the notices list. No mock data.
-const { result, error } = useQuery<DashboardOverviewResult, DashboardOverviewVars>(
-  DASHBOARD_OVERVIEW_QUERY,
-  { recentLimit: RECENT_LIMIT, noticeLimit: NOTICE_LIMIT },
-)
-
-watch(error, (err) => {
-  if (err) toast.error(graphqlErrorMessage(err, locale.t('agents.error')))
+const locale = useLocaleStore(); const toast = useToast(); const router = useRouter()
+const { result, error, refetch } = useQuery<DashboardOverviewResult, DashboardOverviewVars>(DASHBOARD_OVERVIEW_QUERY, { recentLimit: 6, noticeLimit: 6 })
+watch(error, (err) => { if (err) toast.error(graphqlErrorMessage(err, locale.t('agents.error'))) })
+const ov = computed(() => result.value?.dashboardOverview)
+const stats = computed(() => ov.value?.stats)
+const ag = computed(() => ov.value?.agentHealth)
+const alerts = computed(() => ov.value?.activeAlerts ?? [])
+const monthly = computed(() => ov.value?.monthlyUsage)
+const ch = computed(() => ov.value?.componentHealth ?? [])
+const genAt = computed(() => ov.value?.generatedAt)
+const REFRESH_MS = 30_000; const autoRefresh = ref(true)
+let timer: ReturnType<typeof setInterval> | undefined
+function sr() { stopRefresh(); if (autoRefresh.value) timer = setInterval(() => { void refetch() }, REFRESH_MS) }
+function stopRefresh() { if (timer) { clearInterval(timer); timer = undefined } }
+onMounted(sr); onUnmounted(stopRefresh); watch(autoRefresh, (v) => { if (v) sr(); else stopRefresh() })
+const lu = computed(() => genAt.value ? new Date(genAt.value).toLocaleTimeString() : '--')
+const hi = (s: string) => s==='HEALTHY'?'success-standard':s==='WARNING'||s==='DEGRADED'?'warning-standard':'error-standard'
+const hl = (s: string) => locale.t(`dashboard.health.${s.toLowerCase()}`)
+const ags = (s: string) => ({RUNNING:'ds',STOPPED:'dst',ABNORMAL:'dse',UNKNOWN:'dst',running:'ds',stopped:'dst',abnormal:'dse',unknown:'dst'}[s]??'dst')
+/** Unified donut data — shared by SVG, legend, and center total. */
+const C = 314 // circumference = 2*PI*50
+const AGENT_COLORS = { running: '#12b76a', abnormal: '#f04438', stopped: '#98a2b3', unknown: '#d0d5dd' } as const
+interface DonutSegment { key: string; label: string; value: number; color: string; dash: string; offset: string }
+const donutSegments = computed<DonutSegment[]>(() => {
+  if (!ag.value) return []
+  const all = [
+    { key: 'running', label: agz('RUNNING'), value: ag.value.runningAgents, color: AGENT_COLORS.running },
+    { key: 'abnormal', label: agz('ABNORMAL'), value: ag.value.abnormalAgents, color: AGENT_COLORS.abnormal },
+    { key: 'stopped', label: agz('STOPPED'), value: ag.value.stoppedAgents, color: AGENT_COLORS.stopped },
+    { key: 'unknown', label: agz('UNKNOWN'), value: ag.value.unknownAgents, color: AGENT_COLORS.unknown },
+  ]
+  const visible = all.filter(s => s.value > 0)
+  if (visible.length === 0) return all.map(s => ({ ...s, dash: `0 ${C}`, offset: '0' }))
+  const total = visible.reduce((s, x) => s + x.value, 0)
+  let offset = 0
+  return all.map(s => {
+    if (s.value <= 0) return { ...s, dash: `0 ${C}`, offset: '0' }
+    const len = (s.value / total) * C
+    const seg: DonutSegment = { ...s, dash: `${len} ${C}`, offset: `${-offset}` }
+    offset += len
+    return seg
+  })
 })
-
-const stats = computed<DashboardStats | null>(
-  () => result.value?.dashboardOverview?.stats ?? null,
-)
-const recentAgents = computed<DashboardRecentAgent[]>(
-  () => result.value?.dashboardOverview?.recentAgents ?? [],
-)
-const notices = computed<DashboardNotice[]>(
-  () => result.value?.dashboardOverview?.notices ?? [],
-)
-
-// --- Derived display values --------------------------------------------------
-
-// Compact integer formatting (e.g. 52143 → "52k"), matching the original mock
-// look of the metric numbers. Locale-aware so it follows the active language.
-function formatCompact(value: number): string {
-  return new Intl.NumberFormat(locale.locale, {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(value)
-}
-
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat(locale.locale).format(value)
-}
-
-function formatCost(value: number): string {
-  return new Intl.NumberFormat(locale.locale, {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
-}
-
-function percentOf(part: number, total: number): number {
-  if (total <= 0) return 0
-  return Math.round((part / total) * 100)
-}
-
-// Backend timestamps are ISO strings; render them as a compact local date-time.
-// Falls back to the raw value if it is not a parseable date.
-function formatDateTime(value: string): string {
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return new Intl.DateTimeFormat(locale.locale, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(parsed)
-}
-
-const runningAgents = computed(() => stats.value?.runningAgents ?? 0)
-const stoppedAgents = computed(() => stats.value?.stoppedAgents ?? 0)
-const exceptionAgents = computed(() => stats.value?.exceptionAgents ?? 0)
-const totalAgents = computed(() => stats.value?.totalAgents ?? 0)
-
-const runningPercent = computed(() => percentOf(runningAgents.value, totalAgents.value))
-const stoppedPercent = computed(() => percentOf(stoppedAgents.value, totalAgents.value))
-const exceptionPercent = computed(() => percentOf(exceptionAgents.value, totalAgents.value))
-
-// conic-gradient stops for the donut: running → stopped → exception.
-const donutGradient = computed(() => {
-  const running = runningPercent.value
-  const stopped = running + stoppedPercent.value
-  return (
-    `var(--cds-alias-status-success, #1b8a4b) 0 ${running}%,` +
-    `var(--cds-alias-status-warning, #e6a700) ${running}% ${stopped}%,` +
-    `var(--cds-alias-status-danger, #c92100) ${stopped}% 100%`
-  )
-})
-
-const monthlyCalls = computed(() => stats.value?.monthlyCalls ?? 0)
-const monthlyTokens = computed(() => stats.value?.monthlyTokens ?? 0)
-const monthlyCost = computed(() => stats.value?.monthlyCost ?? 0)
-
-const monthlyCallsCompact = computed(() => formatCompact(monthlyCalls.value))
-const monthlyCallsExact = computed(() => formatNumber(monthlyCalls.value))
-const monthlyTokensCompact = computed(() => formatCompact(monthlyTokens.value))
-const monthlyCostText = computed(() => formatCost(monthlyCost.value))
-
-function statusLabel(status: DashboardAgentStatus): string {
-  return locale.t(`dashboard.status.${status}`)
-}
+const donutTotal = computed(() => ag.value?.totalAgents ?? 0)
+const agz = (s: string) => locale.t(`dashboard.health.${s.toLowerCase()}`)
+const sc = (s: string) => s==='CRITICAL'?'d':s==='WARNING'?'w':'i'
+const cz = (s: string) => locale.t(`dashboard.health.${s.toLowerCase()}`)
+// Status → color token class. Mirrors .bd.* palette (green / orange / red / grey).
+const cs = (s: string) => s==='healthy'?'ck-h':s==='warning'||s==='degraded'?'ck-w':s==='critical'?'ck-d':'ck-i'
+// Component display-name override. Backend returns raw identifiers
+// (e.g. "GraphQL API"); rename a few for the dashboard's narrative so the
+// card reads as user-facing platform health, not internal backend terms.
+const cn = (name: string) => name === 'GraphQL API' ? locale.t('dashboard.compHealth.graphqlApi') : name
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function go(nm:any, q?:Record<string,string>, p?:Record<string,string>) { void router.push({name:nm, query:q??{}, params:p??{}}) }
+const hc = computed(() => (stats.value?.successfulCalls??0)+(stats.value?.failedCalls??0) > 0)
 </script>
 
 <template>
-  <section class="dashboard">
-    <header class="dashboard-header">
-      <h1 cds-text="title" class="heading">{{ locale.t('dashboard.overview.title') }}</h1>
-    </header>
+  <section class="d">
+    <header class="dh"><div><h1 cds-text="title" class="heading">{{ locale.t('dashboard.overview.title') }}</h1><p cds-text="body" class="desc muted">{{ locale.t('dashboard.overview.subtitle') }}</p></div>
+      <div class="tb"><span class="lu">{{ locale.t('dashboard.lastRefresh') }}: {{ lu }}</span><label class="rt"><input type="checkbox" v-model="autoRefresh"/>{{ locale.t('dashboard.autoRefresh') }}</label><cds-button action="outline" size="sm" @click="refetch()"><cds-icon shape="refresh" size="sm"/>{{ locale.t('dashboard.refresh') }}</cds-button></div></header>
 
-    <div class="metric-grid">
-      <cds-card class="metric-card">
-        <div class="metric-content">
-          <h2 class="metric-title">{{ locale.t('dashboard.metric.activeAgents') }}</h2>
-          <div class="metric-main-line">
-            <span class="health-dot success" aria-hidden="true"></span>
-            <strong class="metric-number">{{ runningAgents }}</strong>
-            <span class="metric-denominator">/ {{ totalAgents }}</span>
-          </div>
-          <p class="metric-caption">{{ locale.t('dashboard.metric.activeAgentsCaption') }}</p>
-          <p class="metric-caption">{{ locale.t('dashboard.metric.activeAgentsFoot') }}</p>
-        </div>
-      </cds-card>
-
-      <cds-card class="metric-card">
-        <div class="metric-content">
-          <h2 class="metric-title">{{ locale.t('dashboard.metric.totalCalls') }}</h2>
-          <div class="metric-main-line compact">
-            <strong class="metric-number">{{ monthlyCallsCompact }}</strong>
-            <span class="metric-hint">{{ locale.t('dashboard.metric.deduplicated') }}</span>
-          </div>
-          <p class="metric-caption">
-            {{ locale.t('dashboard.metric.thisMonth') }}: <strong>{{ monthlyCallsExact }}</strong>
-            <span>{{ locale.t('dashboard.metric.detailedCount') }}</span>
-          </p>
-        </div>
-      </cds-card>
-
-      <cds-card class="metric-card">
-        <div class="metric-content">
-          <h2 class="metric-title">{{ locale.t('dashboard.metric.monthlyToken') }}</h2>
-          <div class="metric-token-line">
-            <span class="health-dot success" aria-hidden="true"></span>
-            <strong>
-              {{ locale.t('dashboard.metric.thisMonth') }}: {{ monthlyTokensCompact }} Token ({{ monthlyCostText }})
-            </strong>
-          </div>
-          <div class="metric-cost-row">
-            <span>{{ locale.t('dashboard.metric.estimatedCost') }}: {{ monthlyCostText }}</span>
-          </div>
-        </div>
-      </cds-card>
-
-      <cds-card class="metric-card">
-        <div class="metric-content">
-          <h2 class="metric-title">{{ locale.t('dashboard.metric.platformOverview') }}</h2>
-          <p class="metric-caption emphasized">{{ locale.t('dashboard.metric.totalCalls') }}</p>
-          <div class="metric-main-line compact overview-number">
-            <strong class="metric-number">{{ monthlyCallsCompact }}</strong>
-          </div>
-          <p class="metric-caption">
-            {{ locale.t('dashboard.metric.thisMonth') }}: <strong>{{ monthlyCallsExact }}</strong>
-            <span>{{ locale.t('dashboard.metric.detailedCount') }}</span>
-          </p>
-        </div>
-      </cds-card>
+    <!-- R1: 6KPI -->
+    <div class="kg">
+      <cds-card class="kc"><div class="ki"><span class="kl">{{ locale.t('dashboard.kpi.health') }}</span><span class="kv" :class="(stats?.overallStatus??'HEALTHY').toLowerCase()"><cds-icon :shape="hi(stats?.overallStatus??'HEALTHY')" size="md" solid/> {{ hl(stats?.overallStatus??'HEALTHY') }}</span><span class="ks">{{ locale.t('dashboard.kpi.critical') }}: {{ stats?.criticalCount??'--' }} · {{ locale.t('dashboard.kpi.warning') }}: {{ stats?.warningCount??'--' }}</span></div></cds-card>
+      <cds-card class="kc clk" @click="go('agents.list')"><div class="ki"><span class="kl">{{ locale.t('dashboard.kpi.activeAgents') }}</span><span class="kv">{{ stats?.runningAgents??'--' }}<small> / {{ stats?.totalAgents??'--' }}</small></span><span class="ks">{{ locale.t('dashboard.kpi.abnormal') }}: {{ stats?.exceptionAgents??'--' }} · {{ locale.t('dashboard.kpi.stopped') }}: {{ stats?.stoppedAgents??'--' }}</span></div></cds-card>
+      <cds-card class="kc clk" @click="go('mg.supplier')"><div class="ki"><span class="kl">{{ locale.t('dashboard.kpi.linkedModels') }}</span><span class="kv">{{ stats?.healthyModels??'--' }}<small> / {{ stats?.totalModels??'--' }}</small></span><span class="ks">{{ locale.t('dashboard.kpi.healthyModels') }}: {{ stats?.healthyModels??'--' }} · {{ locale.t('dashboard.kpi.totalModels') }}: {{ stats?.totalModels??'--' }}</span></div></cds-card>
+      <cds-card class="kc clk" @click="go('obs.requests',{range:'24h'})"><div class="ki"><span class="kl">{{ locale.t('dashboard.kpi.totalCalls') }}</span><span class="kv">{{ fmtCompact((stats?.successfulCalls??0)+(stats?.failedCalls??0)) }}</span><span class="ks">{{ locale.t('dashboard.kpi.success') }}: {{ fmtNumber(stats?.successfulCalls??0) }} · {{ locale.t('dashboard.kpi.failed') }}: {{ fmtNumber(stats?.failedCalls??0) }}</span></div></cds-card>
+      <cds-card class="kc clk" @click="go('obs.requests',{range:'24h',status:'failed'})"><div class="ki"><span class="kl">{{ locale.t('dashboard.kpi.successRate') }}</span><span class="kv">{{ hc&&stats?.successRate!=null ? fmtPercent(stats.successRate*100) : '--' }}</span><span class="ks">{{ locale.t('dashboard.kpi.failedCalls') }}: {{ fmtNumber(stats?.failedCalls??0) }}</span></div></cds-card>
+      <cds-card class="kc clk" @click="go('obs.monitor',{range:'24h',metric:'latency'})"><div class="ki"><span class="kl">{{ locale.t('dashboard.kpi.p95latency') }}</span><span class="kv">{{ hc ? (stats?.p95LatencyMs?stats.p95LatencyMs+'ms':'--') : '--' }}</span><span class="ks">{{ locale.t('dashboard.kpi.avgLatency') }}</span></div></cds-card>
     </div>
 
-    <div class="insight-grid">
-      <cds-card class="panel-card distribution-card">
-        <div class="panel-content">
-          <h2 class="panel-title">{{ locale.t('dashboard.distribution.title') }}</h2>
-          <div class="distribution-layout">
-            <div
-              class="donut-stage"
-              :aria-label="`${locale.t('dashboard.status.running')} ${runningAgents}, ${locale.t('dashboard.status.stopped')} ${stoppedAgents}, ${locale.t('dashboard.status.exception')} ${exceptionAgents}`"
-            >
-              <div class="donut-chart" :style="{ background: `conic-gradient(${donutGradient})` }" aria-hidden="true">
-                <div class="donut-hole"></div>
-              </div>
-              <div class="chart-callout exception">
-                <span>{{ locale.t('dashboard.status.exception') }}</span>
-                <strong>{{ exceptionAgents }} ({{ exceptionPercent }}%)</strong>
-              </div>
-              <div class="chart-callout running">
-                <span>{{ locale.t('dashboard.status.running') }}</span>
-                <strong>{{ runningAgents }} ({{ runningPercent }}%)</strong>
-              </div>
-              <div class="chart-callout stopped">
-                <span>{{ locale.t('dashboard.status.stopped') }}</span>
-                <strong>{{ stoppedAgents }} ({{ stoppedPercent }}%)</strong>
-              </div>
-            </div>
-
-            <ul class="distribution-legend" :aria-label="locale.t('dashboard.distribution.title')">
-              <li>
-                <span class="legend-dot running"></span>
-                <span>{{ locale.t('dashboard.status.running') }} {{ runningAgents }} ({{ runningPercent }}%)</span>
-              </li>
-              <li>
-                <span class="legend-dot stopped"></span>
-                <span>{{ locale.t('dashboard.status.stopped') }} {{ stoppedAgents }} ({{ stoppedPercent }}%)</span>
-              </li>
-              <li>
-                <span class="legend-dot exception"></span>
-                <span>{{ locale.t('dashboard.status.exception') }} {{ exceptionAgents }} ({{ exceptionPercent }}%)</span>
-              </li>
-            </ul>
-          </div>
+    <!-- R2: Agent (8) + MonthlyUsage (4) -->
+    <div class="r84">
+      <cds-card class="pn"><div class="pi"><h2>{{ locale.t('dashboard.agentHealth') }}</h2>
+        <div class="ah">
+          <div class="ad"><svg viewBox="0 0 160 160" width="140" height="140"><circle cx="80" cy="80" r="50" fill="none" stroke="#e4e7ec" stroke-width="20"/>
+            <!-- Donut: only segments with count > 0 are rendered. No zero-value
+                 placeholders. Empty state (total=0) shows a muted ring. -->
+            <template v-if="donutSegments.length>0">
+              <circle v-for="s in donutSegments" :key="s.key" cx="80" cy="80" r="50" fill="none" :stroke="s.color" stroke-width="20" :stroke-dasharray="s.dash" :stroke-dashoffset="s.offset" transform="rotate(-90 80 80)" stroke-linecap="butt"/>
+            </template>
+            <circle v-else cx="80" cy="80" r="50" fill="none" stroke="#e4e7ec" stroke-width="20"/>
+            <text x="80" y="74" text-anchor="middle" class="dtxt">{{ donutTotal||'--' }}</text><text x="80" y="92" text-anchor="middle" class="dstxt">{{ locale.t('dashboard.totalAgents') }}</text>
+          </svg></div>
+          <div class="as"><div class="asr" v-for="d in donutSegments" :key="d.key"><span class="asd" :class="ags(d.key)"/><span class="asl">{{ d.label }}</span><strong class="asc">{{ d.value }}</strong></div></div>
+          <div class="alst"><div v-for="a in ag?.agents?.slice(0,5)??[]" :key="a.agentId" class="alr" @click="go('agents.detail',{},{id:a.agentId})"><span :title="a.agentName">{{ a.agentName }}</span><span class="asd" :class="ags(a.status)"/><span class="bd" :class="ags(a.status)">{{ agz(a.status) }}</span><span class="mu">{{ a.healthyInstanceCount }}/{{ a.totalInstanceCount }}</span></div></div>
         </div>
-      </cds-card>
-
-      <cds-card class="panel-card recent-card">
-        <div class="panel-content">
-          <h2 class="panel-title">{{ locale.t('dashboard.recent.title') }}</h2>
-          <div class="recent-table-wrap">
-            <table class="recent-table">
-              <thead>
-                <tr>
-                  <th scope="col">
-                    {{ locale.t('dashboard.recent.name') }}
-                    <cds-icon shape="info-circle" size="sm" aria-hidden="true"></cds-icon>
-                  </th>
-                  <th scope="col">{{ locale.t('dashboard.recent.agentName') }}</th>
-                  <th scope="col">{{ locale.t('dashboard.recent.createdAt') }}</th>
-                  <th scope="col">{{ locale.t('dashboard.recent.status') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="agent in recentAgents" :key="agent.id">
-                  <td class="instance-name" :title="agent.name">{{ agent.name }}</td>
-                  <td>{{ agent.agentName }}</td>
-                  <td class="date-cell">{{ formatDateTime(agent.createdAt) }}</td>
-                  <td>
-                    <span class="status-label" :class="agent.status">
-                      <span class="status-dot"></span>
-                      {{ statusLabel(agent.status) }}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </cds-card>
+        <div class="pf"><cds-button action="outline" size="sm" @click="go('agents.list')">{{ locale.t('dashboard.viewAllAgents') }}</cds-button></div>
+      </div></cds-card>
+      <cds-card class="pn"><div class="pi"><h2>{{ locale.t('dashboard.monthlyUsage') }}</h2>
+        <template v-if="monthly"><div class="us"><span>{{ locale.t('dashboard.col.tokens') }}</span><strong>{{ fmtNumber(monthly.totalTokens) }}</strong></div><div class="us"><span>{{ locale.t('dashboard.kpi.monthlyCost') }}</span><strong>{{ fmtMoney(monthly.estimatedCost) }}</strong></div><div class="us"><span>{{ locale.t('dashboard.projected') }}</span><strong>{{ fmtMoney(monthly.projectedMonthlyCost) }}</strong></div></template>
+        <div class="pf"><cds-button action="outline" size="sm" @click="go('obs.metering',{tab:'platform',range:'THIS_MONTH'})">{{ locale.t('dashboard.gotoMetering') }}</cds-button></div>
+      </div></cds-card>
     </div>
 
-    <cds-card class="panel-card notice-card">
-      <div class="panel-content">
-        <h2 class="panel-title notice-title">{{ locale.t('dashboard.notices.title') }}</h2>
-        <ul class="notice-list">
-          <li v-for="notice in notices" :key="notice.id">
-            <span class="notice-dot" :class="notice.status" aria-hidden="true"></span>
-            <span class="notice-text">{{ notice.text }}</span>
-            <time :datetime="notice.occurredAt">{{ formatDateTime(notice.occurredAt) }}</time>
-          </li>
-        </ul>
-      </div>
-    </cds-card>
+    <!-- R3: Alerts(8) + CompHealth(4) -->
+    <div class="r84">
+      <cds-card class="pn"><div class="pi"><h2>{{ locale.t('dashboard.alerts') }}</h2>
+        <div v-if="alerts.length" class="al"><div v-for="a in alerts" :key="a.alertId" class="ar"><span class="bd" :class="sc(a.severity)">{{ a.severity }}</span><span class="atx">{{ a.title }}</span><span class="atm mu">{{ a.occurredAt?.slice(0,16).replace('T',' ') }}</span></div></div>
+        <div v-else class="em"><span>{{ locale.t('dashboard.noAlerts') }}</span></div>
+      </div></cds-card>
+      <cds-card class="pn"><div class="pi"><h2>{{ locale.t('dashboard.compHealth') }}</h2>
+        <div class="ch"><div v-for="c in ch" :key="c.componentName" class="chr"><span class="chn">{{ cn(c.componentName) }}</span><span class="chc">{{ c.healthyCount }}/{{ c.totalCount }}</span><span :class="cs(c.status)">{{ cz(c.status) }}</span></div></div>
+      </div></cds-card>
+    </div>
   </section>
 </template>
 
 <style scoped>
-.dashboard {
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow: visible;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-}
-.dashboard-header {
-  flex: 0 0 auto;
-  padding-top: 4px;
-  padding-bottom: 8px;
-}
-.heading {
-  margin: 0;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 28px;
-  line-height: 1.3;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  flex: 0 0 auto;
-}
-.dashboard :deep(cds-card) {
-  display: block;
-  min-width: 0;
-  background: var(--cds-alias-object-container-background, #fff);
-  border: 1px solid var(--cds-alias-object-border-color, #b3b3b3);
-  border-radius: 6px;
-  box-shadow: none;
-  /* CDS's panel-base sets `--color: initial` on the host and applies
-     `color: var(--color)` to its internal `.private-host` wrapper, which
-     sits between the slotted content and the host. That forces every text
-     node inside a cds-card to default `canvastext` / black regardless of
-     what the light-DOM parent set. Override with our themed foreground token
-     so headings, table headers, donut labels, etc. flip with the theme. */
-  --color: var(--cds-alias-object-app-foreground, #1b1b1b);
-}
-.metric-card {
-  min-height: 112px;
-}
-.metric-content {
-  height: 100%;
-  padding: 13px 14px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-.metric-title,
-.panel-title {
-  margin: 0;
-  font-size: 15px;
-  line-height: 1.3;
-  font-weight: 600;
-}
-.metric-main-line {
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.metric-main-line.compact {
-  gap: 8px;
-}
-.health-dot,
-.status-dot,
-.notice-dot,
-.legend-dot {
-  display: inline-block;
-  flex: 0 0 auto;
-  border-radius: 50%;
-}
-.health-dot {
-  width: 11px;
-  height: 11px;
-}
-.health-dot.success {
-  background: var(--cds-alias-status-success, #1b8a4b);
-}
-.metric-number {
-  font-size: 27px;
-  line-height: 1;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-}
-.metric-denominator {
-  font-size: 21px;
-  font-weight: 500;
-}
-.metric-hint {
-  color: var(--cds-alias-typography-color-300, #565656);
-  font-size: 12px;
-}
-.metric-caption {
-  margin: 1px 0 0;
-  font-size: 12px;
-  line-height: 1.35;
-}
-.metric-caption span {
-  color: var(--cds-alias-typography-color-300, #565656);
-}
-.metric-caption.emphasized {
-  margin-top: 2px;
-}
-.trend-up {
-  color: var(--cds-alias-status-success, #14834a);
-  font-weight: 600;
-}
-.metric-token-line {
-  min-height: 28px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-}
-.metric-cost-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 1px;
-  font-size: 12px;
-}
-.usage-progress {
-  height: 6px;
-  margin-top: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--cds-alias-object-border-color, #d7d7d7);
-}
-.usage-progress > span {
-  display: block;
-  width: 20%;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--cds-alias-status-success, #1b8a4b);
-}
-.overview-number {
-  min-height: 26px;
-}
-.insight-grid {
-  min-height: 200px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
-  flex: 1 1 auto;
-}
-.panel-card {
-  min-height: 0;
-}
-.panel-content {
-  height: 100%;
-  min-height: 0;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-}
-.distribution-layout {
-  min-height: 0;
-  flex: 1;
-  display: grid;
-  grid-template-columns: minmax(230px, 1.3fr) minmax(145px, 0.8fr);
-  align-items: center;
-  gap: 8px;
-}
-.donut-stage {
-  position: relative;
-  min-height: 160px;
-}
-.donut-chart {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 118px;
-  height: 118px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: conic-gradient(
-    var(--cds-alias-status-success, #1b8a4b) 0 30%,
-    var(--cds-alias-status-warning, #e6a700) 30% 80%,
-    var(--cds-alias-status-danger, #c92100) 80% 100%
-  );
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 12%, transparent);
-}
-.donut-hole {
-  position: absolute;
-  inset: 28px;
-  border-radius: 50%;
-  background: var(--cds-alias-object-container-background, #fff);
-  box-shadow: 0 0 0 1px color-mix(in srgb, #000 5%, transparent);
-}
-.chart-callout {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  font-size: 11px;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-.chart-callout strong {
-  font-weight: 500;
-}
-.chart-callout.exception {
-  left: 5%;
-  top: 15%;
-}
-.chart-callout.running {
-  right: 1%;
-  top: 20%;
-}
-.chart-callout.stopped {
-  left: 8%;
-  bottom: 8%;
-}
-.chart-callout::after {
-  content: '';
-  position: absolute;
-  top: 11px;
-  width: 34px;
-  height: 1px;
-  background: currentColor;
-  opacity: 0.5;
-}
-.chart-callout.exception::after,
-.chart-callout.stopped::after {
-  left: calc(100% + 5px);
-  transform: rotate(12deg);
-  transform-origin: left;
-}
-.chart-callout.running::after {
-  right: calc(100% + 5px);
-  transform: rotate(-12deg);
-  transform-origin: right;
-}
-.distribution-legend {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 8px;
-  font-size: 12px;
-}
-.distribution-legend li {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.legend-dot {
-  width: 11px;
-  height: 11px;
-}
-.legend-dot.running,
-.status-label.running .status-dot {
-  background: var(--cds-alias-status-success, #1b8a4b);
-}
-.legend-dot.stopped,
-.status-label.stopped .status-dot {
-  background: var(--cds-alias-status-warning, #e6a700);
-}
-.legend-dot.exception,
-.status-label.exception .status-dot {
-  background: var(--cds-alias-status-danger, #c92100);
-}
-.recent-table-wrap {
-  min-height: 0;
-  margin-top: 10px;
-  overflow: auto;
-}
-.recent-table {
-  width: 100%;
-  min-width: 470px;
-  border-collapse: collapse;
-  table-layout: fixed;
-  font-size: 11px;
-}
-.recent-table th,
-.recent-table td {
-  padding: 8px 7px;
-  overflow: hidden;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
-}
-.recent-table th {
-  background: var(--cds-alias-object-app-background, #e9eaee);
-  font-weight: 600;
-}
-.recent-table th:nth-child(1) { width: 24%; }
-.recent-table th:nth-child(2) { width: 24%; }
-.recent-table th:nth-child(3) { width: 28%; }
-.recent-table th:nth-child(4) { width: 24%; }
-.recent-table th cds-icon {
-  vertical-align: -2px;
-}
-.instance-name {
-  font-weight: 600;
-}
-.date-cell {
-  font-variant-numeric: tabular-nums;
-}
-.status-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.status-dot {
-  width: 9px;
-  height: 9px;
-}
-.notice-card {
-  min-height: 126px;
-  flex: 0 0 auto;
-}
-.notice-title {
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--cds-alias-object-border-color, #d7d7d7);
-}
-.notice-list {
-  margin: 7px 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 7px;
-}
-.notice-list li {
-  display: grid;
-  grid-template-columns: 11px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-}
-.notice-dot {
-  width: 10px;
-  height: 10px;
-}
-.notice-dot.success { background: var(--cds-alias-status-success, #1b8a4b); }
-.notice-dot.warning { background: var(--cds-alias-status-warning, #e6a700); }
-.notice-dot.danger { background: var(--cds-alias-status-danger, #c92100); }
-.notice-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.notice-list time {
-  font-variant-numeric: tabular-nums;
-}
-@media (max-width: 1120px) {
-  .metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .insight-grid {
-    grid-template-columns: 1fr;
-  }
-  .distribution-card,
-  .recent-card {
-    min-height: 220px;
-  }
-}
-@media (max-width: 660px) {
-  .metric-grid {
-    grid-template-columns: 1fr;
-  }
-  .distribution-layout {
-    grid-template-columns: 1fr;
-  }
-  .distribution-legend {
-    grid-template-columns: repeat(3, auto);
-    justify-content: center;
-  }
-  .notice-list li {
-    grid-template-columns: 11px minmax(0, 1fr);
-  }
-  .notice-list time {
-    grid-column: 2;
-    color: var(--cds-alias-typography-color-300, #565656);
-  }
-}
+.d{display:flex;flex-direction:column;gap:16px;padding:20px 24px 32px;color:var(--cds-alias-object-app-foreground,#1d2939)}
+.dh{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+/* Page heading / description — match AgentListView.heading + .desc
+   exactly so the two pages share one visual hierarchy. */
+.heading{margin:0;color:var(--cds-alias-object-app-foreground,#1b1b1b);font-size:28px;line-height:1.3;font-weight:600;letter-spacing:-0.01em}
+.desc{margin:12px 0 0;color:var(--cds-alias-typography-color-300,#565656);font-size:14px;line-height:1.5;max-width:720px}
+.muted{color:var(--cds-alias-typography-color-300,#565656)}
+.tb{display:flex;align-items:center;gap:12px;font-size:12px}.lu{color:#667085;font-variant-numeric:tabular-nums}
+.rt{display:flex;align-items:center;gap:4px;cursor:pointer}
+.kg{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.kc{overflow:hidden;--border:1px solid #e4e7ec;--box-shadow:0 1px 2px 0 rgba(16,24,40,.05),0 1px 3px 0 rgba(16,24,40,.08);--border-radius:10px;transition:box-shadow .18s ease,border-color .18s ease,transform .18s ease}.kc:hover{--box-shadow:0 4px 8px -2px rgba(16,24,40,.06),0 12px 24px -6px rgba(16,24,40,.12);--border-color:#cfd6df;transform:translateY(-1px)}.ki{padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.kl{font-size:12px;color:#667085}.kv{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.kv small{font-size:14px;font-weight:400;color:#667085}
+.kv.healthy{color:#12b76a}.kv.warning,.kv.degraded{color:#f79009}.kv.critical{color:#f04438}
+.ks{font-size:11px;color:#667085}.clk{cursor:pointer;transition:box-shadow .18s ease,border-color .18s ease,transform .18s ease}.clk:hover{box-shadow:0 4px 8px -2px rgba(16,24,40,.06),0 12px 24px -6px rgba(16,24,40,.12);transform:translateY(-1px)}
+.r84{display:grid;grid-template-columns:8fr 4fr;gap:16px}
+.pn{overflow:hidden;--border:1px solid #e4e7ec;--box-shadow:0 1px 2px 0 rgba(16,24,40,.04),0 2px 4px 0 rgba(16,24,40,.04),0 4px 8px 0 rgba(16,24,40,.04);--border-radius:12px;background:linear-gradient(180deg,#fbfcfd 0%,#ffffff 60%);transition:box-shadow .18s ease,border-color .18s ease,transform .18s ease}.pn:hover{--box-shadow:0 4px 8px -2px rgba(16,24,40,.06),0 16px 32px -8px rgba(16,24,40,.10);--border-color:#d0d5dd;transform:translateY(-1px)}.pi{padding:18px 20px;display:flex;flex-direction:column;gap:10px;min-height:280px}
+.pi h2{margin:0;font-size:14px;font-weight:600;color:#101828;letter-spacing:.01em}.pf{margin-top:auto;display:flex;align-items:center;gap:8px;font-size:11px}
+/* agent health */
+.ah{display:grid;grid-template-columns:140px 128px minmax(0,1fr);gap:20px;flex:1;align-items:center;min-height:0}
+.dtxt{font-size:28px;font-weight:700;fill:currentColor}.dstxt{font-size:11px;fill:#667085}
+.as{display:flex;flex-direction:column;gap:6px;width:128px;min-width:128px;max-width:128px;flex:0 0 128px}.asr{display:grid;grid-template-columns:8px 56px 24px;align-items:center;column-gap:8px;font-size:12px;min-height:22px;width:104px}.asl{width:56px;line-height:20px;white-space:nowrap}.asc{width:24px;line-height:20px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.asd{width:8px!important;height:8px!important;min-width:8px!important;min-height:8px!important;max-width:8px!important;max-height:8px!important;padding:0!important;margin:0!important;border-radius:50%!important;flex-shrink:0;display:inline-flex;transform:none!important;box-sizing:border-box;border:0}.asd.ds{background:#12b76a}.asd.dse{background:#f04438}.asd.dst{background:#98a2b3}
+.alr{display:grid;grid-template-columns:1fr 80px 50px;gap:6px;font-size:12px;padding:6px 8px;margin:0 -8px;border-radius:6px;border-bottom:1px solid #f0f0f0;cursor:pointer;align-items:center;transition:background-color .15s ease}.alr:hover{background:#f8fafc}
+/* components */
+.ch{display:flex;flex-direction:column;gap:2px}.chr{display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 8px;margin:0 -8px;border-radius:6px;transition:background-color .15s ease}.chr:hover{background:#f8fafc}.chn{flex:1}.chc{font-variant-numeric:tabular-nums;min-width:32px;text-align:right}
+/* Per-status color for platform-component health chip. Same palette as
+   .bd.* (green / orange / red / grey) so the dashboard reads as one
+   visual system — the names avoid colliding with .bd.* by using the
+   ck- prefix (component-key). */
+.ck-h{color:#12b76a}.ck-w{color:#f79009}.ck-d{color:#f04438}.ck-i{color:#667085}
+/* alerts */
+.al{display:flex;flex-direction:column;gap:2px}.ar{display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 8px;margin:0 -8px;border-radius:6px;transition:background-color .15s ease}.ar:hover{background:#f8fafc}.atx{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.atm{flex-shrink:0}
+.em{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:13px;color:#667085}.sm{font-size:11px;margin-top:4px}
+/* usage */
+.us{display:flex;justify-content:space-between;align-items:baseline;font-size:12px}.us strong{font-size:16px;font-variant-numeric:tabular-nums}
+.td{color:#f04438}.ts{color:#12b76a}
+.bd{font-size:11px;font-weight:600}.bd.ds{color:#12b76a}.bd.w{color:#f79009}.bd.dse{color:#f04438}.bd.i{color:#667085}.bd.dst{color:#98a2b3}
+.mu{color:#667085}
+@media(max-width:1599px){.kg{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:1199px){.r84{grid-template-columns:1fr};.kg{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:767px){.kg{grid-template-columns:1fr};.d{padding:12px}}
 </style>

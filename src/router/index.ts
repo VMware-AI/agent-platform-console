@@ -74,6 +74,26 @@ const router = createRouter({
           component: () => import('@/views/MeteringCenterView.vue'),
           meta: { roles: ['admin', 'read_only'] },
         },
+        {
+          path: 'observability/metering/settings',
+          component: () => import('@/views/MeteringSettingsView.vue'),
+          meta: { roles: ['admin'] },
+          children: [
+            { path: '', redirect: { name: 'obs.metering.settings.currency' } },
+            {
+              path: 'currency',
+              name: 'obs.metering.settings.currency',
+              component: () => import('@/views/metering/CurrencySettingsPage.vue'),
+              meta: { roles: ['admin'] },
+            },
+            {
+              path: 'cost-rules',
+              name: 'obs.metering.settings.cost-rules',
+              component: () => import('@/views/metering/CostRulesPage.vue'),
+              meta: { roles: ['admin'] },
+            },
+          ],
+        },
         // 计量中心 drill-down 子路由 (Phase 3). 三个 mode 通过 `:kind` + `:id`
         // 区分;组合详情走单独路由避免 query 串式拼接。单文件共享组件 `MeteringDrillView.vue`
         // 处理三种 mode,以减少复制。
@@ -137,6 +157,12 @@ const router = createRouter({
           path: 'platform/skills',
           name: 'platform.skills',
           component: () => import('@/views/SkillManageView.vue'),
+          meta: { roles: ['admin'] },
+        },
+        {
+          path: 'platform/branding',
+          name: 'platform.branding',
+          component: () => import('@/views/BrandingSettingsView.vue'),
           meta: { roles: ['admin'] },
         },
 

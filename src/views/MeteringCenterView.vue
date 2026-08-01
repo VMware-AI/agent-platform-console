@@ -69,6 +69,8 @@ interface ModelUsage {
   inputTokens: number
   outputTokens: number
   requests: number
+  inputPricePerToken?: number | null
+  outputPricePerToken?: number | null
   status: UsageStatus
 }
 interface DailyUsage {
@@ -151,6 +153,8 @@ const models = computed<ModelUsage[]>(() =>
     outputTokens: row.outputTokens,
     requests: row.requests,
     status: statusFromRequests(row.requests),
+    inputPricePerToken: row.inputPricePerToken,
+    outputPricePerToken: row.outputPricePerToken,
   })),
 )
 const dailyUsage = computed<DailyUsage[]>(() =>
@@ -203,7 +207,6 @@ const donutSegments = computed(() =>
       color: DONUT_PALETTE[i] ?? DONUT_PALETTE[0],
     })),
 )
-const hasModelDistribution = computed(() => donutSegments.value.length > 0)
 
 // "Agent calls by rank" — REMOVED (PR B.1 retraction). Reason:
 // `overview.byAgent` only contains agents whose token usage was recorded in
@@ -328,6 +331,7 @@ const costByAgent = computed(() => {
   return map
 })
 
+function fmtPrice1M(price: number|null|undefined): string { if (price == null || !Number.isFinite(price) || price <= 0) return "--"; return "$"+(price*1_000_000).toFixed(2)+"/1M" }
 function modelCost(name: string): number {
   return costByModel.value.get(name) ?? 0
 }
@@ -346,8 +350,13 @@ function resetFilters() {
   <section class="metering-page">
     <!-- 1. Page header — spec §5 -->
     <header class="page-head">
-      <h1 cds-text="title" class="heading">{{ locale.t('metering.title') }}</h1>
-      <p cds-text="body" class="desc muted">{{ locale.t('metering.description') }}</p>
+      <div class="head-title-row">
+        <span class="head-icon" aria-hidden="true">
+          <cds-icon shape="dashboard" size="md"></cds-icon>
+        </span>
+        <h1 class="heading">{{ locale.t('metering.title') }}</h1>
+      </div>
+      <p class="head-desc">{{ locale.t('metering.description') }}</p>
     </header>
 
     <!-- 2. Source tabs — spec §6 -->
@@ -363,6 +372,12 @@ function resetFilters() {
         <TimeRangeToolbar
           :ranges="timeRanges"
           :selected-range="selectedRange"
+          :agent-options="[]"
+          :selected-agent="'ALL'"
+          :model-options="[]"
+          :selected-model="'ALL'"
+          :agent-filter-label="''"
+          :model-filter-label="''"
           show-custom
           @update:selected-range="(v: string) => (selectedRange = v as TimeRange)"
           @update:custom-from="(v) => customFrom = v"
@@ -423,7 +438,7 @@ function resetFilters() {
            (which also uses .analysis-grid) keeps its 2fr 1fr split. -->
       <div class="overview-grid">
         <cds-card class="card">
-          <div class="card-pad chart-pad donut-card-pad" :class="{ 'is-empty': !hasModelDistribution }">
+          <div class="card-pad chart-pad donut-card-pad">
             <header class="card-head">
               <h2>{{ locale.t('metering.chart.modelDist') }}</h2>
             </header>
@@ -551,6 +566,8 @@ function resetFilters() {
                     <th class="num">{{ locale.t('metering.table.totalToken') }}</th>
                     <th class="num">{{ locale.t('metering.token.input') }}</th>
                     <th class="num">{{ locale.t('metering.token.output') }}</th>
+                    <th class="num">输入单价</th>
+                    <th class="num">输出单价</th>
                     <th class="num">{{ locale.t('metering.table.requests') }}</th>
                     <th>{{ locale.t('metering.table.status') }}</th>
                   </tr>
@@ -572,6 +589,8 @@ function resetFilters() {
                     <td class="num">{{ fmtNumber(model.totalTokens, locale.locale) }}</td>
                     <td class="num">{{ fmtNumber(model.inputTokens, locale.locale) }}</td>
                     <td class="num">{{ fmtNumber(model.outputTokens, locale.locale) }}</td>
+                    <td class="num">{{ fmtPrice1M(model.inputPricePerToken) }}</td>
+                    <td class="num">{{ fmtPrice1M(model.outputPricePerToken) }}</td>
                     <td class="num">{{ fmtNumber(model.requests, locale.locale) }}</td>
                     <td>
                       <span class="usage-status" :class="model.status">
@@ -664,39 +683,34 @@ function resetFilters() {
    still resolve through CDS theme variables via fallbacks.
    ----------------------------------------------------------------------- */
 .metering-page {
-  /* Spec tokens — keep in sync with §3 of the metering UX spec.
-     Each value is sourced from a `--cds-alias-*` token so the whole page
-     re-skins under [cds-theme~="dark"] without per-rule overrides. The
-     trailing literal in each `var(...)` is the light-mode fallback only. */
-  --meter-page-bg: var(--cds-alias-object-container-background, #f5f7fa);
-  --meter-card-bg: var(--cds-alias-object-app-background, #ffffff);
-  --meter-text: var(--cds-alias-object-app-foreground, #1d2939);
-  --meter-text-muted: var(--cds-alias-typography-color-300, #667085);
-  --meter-border: var(--cds-alias-object-border-color, #e4e7ec);
-  --meter-bg-weak: var(--cds-alias-object-container-background-tint, #fafbfc);
+  /* Spec tokens — keep in sync with §3 of the metering UX spec. */
+  --meter-page-bg: #f5f7fa;
+  --meter-card-bg: #ffffff;
+  --meter-text: #1d2939;
+  --meter-text-muted: #667085;
+  --meter-border: #e4e7ec;
+  --meter-bg-weak: #f8fafc;
   --meter-radius: 8px;
-  /* Status / brand hues stay brand-coloured in both themes — they signal
-     state, not surface chrome. CDS gives us dark-theme-tuned tones so
-     contrast is preserved. */
-  --meter-success: var(--cds-alias-status-success, #12b76a);
-  --meter-warning: var(--cds-alias-status-warning, #f79009);
-  --meter-danger: var(--cds-alias-status-danger, #f04438);
-  --meter-primary: var(--cds-alias-object-app-blue, #0072a3);
+  --meter-success: #12b76a;
+  --meter-warning: #f79009;
+  --meter-danger: #f04438;
+  --meter-primary: var(--cds-alias-status-info, #0072a3);
 
-  /* Chart color tokens — also referenced by MeteringLineChart / BarChart.
-     Pinned to the brand palette (blue / grey) so chart series stay
-     recognisable across the two themes; we deliberately don't tie these
-     to status-* tokens (those would re-color on theme change and break
-     users' mental model of "input vs output"). */
+  /* Chart color tokens -- also referenced by MeteringLineChart / BarChart. */
   --chart-color-input: #4b76bd;
   --chart-color-output: #9aa8bb;
 
+  background: var(--meter-page-bg);
   color: var(--meter-text);
+  height: 100%;
+  min-height: 0;
   min-width: 0;
   max-width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  padding: 20px 24px 32px;
+  overflow: auto;
   font-family: inherit;
   box-sizing: border-box;
 }
@@ -705,23 +719,35 @@ function resetFilters() {
 .page-head {
   flex: 0 0 auto;
 }
+.head-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.head-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--cds-alias-status-info-tint, rgba(0, 114, 163, 0.08));
+  color: var(--meter-primary);
+}
 .heading {
   margin: 0;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1.3;
   font-weight: 600;
   letter-spacing: -0.01em;
+  color: var(--meter-text);
 }
-.desc {
-  margin: 12px 0 0;
-  color: var(--cds-alias-typography-color-300, #565656);
-  font-size: 14px;
+.head-desc {
+  margin: 6px 0 0;
+  font-size: 13px;
   line-height: 1.5;
+  color: var(--meter-text-muted);
   max-width: 720px;
-}
-.muted {
-  color: var(--cds-alias-typography-color-300, #565656);
 }
 
 /* ---------------------------- filter row ---------------------------- */
@@ -747,8 +773,6 @@ function resetFilters() {
   border-color: var(--meter-primary);
   box-shadow: 0 0 0 3px rgba(0, 114, 163, 0.1);
 }
-/* Focus ring uses the same brand-cyan tint in both themes — it stays low
-   enough to read on either light or dark surfaces because alpha is 0.1. */
 
 /* ---------------------------- cards ---------------------------- */
 .metering-page :deep(cds-card) {
@@ -860,18 +884,6 @@ function resetFilters() {
   display: flex;
   flex-direction: column;
 }
-/* When the donut has no data, the 180px / 1fr split collapses to a single
-   full-width column so the empty state stretches across the card instead
-   of being squeezed into the donut slot. */
-.donut-card-pad.is-empty .model-distribution-content {
-  grid-template-columns: minmax(0, 1fr);
-}
-.donut-card-pad.is-empty .donut-host {
-  /* Keep the empty-state centered horizontally + vertically inside the
-     now-full-width column instead of stretching to fill. */
-  align-items: center;
-  justify-content: center;
-}
 .model-distribution-content {
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr);
@@ -946,13 +958,10 @@ function resetFilters() {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-/* Hover / drill-active row tint — uses a slightly deeper shade than
-   `--meter-bg-weak` so the affordance stays visible in light theme. In
-   dark theme CDS provides the equivalent dim overlay. */
-.data-table tbody tr:hover { background: var(--cds-alias-object-container-background-shade, #f1f3f5); }
+.data-table tbody tr:hover { background: var(--meter-bg-weak); }
 .data-table tbody tr:last-child td { border-bottom: 0; }
 .data-table .drill-row { cursor: pointer; transition: background 0.15s; }
-.data-table .drill-row.active { background: var(--cds-alias-object-container-background-shade, #f1f3f5); font-weight: 600; }
+.data-table .drill-row.active { background: var(--meter-bg-weak); font-weight: 600; }
 
 /* Agent-table cell layout (spec §8): primary line = agent name, secondary
    line = agentId. Two stacked spans inside one td keeps the column at
@@ -1020,11 +1029,7 @@ function resetFilters() {
 }
 .usage-status.normal { color: var(--meter-success); }
 .usage-status.warning { color: var(--meter-danger); }
-.empty-cell { padding: 0 !important; background: var(--meter-card-bg); }
-.data-table thead,
-.data-table th {
-  background: var(--meter-card-bg);
-}
+.empty-cell { padding: 0 !important; background: var(--meter-bg-weak); }
 .table-footer {
   display: flex;
   align-items: center;
@@ -1043,7 +1048,7 @@ function resetFilters() {
 }
 .cost-summary {
   padding: 14px 16px;
-  background: var(--meter-card-bg);
+  background: var(--meter-bg-weak);
   border: 1px solid var(--meter-border);
   border-radius: var(--meter-radius);
   display: flex;
@@ -1080,6 +1085,7 @@ function resetFilters() {
   .data-table { min-width: 480px; }
 }
 @media (max-width: 900px) {
+  .metering-page { padding: 16px; }
   .filter-row { flex-direction: column; align-items: stretch; }
   .cost-grid { grid-template-columns: 1fr; }
 }

@@ -525,7 +525,7 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
         </div>
       </cds-grid-column>
 
-      <cds-grid-column :width="'12%'" class="actions-column">
+      <cds-grid-column :width="'12%'">
         <div class="col-head col-actions">
           <span>{{ locale.t('resources.col.actions') }}</span>
         </div>
@@ -921,16 +921,6 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
   justify-content: flex-start;
 }
 
-/* Reserve enough horizontal space for the three icon-above-text action
-   buttons (sync / edit / delete, ~40px each + 8px gaps) so they never
-   squeeze together and trigger an internal wrap. When the viewport is
-   narrower than this column's reserved width, the surrounding `.grid-card`
-   (overflow-x: auto) takes over and produces a horizontal scrollbar
-   instead of the buttons reflowing inside the cell. */
-.actions-column {
-  --min-width: 160px;
-}
-
 .endpoint-cell {
   word-break: break-all;
   font-size: 12px;
@@ -976,14 +966,8 @@ const finalDeleteBodySegments = computed<{ text: string; bold?: boolean }[]>(() 
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  /* `nowrap` keeps the three action buttons on a single line — the grid
-     wrapper (`.grid-card`, `overflow-x: auto`) is responsible for the
-     horizontal scrollbar when the viewport is too narrow to fit them,
-     instead of letting the buttons wrap onto a second row inside the
-     cell. */
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   justify-content: flex-end;
-  white-space: nowrap;
 }
 .row-action {
   display: inline-flex;
