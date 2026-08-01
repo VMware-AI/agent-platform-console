@@ -44,7 +44,7 @@ export const STRINGS: Dict = {
   'nav.obs.metering.settings': { zh: '计量中心设置', en: 'Metering Settings' },
 
   /* ---------- 平台设置 / Branding (BrandingSettingsView) ---------- */
-  'branding.title':       { zh: '品牌定制',         en: 'Branding Settings' },
+  'branding.title':       { zh: '平台设置',         en: 'Platform Settings' },
   'branding.desc':        { zh: '统一管理平台品牌 Logo、登录页样式与版权信息。',
                              en: 'Manage platform logo, login page look, and footer info.' },
   'branding.logo':        { zh: 'Logo 替换',        en: 'Logo' },
