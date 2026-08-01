@@ -63,6 +63,7 @@ const groups: Group[] = [
     icon: 'eye',
     children: [
       { name: 'obs.metering', labelKey: 'nav.obs.metering', icon: 'bar-chart',    to: '/observability/metering' },
+      { name: 'obs.metering.settings', labelKey: 'nav.obs.metering.settings', icon: 'cog', to: '/observability/metering/settings' },
       { name: 'obs.monitor',  labelKey: 'nav.obs.monitor',  icon: 'dashboard',    to: '/observability/monitor' },
       { name: 'obs.requests', labelKey: 'nav.obs.requests', icon: 'list',         to: '/observability/requests' },
       { name: 'obs.audit',    labelKey: 'nav.obs.audit',    icon: 'shield-check', to: '/observability/audit' },
@@ -77,6 +78,7 @@ const groups: Group[] = [
       { name: 'platform.gateway',   labelKey: 'nav.system.gateway',   icon: 'router',        to: '/platform/gateway' },
       { name: 'platform.users',     labelKey: 'nav.system.users',     icon: 'users',         to: '/platform/users' },
       { name: 'platform.skills',    labelKey: 'nav.system.skills',    icon: 'wrench',        to: '/platform/skills' },
+      { name: 'platform.branding',  labelKey: 'nav.system.branding',  icon: 'color-palette', to: '/platform/branding' },
     ],
   },
 ]

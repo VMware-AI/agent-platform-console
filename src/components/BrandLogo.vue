@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { useLocaleStore } from '@/stores/locale'
+import { useBrandStore } from '@/stores/brand'
 
-defineProps<{
-  size?: number
-}>()
-
+defineProps<{ size?: number }>()
 const locale = useLocaleStore()
+const brand = useBrandStore()
 </script>
 
 <template>
-  <svg
+  <img v-if="brand.logo" :src="brand.logo" :width="size??32" :height="size??32" class="brand-logo-img" :alt="locale.t('app.brand')" />
+  <svg v-else
     :width="size ?? 32"
     :height="size ?? 32"
     viewBox="0 0 32 32"

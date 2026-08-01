@@ -12,12 +12,14 @@ import './icons'
 
 const auth = useAuthStore()
 const locale = useLocaleStore()
+import { useBrandStore } from '@/stores/brand'
+const brand = useBrandStore()
 
 const sidebarCollapsed = ref(false)
 
 function syncTitle() {
   if (typeof document !== 'undefined') {
-    document.title = locale.t('app.title')
+    document.title = brand.title || locale.t('app.title')
   }
 }
 
@@ -30,7 +32,7 @@ watch(() => locale.locale, syncTitle)
     <header class="topbar">
       <RouterLink to="/overview" class="brand" :aria-label="locale.t('nav.home')">
         <BrandLogo :size="38" />
-        <strong>{{ locale.t('app.brand') }}</strong>
+        <strong>{{ brand.title || locale.t('app.brand') }}</strong>
       </RouterLink>
       <div class="spacer"></div>
       <div class="actions">
