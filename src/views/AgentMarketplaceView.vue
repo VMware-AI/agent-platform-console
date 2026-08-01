@@ -1007,6 +1007,11 @@ const typeFilterLabel = computed(() => {
   --size: 1.25rem;
   --font-size: 0.65rem;
   --padding: 0 0.4rem;
+  /* Override the global cds-badge --color injection so the label text
+     stays readable on the dark info-blue background regardless of theme.
+     Mirrors the same fix in ModelRouteFormModal.shuttle-status — same
+     root cause (src/styles/global.css line ~36). */
+  --color: #fff;
 }
 .tpl-desc {
   margin: 0 0 8px;
@@ -1018,6 +1023,12 @@ const typeFilterLabel = computed(() => {
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  /* 顶部加 2px padding 让首行字符 ascent 不被父容器 box 边缘切到,
+     同步 -2px margin-top 抵消外部布局偏移(总高度不变,仍是
+     calc(13px * 1.5 * 2) = 39px)。配合 cds-card 的 overflow: hidden
+     默认行为,描述"OpenClaw — 一款..."等长串首行不会再被裁 1-2px。 */
+  padding-top: 2px;
+  margin-top: -2px;
   /* Fixed 2-line height so the 3-column list below starts at the same y
      across cards regardless of description length. Using `height`
      (not `min-height`) so short descriptions don't compress the box. */
