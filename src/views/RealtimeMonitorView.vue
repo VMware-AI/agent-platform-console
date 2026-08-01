@@ -82,12 +82,18 @@ const CHART = {
   left: 42,
   right: 606,
   top: 18,
-  bottom: 214,
+  bottom: 170,
   width: 620,
-  height: 242,
+  height: 205,
 }
 
 const selectedWindow = ref<TimeWindow>('1h')
+const agentIdFilter = ref('')
+const modelFilter = ref('')
+// Applied filter values — committed on Enter/blur. The raw *Filter refs drive
+// only the input's own value, so typing no longer fires a query per keystroke.
+const appliedAgentId = ref('')
+const appliedModel = ref('')
 const nowTick = ref(Date.now())
 const focusedChart = ref<string | null>(null)
 
@@ -121,12 +127,20 @@ const activeGranularity = computed<RequestMetricsGranularity>(() => {
   return 'DAY'
 })
 
-const variables = computed<RequestMetricsVars>(() => ({
-  from: activeRange.value.from.toISOString(),
-  to: activeRange.value.to.toISOString(),
-  granularity: activeGranularity.value,
-  filter: null,
-}))
+const variables = computed<RequestMetricsVars>(() => {
+  const filter: NonNullable<RequestMetricsVars['filter']> = {}
+  const agentId = appliedAgentId.value
+  const model = appliedModel.value
+  if (agentId) filter.agentId = agentId
+  if (model) filter.model = model
+
+  return {
+    from: activeRange.value.from.toISOString(),
+    to: activeRange.value.to.toISOString(),
+    granularity: activeGranularity.value,
+    filter: Object.keys(filter).length > 0 ? filter : null,
+  }
+})
 
 const { result, loading, onError, refetch } = useQuery<RequestMetricsResult, RequestMetricsVars>(
   REQUEST_METRICS_QUERY,
@@ -192,6 +206,13 @@ function manualRefresh() {
   poll()
 }
 
+// Commit the agent/model filter inputs (Enter or blur). Reactive `variables`
+// then refetches once, instead of firing a query on every keystroke.
+function applyMonitorFilters() {
+  appliedAgentId.value = agentIdFilter.value.trim()
+  appliedModel.value = modelFilter.value.trim()
+}
+
 function onVisibilityChange() {
   if (typeof document === 'undefined') return
   if (document.hidden) {
@@ -209,7 +230,7 @@ watch(selectedWindow, () => {
 
 // customStart/customEnd feed `variables` (via activeRange) directly, so editing
 // the custom range refetches through reactive `variables` — no explicit watch
-// needed.
+// needed. Agent/model filters commit via applyMonitorFilters.
 
 onMounted(() => {
   startPolling()
@@ -259,41 +280,12 @@ function niceCeil(value: number): number {
   return niceFraction * magnitude
 }
 
-// Pick a y-axis max that hugs the data. Earlier versions used the 95th
-// percentile (`p95 * 1.15`) which gave breathing room from rare spikes but
-// crushed typical values into a thin baseline strip — e.g. for request/sec
-// where most buckets are 0 and only a handful reach ~0.03 req/s, p95 * 1.15
-// rounded to yMax = 0.1 and the line rendered as a hairline at the bottom.
-//
-// New rule: use the absolute max with 15% headroom, then snap to the next
-// "nice" number above. This guarantees non-zero values get visible plot
-// height even when traffic is sparse. The `floor` argument (per-series
-// minimum) overrides this when the data is so small that even max * 1.15
-// would round below a useful resolution — e.g. request/sec where floor =
-// 0.1 forces 2-decimal ticks (0.10 / 0.08 / 0.05 / 0.03 / 0) so values
-// fit between hash lines instead of being crushed against the baseline.
-function tightAxisMax(values: number[], floor = 0): number {
-  if (values.length === 0) return Math.max(1, floor)
-  const maxAbs = Math.max(...values, 0)
-  // Add 15% headroom so the largest value doesn't sit flush against the
-  // top border, then snap to the next "nice" number above for clean ticks.
-  // Floor guarantees yMax is always at least the series-specific minimum
-  // (e.g. 1 req/s for throughput, 10ms for latency) even when max * 1.15
-  // would round below it.
-  return niceCeil(Math.max(floor, maxAbs * 1.15))
-}
-
 function ticksFor(max: number, count = 4): number[] {
   return Array.from({ length: count + 1 }, (_, i) => (max / count) * (count - i))
 }
 
 function scaleY(value: number, max: number): number {
-  // Guard against zero / negative max, but DO NOT snap to a 1-unit floor
-  // — when the actual axis max is <1 (e.g. request/sec at 0.1), scaling
-  // against 1 crushes all the data points (and y-tick labels) into the
-  // bottom of the plot. Using `max` directly keeps the axis faithful to
-  // whatever `tightAxisMax` decided.
-  const usableMax = max > 0 ? max : 1
+  const usableMax = Math.max(max, 1)
   const ratio = Math.min(Math.max(value / usableMax, 0), 1)
   return CHART.bottom - ratio * (CHART.bottom - CHART.top)
 }
@@ -346,13 +338,7 @@ function barRects(values: number[], max: number): BarRect[] {
   const gap = Math.min(8, step * 0.26)
   const width = Math.max(3, step - gap)
   return values.map((value, index) => {
-    // Floor tiny bars at 4 viewBox units so non-zero values always paint a
-    // visible mark against the baseline. Without this, low-rate request/sec
-    // data (e.g. < 1 req/s on a 1h window with niceCeil rounding the axis to
-    // 10) renders as an invisible sliver and the chart looks empty even when
-    // there is real traffic. 4 units ≈ 3.2 screen px at a 200px-tall SVG.
-    const naturalHeight = CHART.bottom - scaleY(value, max)
-    const height = Math.max(4, naturalHeight)
+    const height = CHART.bottom - scaleY(value, max)
     return {
       x: CHART.left + index * step + gap / 2,
       y: CHART.bottom - height,
@@ -366,18 +352,18 @@ function gradientId(chart: ChartSpec, series: ChartSeries): string {
   return `monitor-${chart.key}-${series.key}`
 }
 
+function maxValue(values: number[]): number {
+  return values.reduce((max, value) => Math.max(max, value), 0)
+}
+
+
+
 function requestRate(bucket: RequestMetricsBucket): number {
   const seconds = GRANULARITY_MS[activeGranularity.value] / 1000
   return bucket.requestCount / seconds
 }
 
 function formatRateTick(value: number, max: number): string {
-  // Pick decimal precision by axis range so ticks stay distinguishable.
-  //   max < 1     → 2 decimals (e.g. 0.10, 0.05) — needed when the floor
-  //                 forces yMax to 1 but typical values are <0.1
-  //   max ≤ 10    → 1 decimal — readable for sub-10 rates
-  //   otherwise   → round to whole numbers (compact integer ticks)
-  if (max < 1) return formatDecimal(value, 2)
   if (max <= 10 && value > 0) return formatDecimal(value, 1)
   return formatNumber(Math.round(value))
 }
@@ -396,22 +382,9 @@ const chartSpecs = computed<ChartSpec[]>(() => {
   const latency = list.map((bucket) => bucket.avgLatencyMs)
   const errors = list.map((bucket) => bucket.errorCount)
 
-  // See `tightAxisMax` — uses absolute max * 1.15 with series-specific
-  // floors that only kick in when data is so small that max * 1.15
-  // rounds below a useful resolution:
-  //   - request rate floor 0.1 → 2-decimal ticks (0.10/0.08/0.05/0.03/0)
-  //     so sub-0.1 req/s values render in the lower-middle of the plot
-  //     instead of being crushed against the baseline. A real spike
-  //     >0.1 req/s still wins via max * 1.15 and the axis scales up.
-  //   - latency floor 10ms → 1-decimal ticks for low-latency data.
-  //   - errors: no floor. Counts are integers; niceCeil produces axis
-  //     values that round to distinct integers (e.g. yMax=5 → ticks
-  //     5/4/3/1/0). Adding a floor would force non-integer axis values
-  //     and the Math.round formatter would collapse adjacent ticks
-  //     into duplicates.
-  const requestMax = tightAxisMax(requestRates, 0.1)
-  const latencyMax = tightAxisMax(latency, 10)
-  const errorMax = tightAxisMax(errors)
+  const requestMax = niceCeil(maxValue(requestRates))
+  const latencyMax = niceCeil(maxValue(latency))
+  const errorMax = niceCeil(maxValue(errors))
 
   return [
     {
@@ -425,12 +398,7 @@ const chartSpecs = computed<ChartSpec[]>(() => {
           key: 'requestRate',
           label: locale.t('monitor.series.requestRate'),
           color: '#4775c1',
-          // `area` (not `bar`) — request/sec traces read more clearly as a
-          // continuous line + filled gradient than as 60 thin bars when the
-          // axis is tight. The y-axis itself is computed via `tightAxisMax`
-          // (95th percentile) so the typical range fills most of the data
-          // area, not just a sliver at the bottom.
-          mode: 'area',
+          mode: 'bar',
           values: requestRates,
         },
       ],
@@ -523,6 +491,31 @@ function toggleFocus(key: string) {
         <cds-icon shape="refresh" size="md" :class="{ spinning: loading }"></cds-icon>
         <span>{{ refreshText }}</span>
       </cds-button>
+
+      <div class="toolbar-spacer"></div>
+
+      <div class="filter-controls" :aria-label="locale.t('monitor.filter.label')">
+        <cds-input control-width="shrink" class="filter-field">
+          <input
+            v-model="agentIdFilter"
+            type="text"
+            :placeholder="locale.t('monitor.filter.agentId')"
+            :aria-label="locale.t('monitor.filter.agentId')"
+            @keyup.enter="applyMonitorFilters"
+            @change="applyMonitorFilters"
+          />
+        </cds-input>
+        <cds-input control-width="shrink" class="filter-field">
+          <input
+            v-model="modelFilter"
+            type="text"
+            :placeholder="locale.t('monitor.filter.model')"
+            :aria-label="locale.t('monitor.filter.model')"
+            @keyup.enter="applyMonitorFilters"
+            @change="applyMonitorFilters"
+          />
+        </cds-input>
+      </div>
     </div>
 
     <!-- KPI cards from the real backend summary (was: data fetched but never shown) -->
@@ -910,19 +903,35 @@ function toggleFocus(key: string) {
   flex: 0 0 auto;
 }
 
-.chart-grid {
-  /* Rows size to the natural chart-card height (set by chart-card's
-     min-height) instead of splitting the available height into 1fr each.
-     The old `repeat(2, minmax(0, 1fr))` forced each card to fill half of
-     the remaining viewport height, which over-stretched the chart SVG
-     (aspect 2.56:1) vertically and crushed the data line into a thin
-     strip. Let the card own its own height; the page itself scrolls
-     when the natural stack exceeds the viewport. */
-  flex: 0 0 auto;
+.toolbar-spacer {
+  flex: 1 1 auto;
+  min-width: 12px;
+}
+
+.filter-controls {
   min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-field {
+  width: 220px;
+  --width: 220px;
+}
+
+.filter-field input {
+  min-width: 0;
+}
+
+.chart-grid {
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: auto;
+  /* Three real charts (the synthetic CPU/memory/active-agent charts were removed
+     in T4). Two rows fit them without the empty bottom band a 3-row grid left. */
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 /* With an odd chart count, let the last card span the full width so the grid
@@ -936,26 +945,16 @@ function toggleFocus(key: string) {
   --overflow: hidden;
   display: block;
   min-width: 0;
+  min-height: 0;
   background: var(--cds-alias-object-container-background, #fff);
   border: 1px solid var(--cds-alias-object-border-color, #b7b7b7);
   border-radius: 6px;
   box-shadow: none;
 }
 
-/* Each card reserves a minimum height so the SVG (viewBox 620×242, ~2.56:1) renders
-   at a usable size. The viewBox aspect is tuned to the 2-column grid card's
-   content area (≈600×234) so the SVG fills the card with no side whitespace.
-   Without this, the flex-column layout collapses each row to a 60–80px strip
-   on short viewports and the line/area/bar marks are unreadable.
-   Declared after `:deep(cds-card)` so its `min-height` wins the cascade
-   over that rule's reset. */
-.chart-card {
-  min-height: 300px;
-}
-
 .chart-card.focused {
   grid-column: 1 / -1;
-  min-height: 380px;
+  min-height: 360px;
 }
 
 .card-content {
@@ -965,9 +964,7 @@ function toggleFocus(key: string) {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  /* Tighter padding than the default 10/8 so the SVG gets more of the card
-     height — the viewBox already reserves space for x-axis labels at the bottom. */
-  padding: 8px 12px 6px;
+  padding: 10px 12px 8px;
 }
 
 .chart-title-row {
@@ -1020,16 +1017,9 @@ function toggleFocus(key: string) {
 
 .monitor-chart {
   width: 100%;
-  height: auto;
   min-height: 0;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   overflow: visible;
-  display: block;
-  /* viewBox = 620 × 242 ≈ 2.562:1. Without this aspect-ratio the SVG element
-     stretches vertically to fill its flex parent, which crushes the data
-     line into a thin strip at the bottom of an over-tall container.
-     Pairing with `height: auto` keeps the inner viewBox uniform-scaled. */
-  aspect-ratio: 620 / 242;
 }
 
 .grid-lines line {
@@ -1112,6 +1102,14 @@ function toggleFocus(key: string) {
     align-items: flex-start;
     flex-wrap: wrap;
   }
+
+  .toolbar-spacer {
+    display: none;
+  }
+
+  .filter-controls {
+    margin-left: auto;
+  }
 }
 
 @media (max-width: 940px) {
@@ -1121,11 +1119,11 @@ function toggleFocus(key: string) {
   }
 
   .chart-card {
-    min-height: 280px;
+    min-height: 260px;
   }
 
   .chart-card.focused {
-    min-height: 360px;
+    min-height: 340px;
   }
 }
 
@@ -1135,6 +1133,7 @@ function toggleFocus(key: string) {
   }
 
   .toolbar,
+  .filter-controls,
   .custom-range {
     align-items: stretch;
     flex-direction: column;
@@ -1151,6 +1150,8 @@ function toggleFocus(key: string) {
     padding: 0 8px;
   }
 
+  .filter-field,
+  .filter-field input,
   .custom-range input {
     width: 100%;
     max-width: none;

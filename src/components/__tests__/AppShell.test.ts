@@ -59,6 +59,18 @@ vi.mock('@/stores/auth', () => ({
   useAuthStore: () => authState,
 }))
 
+// The shell reads the platform title/logo from useBrandStore() (Apollo-backed).
+// No Apollo client exists in the test env, so stub the store with reactive
+// defaults.
+const brandState = reactive({
+  title: { value: '' },
+  logo: { value: null },
+  favicon: { value: null },
+})
+vi.mock('@/stores/brand', () => ({
+  useBrandStore: () => brandState,
+}))
+
 // Imported AFTER the mock is registered.
 import AppShell from '@/components/AppShell.vue'
 import { useLocaleStore } from '@/stores/locale'

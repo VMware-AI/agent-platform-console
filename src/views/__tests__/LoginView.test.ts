@@ -50,6 +50,20 @@ vi.mock('@/stores/auth', () => ({
   useAuthStore: () => authState,
 }))
 
+/* ---------- Mock the brand store ---------- */
+
+// The view reads the platform title from useBrandStore() (Apollo-backed).
+// No Apollo client exists in the test env, so stub the store with a reactive
+// title value.
+const brandState = reactive({
+  title: { value: '' },
+  subtitle: { value: '' },
+  copyright: { value: '' },
+})
+vi.mock('@/stores/brand', () => ({
+  useBrandStore: () => brandState,
+}))
+
 /* ---------- Mock vue-router ---------- */
 
 const pushSpy = vi.fn().mockResolvedValue(undefined)

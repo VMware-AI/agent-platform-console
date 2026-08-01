@@ -53,7 +53,7 @@ export const PROVIDER_DEFAULT_API_BASE: Record<ProviderOption, string> = {
   custom: '',
   deepseek: 'https://api.deepseek.com/v1',
   minimax: 'https://api.minimaxi.com/v1',
-  ollama_chat: 'http://192.0.2.1:11434',
+  ollama_chat: 'http://10.121.166.222:11434',
   moonshot: 'https://api.moonshot.cn/v1',
   openrouter: 'https://openrouter.ai/api/v1',
   openai: 'https://api.openai.com/v1',

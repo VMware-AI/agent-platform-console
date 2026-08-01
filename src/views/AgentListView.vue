@@ -284,13 +284,10 @@ type RowActionKey = 'rotateKey' | 'restart' | 'stop' | 'start' | 'update' | 'del
 
 // Actions vary by status so the menu never shows a no-op (e.g. "stop" on
 // an already-stopped agent or "start" on a running one).
-// Note: `copyAccess` (访问信息) is rendered as its own outline button in the
-// row actions cell — it is intentionally NOT listed here so the three-dot
-// overflow menu doesn't duplicate it.
 const ACTIONS_BY_STATUS: Partial<Record<StatusKey, RowActionKey[]>> = {
-  running:   ['rotateKey', 'update', 'installSkill', 'terminal', 'restart', 'stop', 'delete', 'hardDelete'],
-  stopped:   ['rotateKey', 'update', 'installSkill', 'terminal', 'start', 'delete', 'hardDelete'],
-  exception: ['rotateKey', 'update', 'installSkill', 'terminal', 'restart', 'stop', 'delete', 'hardDelete'],
+  running:   ['rotateKey', 'update', 'installSkill', 'terminal', 'restart', 'stop', 'delete', 'hardDelete', 'copyAccess'],
+  stopped:   ['rotateKey', 'update', 'installSkill', 'terminal', 'start', 'delete', 'hardDelete', 'copyAccess'],
+  exception: ['rotateKey', 'update', 'installSkill', 'terminal', 'restart', 'stop', 'delete', 'hardDelete', 'copyAccess'],
   failed:    ['delete', 'hardDelete'],
   provisioning: ['delete', 'hardDelete'],
 }
@@ -687,7 +684,7 @@ async function doSkillInstall() {
     } catch { skillInstallResults.value[sid] = 'fail' }
   }
   const ok = Object.values(skillInstallResults.value).filter(v => v === 'ok').length
-  if (ok > 0) toast.success(locale.t('skills.installDialog.installDone').replace('{ok}', String(ok)).replace('{total}', String(skillInstallSelected.value.length)))
+  if (ok > 0) toast.success(`安装完成: ${ok}/${skillInstallSelected.value.length} 成功`)
   if (agent) refreshInstalledSkills(agent)
   skillInstallLoading.value = false
 }
@@ -695,7 +692,10 @@ async function doSkillInstall() {
 
 function openRowActions(agent: Agent, target: EventTarget | null) {
   rowActionsTarget.value = agent
-  rowActionsAnchor.value = target as HTMLElement | null
+  const host = (target as HTMLElement | null)?.closest(
+    'cds-button-action',
+  ) as HTMLElement | null
+  rowActionsAnchor.value = host ?? (target as HTMLElement | null)
 }
 
 function closeRowActions() {
@@ -1249,37 +1249,26 @@ const summaryText = computed(() => {
           <cds-grid-cell class="muted time-cell">{{ fmtDateTime(agent.createdAt) }}</cds-grid-cell>
           <cds-grid-cell class="muted time-cell">{{ fmtDateTime(agent.updatedAt) }}</cds-grid-cell>
           <cds-grid-cell>
-            <span class="row-actions">
-              <button
-                type="button"
-                class="row-action"
-                :title="locale.t('agents.action.visit')"
-                @click="onCopyAccess(agent)"
-              >
+            <span class="actions-cell">
+              <cds-button action="outline" size="sm" @click="onCopyAccess(agent)">
                 <cds-icon shape="eye" size="sm" aria-hidden="true"></cds-icon>
-                <span>{{ locale.t('agents.action.visit') }}</span>
-              </button>
-              <button
-                type="button"
-                class="row-action"
+                {{ locale.t('agents.action.visit') }}
+              </cds-button>
+              <cds-button
+                action="outline"
+                size="sm"
                 :disabled="agent.status === 'exception'"
-                :title="agent.status === 'exception' ? locale.t('agents.action.exceptionConfigureBlocked') : locale.t('agents.action.configure')"
+                :title="agent.status === 'exception' ? locale.t('agents.action.exceptionConfigureBlocked') : undefined"
                 @click="onConfigure(agent)"
               >
                 <cds-icon shape="cog" size="sm" aria-hidden="true"></cds-icon>
-                <span>{{ locale.t('agents.action.configure') }}</span>
-              </button>
-              <button
-                type="button"
+                {{ locale.t('agents.action.configure') }}
+              </cds-button>
+              <cds-button-action
                 :id="`row-actions-trigger-${agent.id}`"
-                class="row-action"
                 :aria-label="locale.t('agents.action.more')"
-                :title="locale.t('agents.action.more')"
-                @click="(e: MouseEvent) => openRowActions(agent, e.currentTarget)"
-              >
-                <cds-icon shape="ellipsis-vertical" size="sm" aria-hidden="true"></cds-icon>
-                <span>{{ locale.t('agents.action.more') }}</span>
-              </button>
+                @click="(e: MouseEvent) => openRowActions(agent, e.target)"
+              ></cds-button-action>
             </span>
           </cds-grid-cell>
         </cds-grid-row>
@@ -1550,15 +1539,15 @@ const summaryText = computed(() => {
     <!-- Skill Install Dialog -->
     <cds-modal :hidden="!skillInstallOpen" closable size="md" @closeChange="skillInstallOpen = false">
       <cds-modal-header>
-        <h2 cds-text="subsection">{{ locale.t('skills.installDialog.title').replace('{name}', skillInstallAgent?.name ?? '') }}</h2>
+        <h2 cds-text="subsection">安装 Skill — {{ skillInstallAgent?.name }}</h2>
       </cds-modal-header>
       <cds-modal-content>
         <div v-if="installableSkills.length === 0" cds-text="body" style="color:#888;padding:16px">
-          {{ locale.t('skills.installDialog.empty') }}
+          暂无可用离线 Skill。请先在 Skills 管理中同步离线包。
         </div>
         <div v-else cds-layout="vertical gap:sm p:sm">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;color:#6b7280;font-size:12px">
-            <span>{{ skillInstalledLoading ? locale.t('skills.installDialog.checking') : locale.t('skills.installDialog.count').replace('{count}', String(installableSkills.length)) }}</span>
+            <span>{{ skillInstalledLoading ? '正在检查已安装状态...' : `离线包 ${installableSkills.length} 个` }}</span>
             <span>{{ skillInstallSummary }}</span>
           </div>
           <label v-for="s in pagedInstallableSkills" :key="s.id" style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer">
@@ -1566,26 +1555,26 @@ const summaryText = computed(() => {
             <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">
               <strong>{{ s.name }}</strong> <span style="color:#888;font-size:12px">v{{ s.version }}</span>
               <template v-if="s.agentTypes?.length"><span v-for="at in s.agentTypes" :key="at" style="background:#e8d5f5;color:#6b3a8b;font-size:10px;padding:1px 5px;border-radius:4px;margin-left:2px">{{ at }}</span></template>
-              <span v-else style="background:#e5e7eb;color:#6b7280;font-size:10px;padding:1px 5px;border-radius:4px;margin-left:2px">{{ locale.t('skills.installDialog.noAgentTypes') }}</span>
+              <span v-else style="background:#e5e7eb;color:#6b7280;font-size:10px;padding:1px 5px;border-radius:4px;margin-left:2px">全部</span>
               <span v-if="s.category" style="margin-left:8px;font-size:11px;color:#2563EB;background:#eff6ff;padding:1px 6px;border-radius:4px">{{ s.category }}</span>
-              <span v-if="skillInstalled[s.id]" style="margin-left:auto;font-size:11px;color:#047857;background:#ecfdf5;padding:1px 6px;border-radius:4px">{{ locale.t('skills.installDialog.installed') }}</span>
-              <span v-else style="margin-left:auto;font-size:11px;color:#6b7280;background:#f3f4f6;padding:1px 6px;border-radius:4px">{{ locale.t('skills.installDialog.notInstalled') }}</span>
+              <span v-if="skillInstalled[s.id]" style="margin-left:auto;font-size:11px;color:#047857;background:#ecfdf5;padding:1px 6px;border-radius:4px">已安装</span>
+              <span v-else style="margin-left:auto;font-size:11px;color:#6b7280;background:#f3f4f6;padding:1px 6px;border-radius:4px">未安装</span>
               <span v-if="skillInstallResults[s.id] === 'ok'" style="margin-left:auto;color:#059669">✅</span>
               <span v-else-if="skillInstallResults[s.id] === 'fail'" style="margin-left:auto;color:#dc2626">❌</span>
               <span v-else-if="skillInstallResults[s.id] === 'pending'" style="margin-left:auto;color:#9ca3af">⏳</span>
             </div>
           </label>
           <div v-if="skillInstallTotalPages > 1" style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-top:4px">
-            <cds-button size="sm" kind="secondary" :disabled="skillInstallPage <= 1 || skillInstallLoading" @click="skillInstallPage = Math.max(1, skillInstallPage - 1)">{{ locale.t('skills.installDialog.prev') }}</cds-button>
-            <span style="font-size:12px;color:#6b7280">{{ locale.t('skills.installDialog.pageOf').replace('{page}', String(skillInstallPage)).replace('{total}', String(skillInstallTotalPages)) }}</span>
-            <cds-button size="sm" kind="secondary" :disabled="skillInstallPage >= skillInstallTotalPages || skillInstallLoading" @click="skillInstallPage = Math.min(skillInstallTotalPages, skillInstallPage + 1)">{{ locale.t('skills.installDialog.next') }}</cds-button>
+            <cds-button size="sm" kind="secondary" :disabled="skillInstallPage <= 1 || skillInstallLoading" @click="skillInstallPage = Math.max(1, skillInstallPage - 1)">上一页</cds-button>
+            <span style="font-size:12px;color:#6b7280">第 {{ skillInstallPage }} / {{ skillInstallTotalPages }} 页</span>
+            <cds-button size="sm" kind="secondary" :disabled="skillInstallPage >= skillInstallTotalPages || skillInstallLoading" @click="skillInstallPage = Math.min(skillInstallTotalPages, skillInstallPage + 1)">下一页</cds-button>
           </div>
         </div>
       </cds-modal-content>
       <cds-modal-actions>
-        <cds-button kind="secondary" @click="skillInstallOpen = false; skillInstallResults = {}">{{ locale.t('skills.installDialog.close') }}</cds-button>
+        <cds-button kind="secondary" @click="skillInstallOpen = false; skillInstallResults = {}">关闭</cds-button>
         <cds-button kind="primary" :disabled="skillInstallSelected.length === 0 || skillInstallLoading" @click="doSkillInstall">
-          {{ skillInstallLoading ? locale.t('skills.installDialog.installing') : locale.t('skills.installDialog.installOne').replace('{count}', String(skillInstallSelected.length)) }}
+          {{ skillInstallLoading ? '安装中...' : `安装 ${ skillInstallSelected.length } 个 Skill` }}
         </cds-button>
       </cds-modal-actions>
     </cds-modal>
@@ -1977,48 +1966,15 @@ const summaryText = computed(() => {
   gap: 6px;
 }
 
-/* Row action buttons — matches the icon-above / label-below style used by
-   ModelGatewayView.vue so the 操作 column reads as one design system across
-   the console. Plain <button> element so we can override the cds-button
-   theme defaults (which would otherwise paint a fill on outline / solid
-   actions). */
-.row-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.row-action {
+.actions-cell {
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 2px;
-  min-width: 40px;
-  padding: 2px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--cds-alias-object-interaction-color, #006e9c);
-  font: inherit;
-  cursor: pointer;
-}
-.row-action span {
-  font-size: 10px;
-  line-height: 1.15;
-  white-space: nowrap;
-}
-.row-action:focus-visible {
-  outline: 2px solid var(--cds-alias-status-info, #0079ad);
-  outline-offset: 1px;
-}
-.row-action:disabled,
-.row-action.disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-.row-action.danger {
-  color: var(--cds-alias-status-danger, #c92100);
+  gap: 6px;
+  /* Allow buttons to wrap to a second line when the 操作 column is too
+     narrow to hold them all on one row — the alternative (clipping) would
+     hide part of "访问信息" / "配置". The wrapped row is slightly taller
+     than its neighbours; cds-grid handles the alignment automatically. */
+  flex-wrap: wrap;
 }
 
 /* ---------- Dropdown menu options (used by AppDropdown for batch/more actions
