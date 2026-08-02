@@ -36,3 +36,34 @@ cds-tag,
 cds-badge {
   --color: var(--cds-alias-object-app-foreground, #1b1b1b);
 }
+
+/* Note: setting `cds-modal cds-card { display: block; width: 100% }` here
+   does NOT reliably force modal cards to fill the modal width — Clarity's
+   cds-card host resolves its intrinsic width from its slotted content,
+   not from the host-level width declaration. Inside the metering settings
+   modal the actual fix is per-page: give every direct child of the
+   cds-card (e.g. .card-header) an explicit `width: 100%`, which makes the
+   slotted subtree span the available width and pulls the host with it.
+   See CostRulesPage.vue for the working pattern. */
+
+/* Slot children inside a modal card need explicit horizontal padding —
+   cds-card itself ships no inner padding, so titles, form fields, tables
+   and result blocks all sit flush against the card's edges. This rule
+   applies the indent uniformly to every direct child of a modal card. */
+cds-modal cds-card > * {
+  padding-left: 16px;
+  padding-right: 16px;
+  box-sizing: border-box;
+}
+/* First/last children bleed to the top/bottom edges of the card so the
+   padding only indents horizontally — vertical rhythm stays unchanged. */
+cds-modal cds-card > *:first-child {
+  padding-top: 0;
+}
+cds-modal cds-card > *:last-child {
+  padding-bottom: 0;
+}
+/* Direct children that already set their own width (e.g. the
+   cost-rules page's `.card-header { width: 812px }`) still receive the
+   horizontal padding via box-sizing: border-box; the padding eats into
+   the explicit width rather than pushing past the card edge. */

@@ -36,6 +36,9 @@ const saved = ref(false)
 async function handleSave(): Promise<void> {
   const current = result.value?.costRuleConfig
   if (!current) return
+  // 当前所有字段都不可编辑（radio 用 :checked 静态绑定，checkbox 全 disabled），
+  // 永远没有 dirty，直接短路避免 no-op POST。
+  if (!isDirty()) return
   const input: UpdateCostRulesInput = {
     missingPriceAction: current.missingPriceAction,
     chargeFailedRequests: current.chargeFailedRequests,
@@ -48,10 +51,23 @@ async function handleSave(): Promise<void> {
     alertMonthlyBudget: current.alertMonthlyBudget,
     alertUsageSpike: current.alertUsageSpike,
   }
+  // 失败时直接抛给上层（modal 由 toast 兜底），saved 保持 false，
+  // modalSaved 就不会误显示「已保存」。
   await saveRules({ input })
   saved.value = true
   setTimeout(() => { saved.value = false }, 2000)
 }
+
+// 当前页面所有字段不可编辑，所以永远 clean。保留这个钩子是为了和
+// CurrencySettingsPage 对称（同样暴露 isDirty 给父级 modal），未来若加
+// 可编辑字段，只把这里改为实际比较即可。
+function isDirty(): boolean {
+  return false
+}
+
+// 在 modal 化后，保存按钮被移到了 MeteringCenterView 的 cds-modal-actions 底部，
+// 这里把 handleSave / saving / saved 暴露给父组件调用。
+defineExpose({ handleSave, saving, saved, isDirty })
 </script>
 
 <template>
@@ -60,9 +76,6 @@ async function handleSave(): Promise<void> {
     <cds-card>
       <div class="card-header">
         <h2>{{ locale.t('meteringSetting.missingPriceTitle') }}</h2>
-        <cds-button status="primary" size="sm" @click="handleSave" :loading="saving">
-          {{ saved ? locale.t('branding.saved') : locale.t('branding.save') }}
-        </cds-button>
       </div>
       <p class="card-desc">{{ locale.t('meteringSetting.missingPriceDesc') }}</p>
       <div v-if="loading" class="empty-state">{{ locale.t('meteringSetting.notConfigured') }}</div>
@@ -166,11 +179,20 @@ async function handleSave(): Promise<void> {
   flex-direction: column;
   gap: 16px;
 }
+/* cds-card inside the modal is forced block + 100% via global.css
+   (`cds-modal cds-card { ... }`) so cards here fill the modal width. */
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-top: 8px;
   margin-bottom: 8px;
+  /* 硬编码 812px：cds-card host 的 width 不响应 light DOM 选择器，
+     实际尺寸靠 slot 内的内容反向撑开。手动验证 812px 时 cds-card 铺满
+     modal-lg（约 691px dialog + padding）的内容区。 */
+  width: 812px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .card-header h2 {
   margin: 0;
@@ -239,6 +261,5 @@ async function handleSave(): Promise<void> {
 .empty-state {
   color: var(--cds-alias-object-app-foreground-subtle, #667085);
   font-size: 13px;
-  padding: 12px 0;
 }
 </style>

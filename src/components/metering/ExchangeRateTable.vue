@@ -134,6 +134,7 @@ function statusBadge(status: string): 'success' | 'neutral' {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-top: 8px;
   margin-bottom: 12px;
 }
 .card-header h2 {
@@ -187,6 +188,5 @@ function statusBadge(status: string): 'success' | 'neutral' {
 .loading, .empty {
   color: var(--cds-alias-object-app-foreground-subtle, #667085);
   font-size: 13px;
-  padding: 12px 0;
 }
 </style>

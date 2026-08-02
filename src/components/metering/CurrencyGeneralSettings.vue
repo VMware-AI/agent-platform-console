@@ -3,21 +3,35 @@ import { ref, watch } from 'vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useCurrencySettings } from '@/composables/useCurrencySettings'
 import { SUPPORTED_CURRENCIES } from '@/types/metering-settings'
+import type { UpdateCurrencySettingsInput } from '@/types/metering-settings'
 
 const locale = useLocaleStore()
-const { result, loading, saving, saveSettings } = useCurrencySettings()
+const { result, loading } = useCurrencySettings()
 
 const baseCurrency = ref('USD')
 const displayCurrency = ref('CNY')
 const precision = ref(2)
-const saved = ref(false)
 
+// Snapshot of the values as they were when the query first resolved.
+// Used to compute isDirty so the parent modal can skip the mutation when
+// the user hasn't changed anything (avoids no-op POSTs on every save click).
+let snapshot: { baseCurrency: string; defaultDisplayCurrency: string; amountPrecision: number } | null = null
 
 // Sync from query result
 watch(
   () => result.value?.currencySettings,
   (v: { baseCurrency?: string; defaultDisplayCurrency?: string; amountPrecision?: number } | null | undefined) => {
     if (v) {
+      // Only seed the snapshot on the first non-null result; later queries
+      // (post-save refetch) shouldn't overwrite it — otherwise isDirty would
+      // always reset to false the moment a save lands.
+      if (!snapshot) {
+        snapshot = {
+          baseCurrency: v.baseCurrency ?? baseCurrency.value,
+          defaultDisplayCurrency: v.defaultDisplayCurrency ?? displayCurrency.value,
+          amountPrecision: v.amountPrecision ?? precision.value,
+        }
+      }
       baseCurrency.value = v.baseCurrency ?? baseCurrency.value
       displayCurrency.value = v.defaultDisplayCurrency ?? displayCurrency.value
       precision.value = v.amountPrecision ?? precision.value
@@ -26,25 +40,32 @@ watch(
   { immediate: true },
 )
 
-async function handleSave(): Promise<void> {
-  await saveSettings({
+// 把当前表单值以函数 getter 暴露给父级 CurrencySettingsPage，由父级统一触发保存。
+// 之前这里自行 useMutation + 暴露 saving/saved，但 modal 化后两层 defineExpose getter
+// 嵌套会让响应式追踪不稳（activePage.value.saving 的 computed 不一定在 Apollo loading
+// 变化时重算），所以保存逻辑整体上移到父级，本组件只负责表单状态 + 取值。
+defineExpose({
+  getValues: (): UpdateCurrencySettingsInput => ({
     baseCurrency: baseCurrency.value,
     defaultDisplayCurrency: displayCurrency.value,
     amountPrecision: precision.value,
     preserveOriginalAmount: true,
-  })
-  saved.value = true
-  setTimeout(() => { saved.value = false }, 2000)
-}
+  }),
+  isDirty: (): boolean => {
+    if (!snapshot) return false
+    return (
+      snapshot.baseCurrency !== baseCurrency.value ||
+      snapshot.defaultDisplayCurrency !== displayCurrency.value ||
+      snapshot.amountPrecision !== precision.value
+    )
+  },
+})
 </script>
 
 <template>
   <cds-card>
     <div class="card-header">
       <h2>{{ locale.t('meteringSetting.currency') }}</h2>
-      <cds-button status="primary" size="sm" @click="handleSave" :loading="saving">
-        {{ saved ? locale.t('branding.saved') : locale.t('branding.save') }}
-      </cds-button>
     </div>
 
     <div v-if="loading" class="loading">...</div>
@@ -95,6 +116,7 @@ async function handleSave(): Promise<void> {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-top: 8px;
   margin-bottom: 12px;
 }
 .card-header h2 {

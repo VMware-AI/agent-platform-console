@@ -41,7 +41,6 @@ export const STRINGS: Dict = {
   'nav.system.users': { zh: '用户与权限', en: 'Users & Roles' },
   'nav.system.skills': { zh: '技能管理', en: 'Skills Management' },
   'nav.system.branding': { zh: '平台设置', en: 'Platform Settings' },
-  'nav.obs.metering.settings': { zh: '计量中心设置', en: 'Metering Settings' },
 
   /* ---------- 平台设置 / Branding (BrandingSettingsView) ---------- */
   'branding.title':       { zh: '平台设置',         en: 'Platform Settings' },
