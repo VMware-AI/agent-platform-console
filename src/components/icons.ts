@@ -72,6 +72,7 @@ import {
   connectIcon,
   networkGlobeIcon,
   colorPaletteIcon,
+  certificateIcon,
 } from '@cds/core/icon'
 
 // Register once at module load. Idempotent — safe to import multiple times.
@@ -147,4 +148,5 @@ ClarityIcons.addIcons(
   connectIcon,
   networkGlobeIcon,
   colorPaletteIcon,
+  certificateIcon,
 )

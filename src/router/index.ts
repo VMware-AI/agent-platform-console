@@ -145,6 +145,12 @@ const router = createRouter({
           component: () => import('@/views/BrandingSettingsView.vue'),
           meta: { roles: ['admin'] },
         },
+        {
+          path: 'platform/license',
+          name: 'platform.license',
+          component: () => import('@/views/LicenseView.vue'),
+          meta: { roles: ['admin'] },
+        },
 
         // 个人资料: any authenticated user; reads `me` (which all roles have).
         // Rendered as a modal overlay (see ProfileView / AppShell) rather than
