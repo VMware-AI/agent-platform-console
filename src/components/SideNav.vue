@@ -63,7 +63,6 @@ const groups: Group[] = [
     icon: 'eye',
     children: [
       { name: 'obs.metering', labelKey: 'nav.obs.metering', icon: 'bar-chart',    to: '/observability/metering' },
-      { name: 'obs.metering.settings', labelKey: 'nav.obs.metering.settings', icon: 'cog', to: '/observability/metering/settings' },
       { name: 'obs.monitor',  labelKey: 'nav.obs.monitor',  icon: 'dashboard',    to: '/observability/monitor' },
       { name: 'obs.requests', labelKey: 'nav.obs.requests', icon: 'list',         to: '/observability/requests' },
       { name: 'obs.audit',    labelKey: 'nav.obs.audit',    icon: 'shield-check', to: '/observability/audit' },

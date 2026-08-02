@@ -78,6 +78,7 @@ const router = createRouter({
         // mutations are gated server-side as well (see backend rbac.go).
         {
           path: 'observability/metering/settings',
+          name: 'obs.metering.settings',
           component: () => import('@/views/MeteringSettingsView.vue'),
           meta: { roles: ['admin'] },
           children: [
