@@ -77,8 +77,7 @@ const groups: Group[] = [
       { name: 'platform.gateway',   labelKey: 'nav.system.gateway',   icon: 'router',        to: '/platform/gateway' },
       { name: 'platform.users',     labelKey: 'nav.system.users',     icon: 'users',         to: '/platform/users' },
       { name: 'platform.skills',    labelKey: 'nav.system.skills',    icon: 'wrench',        to: '/platform/skills' },
-      { name: 'platform.branding',  labelKey: 'nav.system.branding',  icon: 'color-palette', to: '/platform/branding' },
-      { name: 'platform.license',   labelKey: 'nav.system.license',   icon: 'certificate',   to: '/platform/license' },
+      { name: 'platform.settings',  labelKey: 'nav.system.settings',  icon: 'cog',           to: '/platform/settings' },
     ],
   },
 ]

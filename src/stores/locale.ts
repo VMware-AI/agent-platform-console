@@ -40,11 +40,18 @@ export const STRINGS: Dict = {
   'nav.system.gateway': { zh: '模型网关接入', en: 'Gateway Connections' },
   'nav.system.users': { zh: '用户与权限', en: 'Users & Roles' },
   'nav.system.skills': { zh: '技能管理', en: 'Skills Management' },
-  'nav.system.branding': { zh: '平台设置', en: 'Platform Settings' },
+  'nav.system.branding': { zh: '个性化设置', en: 'Personalization' },
   'nav.system.license': { zh: '许可管理', en: 'License' },
+  'nav.system.settings': { zh: '平台设置', en: 'Platform Settings' },
 
-  /* ---------- 平台设置 / Branding (BrandingSettingsView) ---------- */
-  'branding.title': { zh: '平台设置', en: 'Platform Settings' },
+  /* ---------- 平台设置 / Settings (SettingsView double-tab container) ---------- */
+  'settings.title': { zh: '平台设置', en: 'Platform Settings' },
+  'settings.description': {
+    zh: '管理平台许可与外观个性化配置。',
+    en: 'Manage platform license and appearance personalization.',
+  },
+  /* ---------- 平台设置 / Branding (BrandingSettingsView → BrandingTab) ---------- */
+  'branding.title': { zh: '个性化设置', en: 'Personalization' },
   'branding.desc': {
     zh: '统一管理平台品牌 Logo、登录页样式与版权信息。',
     en: 'Manage platform logo, login page look, and footer info.',
