@@ -5,12 +5,13 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useQuery } from '@vue/apollo-composable'
 import gql from 'graphql-tag'
-import { VSPHERE_RESOURCE_POOLS_QUERY, VSPHERE_NETWORKS_QUERY, UNBOUND_KEYS_QUERY, INSTANT_CLONE_PARENTS_QUERY } from '@/api/graphql/queries/vsphere'
+import { VSPHERE_RESOURCE_POOLS_QUERY, VSPHERE_NETWORKS_QUERY, VSPHERE_DATASTORES_QUERY, UNBOUND_KEYS_QUERY, INSTANT_CLONE_PARENTS_QUERY } from '@/api/graphql/queries/vsphere'
 import type { ResourcePool } from '@/types/resource-pool'
 import type {
   DeployAgentInput, OvaTemplateFamily,
   VsphereResourcePool, VsphereResourcePoolsQueryResult, VsphereResourcePoolsQueryVars,
   VsphereNetwork, VsphereNetworksQueryResult, VsphereNetworksQueryVars,
+  VsphereDatastore, VsphereDatastoresQueryResult, VsphereDatastoresQueryVars,
 } from '@/types/marketplace'
 import '@/components/icons'
 import { useLocaleStore } from '@/stores/locale'
@@ -22,7 +23,7 @@ const locale = useLocaleStore()
 
 /* ════════════ 区块 1: 基础运行环境 ════════════ */
 const globalForm = reactive({
-  versionId: '', resourcePoolId: '', placementPool: '', targetNetwork: '',
+  versionId: '', resourcePoolId: '', placementPool: '', targetNetwork: '', targetDatastore: '',
   cloneMode: 'full' as 'full' | 'instant', instantCloneParent: '',
   parentSource: 'existing' as 'existing' | 'create',
   newParents: [{ name: 'ic-p', ip: '' }] as Array<{ name: string; ip: string }>,
@@ -121,6 +122,8 @@ const vspherePools = computed<VsphereResourcePool[]>(() => vRes.value?.vsphereRe
 const vspherePoolsLoading = computed(() => vOn.value && vspherePools.value.length === 0)
 const { result: nRes } = useQuery<VsphereNetworksQueryResult, VsphereNetworksQueryVars>(VSPHERE_NETWORKS_QUERY, () => ({ resourcePoolId: globalForm.resourcePoolId }), () => ({ enabled: vOn.value, fetchPolicy: 'cache-first' }))
 const vsphereNetworks = computed<VsphereNetwork[]>(() => nRes.value?.vsphereNetworks ?? [])
+const { result: dRes } = useQuery<VsphereDatastoresQueryResult, VsphereDatastoresQueryVars>(VSPHERE_DATASTORES_QUERY, () => ({ resourcePoolId: globalForm.resourcePoolId }), () => ({ enabled: vOn.value, fetchPolicy: 'cache-first' }))
+const vsphereDatastores = computed<VsphereDatastore[]>(() => dRes.value?.vsphereDatastores ?? [])
 const { result: uRes } = useQuery(UNBOUND_KEYS_QUERY, null, () => ({ enabled: computed(() => props.open), fetchPolicy: 'cache-and-network' }))
 const unboundKeys = computed(() => uRes.value?.unboundKeys ?? [])
 const keySearch = ref('')
@@ -147,6 +150,14 @@ const versionList = computed(() => props.template ? [...props.template.versions]
 const networksGrouped = computed(() => {
   const g: Record<string, VsphereNetwork[]> = {}
   for (const n of vsphereNetworks.value) { const k = n.type === 'distributed' ? (n.dvsName || 'Distributed') : 'Standard'; if (!g[k]) g[k] = []; g[k].push(n) }
+  return g
+})
+
+// Datastores are grouped by their datacenter (the first segment of the full
+// inventory path, e.g. "/DC0/datastore/vsanDatastore" → "DC0").
+const datastoresGrouped = computed(() => {
+  const g: Record<string, VsphereDatastore[]> = {}
+  for (const ds of vsphereDatastores.value) { const k = ds.path.split('/').filter(Boolean)[0] || 'Datacenter'; if (!g[k]) g[k] = []; g[k].push(ds) }
   return g
 })
 
@@ -214,7 +225,7 @@ function submit() {
     return {
       name: r.hostname.trim(), templateFamilyId: props.template?.id ?? '', templateVersionId: globalForm.versionId,
       resourcePoolId: globalForm.resourcePoolId, targetResourcePool: globalForm.placementPool || null,
-      targetNetwork: globalForm.targetNetwork || null, hostname: r.hostname.trim() || null,
+      targetNetwork: globalForm.targetNetwork || null, targetDatastore: globalForm.targetDatastore || null, hostname: r.hostname.trim() || null,
       keySource: (r.keyBinding ? 'existing' : 'new') as 'new' | 'existing',
       existingKeyId: r.keyBinding || null, cloneMode: globalForm.cloneMode,
       instantCloneParent: globalForm.cloneMode === 'instant' && globalForm.parentSource === 'existing' ? globalForm.instantCloneParent || null : null,
@@ -235,7 +246,7 @@ function submit() {
 watch(() => props.open, (o) => {
   if (o && props.template) {
     const v = props.template.versions[0]
-    Object.assign(globalForm, { versionId: v?.id ?? '', resourcePoolId: props.pools[0]?.id ?? '', placementPool: '', targetNetwork: '', cloneMode: 'full', instantCloneParent: '', parentSource: 'existing', newParents: [{ name: 'ic-p', ip: '' }] })
+    Object.assign(globalForm, { versionId: v?.id ?? '', resourcePoolId: props.pools[0]?.id ?? '', placementPool: '', targetNetwork: '', targetDatastore: '', cloneMode: 'full', instantCloneParent: '', parentSource: 'existing', newParents: [{ name: 'ic-p', ip: '' }] })
     Object.assign(securityForm, { runAsUser: 'vmware', password: '', confirmPassword: '', sshKey: '' })
     Object.assign(deployPolicy, { ipMode: 'dhcp', netmask: '255.255.255.0', gateway: '172.16.85.1', dns: '172.16.85.1' })
     deployMode.value = 'single'
@@ -280,6 +291,7 @@ watch(() => props.open, (o) => {
             <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.version') }}</label><select v-model="globalForm.versionId"><option v-for="v in versionList" :key="v.id" :value="v.id">{{ v.version }}</option></select></cds-select>
             <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.placementPool') }}</label><select v-model="globalForm.placementPool"><option value="" disabled>{{ vspherePoolsLoading ? '加载中…' : locale.t('deployAgent.selectPlaceholder') }}</option><option v-for="p in vspherePools" :key="p.path" :value="p.path">{{ p.name }}</option></select></cds-select>
             <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.targetNetwork') }}</label><select v-model="globalForm.targetNetwork"><option value="">{{ locale.t('deployAgent.inheritDefault') }}</option><optgroup v-for="(nets,g) in networksGrouped" :key="g" :label="g"><option v-for="n in nets" :key="n.path" :value="n.path">{{ n.name }}</option></optgroup></select></cds-select>
+            <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.targetDatastore') }}</label><select v-model="globalForm.targetDatastore"><option value="">{{ locale.t('deployAgent.datastoreDefault') }}</option><optgroup v-for="(dss,g) in datastoresGrouped" :key="g" :label="g"><option v-for="ds in dss" :key="ds.path" :value="ds.path">{{ ds.name }}</option></optgroup></select></cds-select>
             <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.cloneMode') }}</label><select v-model="globalForm.cloneMode"><option value="full">{{ locale.t('deployAgent.cloneMode.full') }}</option><option value="instant">{{ locale.t('deployAgent.cloneMode.instant') }}</option></select></cds-select>
           </div>
           <template v-if="globalForm.cloneMode==='instant'">
