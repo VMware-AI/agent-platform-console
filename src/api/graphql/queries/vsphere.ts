@@ -29,6 +29,20 @@ export const VSPHERE_NETWORKS_QUERY = gql`
   }
 `
 
+/**
+ * Lists all datastores in a platform resource pool's vCenter. The picked
+ * datastore's `path` is sent as DeployAgentInput.targetDatastore. Admin-only
+ * (it dials vCenter with the pool's privileged credentials).
+ */
+export const VSPHERE_DATASTORES_QUERY = gql`
+  query VsphereDatastores($resourcePoolId: ID!) {
+    vsphereDatastores(resourcePoolId: $resourcePoolId) {
+      name
+      path
+    }
+  }
+`
+
 export const CONTENT_LIBRARIES_QUERY = gql`
   query ContentLibraries($resourcePoolId: ID!) {
     contentLibraries(resourcePoolId: $resourcePoolId)

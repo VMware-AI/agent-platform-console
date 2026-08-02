@@ -234,6 +234,10 @@ export interface DeployAgentInput {
   maxBudget?: number | null
   /** Optional target portgroup path for the agent VM's NIC (VsphereNetwork.path). */
   targetNetwork?: string | null
+  /** Optional target datastore inventory path for the clone
+   * (VsphereDatastore.path, e.g. "/DC0/datastore/vsanDatastore").
+   * Empty = platform default datastore (vsanDatastore). */
+  targetDatastore?: string | null
   /** Department whose gateway issues the key. */
   departmentId?: string | null
   /** OVF/vApp properties from the template, keyed by property id. */
@@ -294,4 +298,20 @@ export interface VsphereNetworksQueryVars {
 
 export interface VsphereNetworksQueryResult {
   vsphereNetworks: VsphereNetwork[]
+}
+
+/** A vCenter datastore shown in the deploy form's storage picker. `path` is the
+ * full inventory path (e.g. "/DC0/datastore/vsanDatastore") sent as
+ * DeployAgentInput.targetDatastore; `name` is the human label. */
+export interface VsphereDatastore {
+  name: string
+  path: string
+}
+
+export interface VsphereDatastoresQueryVars {
+  resourcePoolId: string
+}
+
+export interface VsphereDatastoresQueryResult {
+  vsphereDatastores: VsphereDatastore[]
 }

@@ -3453,6 +3453,11 @@ export const STRINGS: Dict = {
     en: 'vSphere placement pool',
   },
   'deployAgent.label.targetNetwork': { zh: '目标端口组', en: 'Target port group' },
+  'deployAgent.label.targetDatastore': { zh: '目标数据存储', en: 'Target datastore' },
+  'deployAgent.datastoreDefault': {
+    zh: '默认(vsanDatastore)',
+    en: 'Default (vsanDatastore)',
+  },
   'deployAgent.label.cloneMode': { zh: '克隆模式', en: 'Clone mode' },
   'deployAgent.cloneMode.full': { zh: '全量克隆', en: 'Full clone' },
   'deployAgent.cloneMode.instant': { zh: '即时克隆', en: 'Instant clone' },
