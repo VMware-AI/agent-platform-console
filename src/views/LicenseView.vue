@@ -12,7 +12,7 @@ import {
 const locale = useLocaleStore()
 const toast = useToast()
 
-const { result, refetch, onResult } = useQuery(LICENSE_STATUS_QUERY, undefined, () => ({
+const { refetch, onResult } = useQuery(LICENSE_STATUS_QUERY, undefined, () => ({
   fetchPolicy: 'network-only',
 }))
 
