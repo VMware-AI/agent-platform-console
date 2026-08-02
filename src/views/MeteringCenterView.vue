@@ -12,10 +12,11 @@
 //   - 2-col detail table row: by-model and by-date, with right-aligned
 //     numbers, sticky header, ellipsis + tooltip, tabular-nums.
 
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
 import {
@@ -45,8 +46,9 @@ import GatewaySpendPanel from '@/views/metering/GatewaySpendPanel.vue'
 import { fmtMoney, fmtNumber, fmtCompact, truncate, shortDate } from '@/utils/meter-format'
 import '@/components/icons'
 
-type MeteringSource = 'platform' | 'gateway'
+type MeteringSource = 'platform' | 'gateway' | 'settings'
 const source = ref<MeteringSource>('platform')
+const auth = useAuthStore()
 type TimeRange = '7d' | '30d' | 'month'
 type UsageStatus = 'normal' | 'warning'
 
@@ -87,10 +89,26 @@ const drillModel = ref<string | null>(null)
 const customFrom = ref('')
 const customTo = ref('')
 
-const sourceTabs = computed(() => [
-  { key: 'platform', label: locale.t('metering.source.platform') },
-  { key: 'gateway', label: locale.t('metering.source.gateway') },
-])
+const sourceTabs = computed(() => {
+  const tabs: Array<{ key: MeteringSource; label: string }> = [
+    { key: 'platform', label: locale.t('metering.source.platform') },
+    { key: 'gateway', label: locale.t('metering.source.gateway') },
+  ]
+  // 计量中心设置入口 — 从二级菜单移入页内标签，仅 admin 可见
+  if (auth.role === 'admin') {
+    tabs.push({ key: 'settings', label: locale.t('nav.obs.metering.settings') })
+  }
+  return tabs
+})
+
+// 计量中心设置标签：点击后跳转到设置页，并把 source 恢复为 platform
+// （settings 不是页内数据源，仅作为跳转入口）。
+watch(source, (v) => {
+  if (v === 'settings') {
+    void router.push({ name: 'obs.metering.settings' })
+    source.value = 'platform'
+  }
+})
 
 const timeRanges: Array<{ key: TimeRange; label: string }> = [
   { key: '7d', label: locale.t('metering.range.7d') },

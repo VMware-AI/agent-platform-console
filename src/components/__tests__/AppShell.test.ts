@@ -31,12 +31,7 @@ import { reactive } from 'vue'
 import { defineComponent, h } from 'vue'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import {
-  createRouter,
-  createMemoryHistory,
-  type Router,
-  type RouteRecordRaw,
-} from 'vue-router'
+import { createRouter, createMemoryHistory, type Router, type RouteRecordRaw } from 'vue-router'
 
 /* ---------- Mock the auth store ---------- */
 
@@ -49,9 +44,10 @@ const logoutSpy = vi.fn(async () => {
 })
 
 const authState = reactive({
-  user: { email: 'admin@example.com', displayName: 'Ada Admin' } as
-    | { email: string; displayName: string }
-    | null,
+  user: { email: 'admin@example.com', displayName: 'Ada Admin' } as {
+    email: string
+    displayName: string
+  } | null,
   logout: logoutSpy,
 })
 
@@ -224,9 +220,7 @@ describe('AppShell — logout wiring', () => {
     // The logout option carries the `user.logout` locale label; find it by text
     // among the menu's option button(s).
     const logoutLabel = locale.t('user.logout')
-    const logoutBtn = userMenu
-      .findAll('button.opt')
-      .find((b) => b.text().includes(logoutLabel))
+    const logoutBtn = userMenu.findAll('button.opt').find((b) => b.text().includes(logoutLabel))
     expect(logoutBtn, 'logout menu item should be rendered').toBeTruthy()
 
     await logoutBtn!.trigger('click')

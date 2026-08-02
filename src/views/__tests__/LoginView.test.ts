@@ -98,7 +98,11 @@ function isSubmitLoading(wrapper: VueWrapper): boolean {
   return submitButton(wrapper).attributes('loading') === 'true'
 }
 
-async function fillCredentials(wrapper: VueWrapper, email = VALID_EMAIL, password = VALID_PASSWORD) {
+async function fillCredentials(
+  wrapper: VueWrapper,
+  email = VALID_EMAIL,
+  password = VALID_PASSWORD,
+) {
   await emailInput(wrapper).setValue(email)
   await passwordInput(wrapper).setValue(password)
 }
