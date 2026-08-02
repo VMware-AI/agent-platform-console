@@ -202,7 +202,7 @@ const previewStyle = computed(() => ({ '--brand-primary': primaryColor.value || 
 .asset-box{border:1px dashed #d0d5dd;border-radius:8px;padding:12px;background:#f8fafc;display:flex;flex-direction:column;gap:8px}.asset-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .asset-acts{display:flex;gap:8px}.fl{font-size:12px;font-weight:600;color:#1d2939}
 .pv{min-height:40px;display:flex;align-items:center;gap:8px}.pv-logo{max-height:48px}.pv-icon{max-height:32px}.pv-bg{max-width:100%;max-height:120px;border-radius:4px}
-.pr-login{position:relative;border-radius:8px;overflow:hidden;background:#f0f2f5;min-height:280px;display:flex;flex-direction:column;align-items:stretch;justify-content:center;width:100%;padding:24px}
+.pr-login{position:relative;border-radius:8px;overflow:hidden;background:#f0f2f5;min-height:263px;display:flex;flex-direction:column;align-items:stretch;justify-content:center;width:100%;padding:0}
 .pr-overlay{position:absolute;inset:0;z-index:0;pointer-events:none}
 .pr-card{position:relative;z-index:1;background:#fff;border-radius:8px;padding:20px;width:min(100%,320px);box-shadow:0 4px 16px rgba(0,0,0,.1);display:flex;flex-direction:column;gap:6px}
 .pr-logo{display:flex;justify-content:center;margin-bottom:4px}.pr-name{text-align:center;font-size:16px}
