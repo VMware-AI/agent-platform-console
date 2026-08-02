@@ -102,6 +102,7 @@ function formatTime(iso: string): string {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-top: 8px;
   margin-bottom: 4px;
 }
 .card-header h2 {

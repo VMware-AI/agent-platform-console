@@ -12,7 +12,7 @@
 //   - 2-col detail table row: by-model and by-date, with right-aligned
 //     numbers, sticky header, ellipsis + tooltip, tabular-nums.
 
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
@@ -43,12 +43,43 @@ import TimeRangeToolbar from '@/components/metering/TimeRangeToolbar.vue'
 import MeteringEmptyState from '@/components/metering/MeteringEmptyState.vue'
 import TabStrip from '@/components/TabStrip.vue'
 import GatewaySpendPanel from '@/views/metering/GatewaySpendPanel.vue'
+import CurrencySettingsPage from '@/views/metering/CurrencySettingsPage.vue'
+import CostRulesPage from '@/views/metering/CostRulesPage.vue'
 import { fmtMoney, fmtNumber, fmtCompact, truncate, shortDate } from '@/utils/meter-format'
 import '@/components/icons'
 
-type MeteringSource = 'platform' | 'gateway' | 'settings'
+type MeteringSource = 'platform' | 'gateway'
 const source = ref<MeteringSource>('platform')
 const auth = useAuthStore()
+// 计量设置 modal（admin-only）。点击页头「计量设置」按钮打开。
+const settingsOpen = ref(false)
+const settingsTab = ref<'currency' | 'cost-rules'>('currency')
+// 子页面 ref：分别指向当前两个 tab 的子组件实例，由其内部 expose 出 handleSave / saving / saved。
+const currencyPageRef = ref<InstanceType<typeof CurrencySettingsPage> | null>(null)
+const costRulesPageRef = ref<InstanceType<typeof CostRulesPage> | null>(null)
+
+// modal 顶部 spinner：任一 tab 在 saving 时为 true。
+const modalSaving = computed(
+  () => Boolean(currencyPageRef.value?.saving) || Boolean(costRulesPageRef.value?.saving),
+)
+// 「已保存」徽标：任一 tab 成功保存过就显示 —— dirty 短路后单 tab 保存的
+// 场景下 cost-rules 的 saved 仍是 false，所以这里用 || 才能在「我刚刚确实
+// 保存了某个 tab」时给出预期反馈。
+const modalSaved = computed(
+  () => Boolean(currencyPageRef.value?.saved) || Boolean(costRulesPageRef.value?.saved),
+)
+
+// 一次保存两个 tab 的内容。任一 tab 报错则中断后续调用并向上抛出 —
+// 让 toast / 上层 error 处理统一收口。失败的 tab 已有的 saved 不会被设置，
+// 所以 modalSaved 不会误显示「已保存」。
+async function onModalSave(): Promise<void> {
+  try {
+    await currencyPageRef.value?.handleSave?.()
+    await costRulesPageRef.value?.handleSave?.()
+  } catch (error) {
+    toast.error(graphqlErrorMessage(error, locale.t('meteringSetting.title')))
+  }
+}
 type TimeRange = '7d' | '30d' | 'month'
 type UsageStatus = 'normal' | 'warning'
 
@@ -89,26 +120,13 @@ const drillModel = ref<string | null>(null)
 const customFrom = ref('')
 const customTo = ref('')
 
-const sourceTabs = computed(() => {
-  const tabs: Array<{ key: MeteringSource; label: string }> = [
-    { key: 'platform', label: locale.t('metering.source.platform') },
-    { key: 'gateway', label: locale.t('metering.source.gateway') },
-  ]
-  // 计量中心设置入口 — 从二级菜单移入页内标签，仅 admin 可见
-  if (auth.role === 'admin') {
-    tabs.push({ key: 'settings', label: locale.t('nav.obs.metering.settings') })
-  }
-  return tabs
-})
+const sourceTabs = computed<Array<{ key: MeteringSource; label: string }>>(() => [
+  { key: 'platform', label: locale.t('metering.source.platform') },
+  { key: 'gateway', label: locale.t('metering.source.gateway') },
+])
 
-// 计量中心设置标签：点击后跳转到设置页，并把 source 恢复为 platform
-// （settings 不是页内数据源，仅作为跳转入口）。
-watch(source, (v) => {
-  if (v === 'settings') {
-    void router.push({ name: 'obs.metering.settings' })
-    source.value = 'platform'
-  }
-})
+// 计量设置入口：从页头按钮弹出 modal，详见 .page-head 模板 + 末尾 cds-modal。
+// settings 不再作为 TabStrip 内的 source tab（收敛入口，admin-only）。
 
 const timeRanges: Array<{ key: TimeRange; label: string }> = [
   { key: '7d', label: locale.t('metering.range.7d') },
@@ -364,8 +382,23 @@ function resetFilters() {
   <section class="metering-page">
     <!-- 1. Page header — spec §5 -->
     <header class="page-head">
-      <h1 cds-text="title" class="heading">{{ locale.t('metering.title') }}</h1>
-      <p cds-text="body" class="desc muted">{{ locale.t('metering.description') }}</p>
+      <div class="page-head-text">
+        <h1 cds-text="title" class="heading">{{ locale.t('metering.title') }}</h1>
+        <p cds-text="body" class="desc muted">{{ locale.t('metering.description') }}</p>
+      </div>
+      <!-- 计量设置入口（admin-only）：点开 modal，modal 内嵌 currency / cost-rules 子标签。
+           文案复用已有 locale key `meteringSetting.gotoSettings`（zh: 计量设置 / en: Settings）。 -->
+      <cds-button
+        v-if="auth.role === 'admin'"
+        action="outline"
+        size="sm"
+        class="settings-btn"
+        :aria-label="locale.t('meteringSetting.gotoSettings')"
+        @click="settingsOpen = true"
+      >
+        <cds-icon shape="cog" size="sm" aria-hidden="true"></cds-icon>
+        {{ locale.t('meteringSetting.gotoSettings') }}
+      </cds-button>
     </header>
 
     <!-- 2. Source tabs — spec §6 -->
@@ -672,6 +705,58 @@ function resetFilters() {
         </div>
       </cds-card>
     </template>
+
+    <!-- 计量设置 modal（admin-only）。嵌入 CurrencySettingsPage / CostRulesPage
+         两个组件，复用现有数据查询 + 保存逻辑，不走路由。 -->
+    <cds-modal
+      v-if="auth.role === 'admin'"
+      size="lg"
+      :hidden="!settingsOpen"
+      @closeChange="settingsOpen = false"
+    >
+      <cds-modal-header>
+        <h3 cds-text="title">{{ locale.t('meteringSetting.title') }}</h3>
+      </cds-modal-header>
+      <cds-modal-content>
+        <nav class="ms-modal-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="settingsTab === 'currency'"
+            class="ms-modal-tab"
+            :class="{ active: settingsTab === 'currency' }"
+            @click="settingsTab = 'currency'"
+          >
+            {{ locale.t('meteringSetting.tabCurrency') }}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="settingsTab === 'cost-rules'"
+            class="ms-modal-tab"
+            :class="{ active: settingsTab === 'cost-rules' }"
+            @click="settingsTab = 'cost-rules'"
+          >
+            {{ locale.t('meteringSetting.tabCostRules') }}
+          </button>
+        </nav>
+        <CurrencySettingsPage v-if="settingsTab === 'currency'" ref="currencyPageRef" />
+        <CostRulesPage v-else ref="costRulesPageRef" />
+      </cds-modal-content>
+      <cds-modal-actions>
+        <cds-button action="outline" :disabled="modalSaving" @click="settingsOpen = false">
+          {{ locale.t('meteringSetting.cancel') }}
+        </cds-button>
+        <cds-button
+          status="primary"
+          :disabled="modalSaving"
+          :loading="modalSaving"
+          @click="onModalSave"
+        >
+          {{ modalSaved ? locale.t('branding.saved') : locale.t('branding.save') }}
+        </cds-button>
+      </cds-modal-actions>
+    </cds-modal>
   </section>
 </template>
 
@@ -722,6 +807,24 @@ function resetFilters() {
 /* ---------------------------- 1. page header ---------------------------- */
 .page-head {
   flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.page-head-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.settings-btn {
+  flex: 0 0 auto;
+  /* 与页面描述 (`<p class="desc">` 起始位置) 对齐 — 描述位于 h1 下方约 36px 处
+     (h1 行高 28*1.3≈36.4 + h1 自身高度 36)，按钮基线贴近描述顶部。 */
+  margin-top: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .heading {
   margin: 0;
@@ -740,6 +843,36 @@ function resetFilters() {
 }
 .muted {
   color: var(--cds-alias-typography-color-300, #565656);
+}
+
+/* ---------------------------- settings modal ---------------------------- */
+/* Modal 内的两个子标签：货币与汇率 / 成本规则。视觉与独立 settings 页的
+   .ms-tabs / .ms-tab 一致（下划线指示器），但 scoped 在本组件避免冲突。 */
+.ms-modal-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--cds-alias-object-border-color, #d0d5dd);
+  margin-bottom: 16px;
+}
+.ms-modal-tab {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--cds-alias-object-app-foreground-subtle, #667085);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+.ms-modal-tab:hover {
+  color: var(--cds-alias-object-interaction-color, #006e9c);
+}
+.ms-modal-tab.active {
+  color: var(--cds-alias-object-interaction-color, #006e9c);
+  border-bottom-color: var(--cds-alias-object-interaction-color, #006e9c);
 }
 
 /* ---------------------------- filter row ---------------------------- */
