@@ -139,16 +139,13 @@ const router = createRouter({
           component: () => import('@/views/SkillManageView.vue'),
           meta: { roles: ['admin'] },
         },
+        // 平台设置: 合并原 platform.branding (个性化设置) + platform.license (许可管理)
+        // 为双 tab 容器 — 与 platform.users (用户与权限) 同构,容器只持有 TabStrip,
+        // 子组件按 v-if 切换。admin-only.
         {
-          path: 'platform/branding',
-          name: 'platform.branding',
-          component: () => import('@/views/BrandingSettingsView.vue'),
-          meta: { roles: ['admin'] },
-        },
-        {
-          path: 'platform/license',
-          name: 'platform.license',
-          component: () => import('@/views/LicenseView.vue'),
+          path: 'platform/settings',
+          name: 'platform.settings',
+          component: () => import('@/views/settings/SettingsView.vue'),
           meta: { roles: ['admin'] },
         },
 

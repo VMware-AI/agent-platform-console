@@ -1,4 +1,10 @@
 <script setup lang="ts">
+/**
+ * License management tab — content moved from [LicenseView.vue](../LicenseView.vue)
+ * (PR #86) into the SettingsView double-tab container. The page header and
+ * `<TabStrip>` are owned by the parent; this tab only renders the three
+ * status / bind / activate cards.
+ */
 import { ref, computed, onMounted } from 'vue'
 import { useQuery, useMutation } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
@@ -85,12 +91,7 @@ async function copyBindIP() {
 </script>
 
 <template>
-  <section class="lic">
-    <header class="page-head">
-      <h1 cds-text="title" class="heading">{{ locale.t('license.title') }}</h1>
-      <p cds-text="body" class="desc muted">{{ locale.t('license.desc') }}</p>
-    </header>
-
+  <section class="license-tab">
     <!-- Status card -->
     <cds-card class="card">
       <div class="cp">
@@ -152,35 +153,13 @@ async function copyBindIP() {
 </template>
 
 <style scoped>
-/* Page shell + typography mirror UserRoleView (用户与权限) so the 许可管理
-   page reads with the same visual weight as the rest of 系统配置. */
-.lic {
+.license-tab {
   display: flex;
   flex-direction: column;
   gap: 16px;
   min-width: 0;
 }
 
-.page-head {
-  flex-shrink: 0;
-}
-
-.heading {
-  margin: 0;
-  color: var(--cds-alias-object-app-foreground, #1b1b1b);
-  font-size: 28px;
-  line-height: 1.3;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.desc {
-  margin: 12px 0 0;
-  color: var(--cds-alias-typography-color-300, #565656);
-  font-size: 14px;
-  line-height: 1.5;
-  max-width: 720px;
-}
 .card { width: 100%; }
 .cp { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
 .st-row { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
