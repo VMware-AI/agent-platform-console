@@ -86,7 +86,7 @@ export interface CreateOvaTemplateVersionInput {
   version: string
   ovaIdentifier: string
   notes?: string | null
-  cloneMode?: "full" | "instant" | null
+  cloneMode?: 'full' | 'instant' | null
   instantCloneParent?: string | null
 }
 
@@ -107,7 +107,7 @@ export interface AddOvaTemplateVersionInput {
   version: string
   ovaIdentifier: string
   notes?: string | null
-  cloneMode?: "full" | "instant" | null
+  cloneMode?: 'full' | 'instant' | null
   instantCloneParent?: string | null
 }
 
@@ -127,7 +127,6 @@ export interface AddOvaTemplateVersionVars {
   input: AddOvaTemplateVersionInput
 }
 
-
 /* ============================================================
  * OVF / vApp Properties (dynamic deploy form from template vAppConfig)
  * ============================================================ */
@@ -135,12 +134,12 @@ export interface AddOvaTemplateVersionVars {
 export interface OVFProperty {
   key: string
   label: string
-  type: string         // "string" | "password" | "boolean" | "int" | "real" | "ip"
+  type: string // "string" | "password" | "boolean" | "int" | "real" | "ip"
   defaultValue?: string | null
   description: string
   required: boolean
   password: boolean
-  values: string[]      // enum choices, empty for non-enum
+  values: string[] // enum choices, empty for non-enum
   category: string
 }
 
@@ -250,7 +249,7 @@ export interface DeployAgentInput {
   existingKeyId?: string | null
   /** Optional free-text deploy notes. */
   notes?: string | null
-  cloneMode?: "full" | "instant" | null
+  cloneMode?: 'full' | 'instant' | null
   instantCloneParent?: string | null
 }
 
