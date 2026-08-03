@@ -607,6 +607,7 @@ export const STRINGS: Dict = {
   'agents.col.actions': { zh: '操作', en: 'Actions' },
   'agents.status.running': { zh: '运行中', en: 'Running' },
   'agents.status.stopped': { zh: '已停止', en: 'Stopped' },
+  'agents.status.recycled': { zh: '已回收', en: 'Recycled' },
   'agents.status.provisioning': { zh: '部署中', en: 'Provisioning' },
   'agents.status.exception': { zh: '异常', en: 'Exception' },
   'agents.status.error': { zh: '异常', en: 'Error' },
@@ -652,8 +653,8 @@ export const STRINGS: Dict = {
   'agents.action.failed': { zh: '操作失败', en: 'Action failed' },
   'agents.confirm.deleteTitle': { zh: '删除智能体', en: 'Delete agent' },
   'agents.confirm.deleteBody': {
-    zh: '确定删除智能体 "{name}"？其 VM 资源将被回收，此操作不可撤销。',
-    en: 'Delete agent "{name}"? Its VM resources will be recycled. This cannot be undone.',
+    zh: '确定删除智能体 "{name}"？其 VM 将关机并断开网络（保留在 vCenter），其密钥将解除绑定并禁用（不会删除，可在密钥管理页重新启用）。此操作不可撤销。',
+    en: 'Delete agent "{name}"? Its VM is powered off and disconnected from the network (kept on the vCenter), and its key is unbound and disabled (not deleted — it can be re-enabled on the keys page). This cannot be undone.',
   },
   // Hard-delete is admin-only and PHYSICALLY removes the agent row (distinct from
   // "delete" which is recycle). Mirrors ModelGatewayView's two-step type-to-confirm.
@@ -662,13 +663,13 @@ export const STRINGS: Dict = {
   'agents.action.hardDeleteFailed': { zh: '彻底删除失败', en: 'Hard delete failed' },
   'agents.confirm.hardDeleteTitle': { zh: '彻底删除智能体', en: 'Hard Delete Agent' },
   'agents.confirm.hardDeleteBody': {
-    zh: '将永久删除智能体 "{name}" 及其所有数据，此操作不可撤销。请输入 {{name}} 以确认。',
-    en: 'Permanently delete agent "{name}". This cannot be undone. Type {{name}} to confirm.',
+    zh: '将永久删除智能体 "{name}" 及其所有数据（VM 将从 vCenter 销毁），此操作不可撤销。其绑定的密钥将解除绑定并禁用（不会删除，可在密钥管理页重新启用）。请输入 {{name}} 以确认。',
+    en: 'Permanently delete agent "{name}" and all its data (its VM is destroyed from the vCenter). This cannot be undone. Its bound key is unbound and disabled (not deleted — it can be re-enabled on the keys page). Type {{name}} to confirm.',
   },
   'agents.confirm.hardDeleteInputPlaceholder': { zh: '输入智能体名称', en: 'Type the agent name' },
   'agents.confirm.batchDeleteBody': {
-    zh: '确定删除选中的 {count} 个智能体？其 VM 资源将被回收，此操作不可撤销。',
-    en: 'Delete the {count} selected agents? Their VM resources will be recycled. This cannot be undone.',
+    zh: '确定删除选中的 {count} 个智能体？其 VM 将关机并断开网络（保留在 vCenter），其密钥将解除绑定并禁用（不会删除，可在密钥管理页重新启用）。此操作不可撤销。',
+    en: 'Delete the {count} selected agents? Their VMs are powered off and disconnected from the network (kept on the vCenter), and their keys are unbound and disabled (not deleted — they can be re-enabled on the keys page). This cannot be undone.',
   },
   // Batch hard-delete mirrors single hardDelete but shows the full name list and
   // requires ALL names typed (one per line) to confirm. Admin-only.
@@ -677,8 +678,8 @@ export const STRINGS: Dict = {
     en: 'Hard-Delete {count} Selected Agents',
   },
   'agents.confirm.hardDeleteBatchBody': {
-    zh: '将永久删除以下 {count} 个智能体及其所有数据，此操作不可撤销。请输入各智能体名称（空格或换行分隔）以确认。\n{{names}}',
-    en: 'Permanently delete the following {count} agents. This cannot be undone. Type each agent name separated by spaces or newlines to confirm.\n{{names}}',
+    zh: '将永久删除以下 {count} 个智能体及其所有数据（VM 将从 vCenter 销毁），此操作不可撤销。其绑定的密钥将解除绑定并禁用（不会删除，可在密钥管理页重新启用）。请输入各智能体名称（空格或换行分隔）以确认。\n{{names}}',
+    en: 'Permanently delete the following {count} agents and all their data (their VMs are destroyed from the vCenter). This cannot be undone. Their bound keys are unbound and disabled (not deleted — they can be re-enabled on the keys page). Type each agent name separated by spaces or newlines to confirm.\n{{names}}',
   },
   'agents.action.sortAsc': { zh: '升序', en: 'Ascending' },
   'agents.action.sortDesc': { zh: '降序', en: 'Descending' },
@@ -1913,6 +1914,10 @@ export const STRINGS: Dict = {
   'virtualKey.toast.deleted': {
     zh: '已删除 {count} 个令牌',
     en: 'Deleted {count} virtual keys',
+  },
+  'virtualKey.toast.boundSkipped': {
+    zh: '已跳过 {count} 个绑定智能体的密钥（绑定中的密钥不可删除）',
+    en: 'Skipped {count} agent-bound keys (bound keys cannot be deleted)',
   },
   // Purge-path toasts — `{count}` is the number of rows the resolver
   // physically deleted (NOT the number of revoked keys the operator
