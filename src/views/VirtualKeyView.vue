@@ -493,8 +493,10 @@ const deleteDialogInputPlaceholder = computed(() => {
   return locale.t('virtualKey.confirm.deleteInputPlaceholder') as string
 })
 
-function statusVariant(status: VirtualKeyStatus): 'success' | 'neutral' | 'danger' {
-  return status === 'active' ? 'success' : status === 'disabled' ? 'neutral' : 'danger'
+function statusVariant(status: VirtualKeyStatus): 'success' | 'warning' | 'danger' {
+  // disabled = amber "paused, recoverable" (keys released by an agent delete
+  // land here); active = green; revoked = red (irreversible).
+  return status === 'active' ? 'success' : status === 'disabled' ? 'warning' : 'danger'
 }
 
 function statusIcon(status: VirtualKeyStatus): string {
@@ -1092,7 +1094,15 @@ function performBatch(action: BatchAction, close: () => void) {
   if (ids.length === 0) return
   if (action === 'enable') requestSetEnabled(ids, true)
   else if (action === 'disable') requestSetEnabled(ids, false)
-  else if (action === 'delete') pendingDeleteIds.value = ids
+  else if (action === 'delete') {
+    // Bound keys cannot be deleted (1:1 per-agent key policy) — skip them
+    // from the pending delete and warn the operator.
+    const boundCount = ids.filter((id) => virtualKeys.value.find((k) => k.id === id)?.agent).length
+    if (boundCount > 0) {
+      toast.warning((locale.t('virtualKey.toast.boundSkipped') as string).replace('{count}', String(boundCount)))
+    }
+    pendingDeleteIds.value = ids.filter((id) => !virtualKeys.value.find((k) => k.id === id)?.agent)
+  }
 }
 
 function closeDelete() {
@@ -1102,9 +1112,16 @@ function closeDelete() {
 async function confirmDelete() {
   const ids = pendingDeleteIds.value
   if (ids.length === 0) return
-  const targets = ids.filter(
-    (id) => virtualKeys.value.find((key) => key.id === id)?.status !== 'revoked',
-  )
+  // Defense-in-depth on top of performBatch's skip: only unbound, non-revoked
+  // keys are deletable (bound keys are rejected server-side too).
+  const targets = ids.filter((id) => {
+    const key = virtualKeys.value.find((k) => k.id === id)
+    return key && key.status !== 'revoked' && !key.agent
+  })
+  if (targets.length === 0) {
+    pendingDeleteIds.value = []
+    return
+  }
   const outcomes = await Promise.allSettled(
     targets.map((id) =>
       apolloClient.mutate<RevokeVirtualKeyResult, RevokeVirtualKeyVars>({
@@ -2238,6 +2255,12 @@ function goToPage(page: number) {
      beats the attribute selector inside :host, so this wins for every
      status. */
   --color: #fff;
+}
+/* Amber (warning) background with white text fails WCAG contrast (1.9:1) —
+   the amber pill gets the near-black text Carbon's warning variant defaults
+   to instead (7:1), matching the disabled = "paused, recoverable" badge. */
+.status-badge[status='warning'] {
+  --color: #21333b;
 }
 .row-actions {
   display: flex;
