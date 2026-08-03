@@ -1022,6 +1022,12 @@ async function submitKey(draft: {
       },
     })
     formOpen.value = false
+    // Match closeForm()'s reset of formGateway / formNameDuplicate so a
+    // quick second open after a successful save doesn't get its gateway
+    // re-seeded by reset() in the modal. See closeForm() comment for the
+    // original rationale — submit-success was simply not on that path.
+    formGateway.value = ''
+    formNameDuplicate.value = null
     // Reveal secret BEFORE refetch — the secret is shown exactly once.
     const secret = data?.issueVirtualKey?.secret
     if (secret) revealSecret(secret)
