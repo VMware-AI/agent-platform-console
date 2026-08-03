@@ -27,10 +27,10 @@ onMounted(sr); onUnmounted(stopRefresh); watch(autoRefresh, (v) => { if (v) sr()
 const lu = computed(() => genAt.value ? new Date(genAt.value).toLocaleTimeString() : '--')
 const hi = (s: string) => s==='HEALTHY'?'success-standard':s==='WARNING'||s==='DEGRADED'?'warning-standard':'error-standard'
 const hl = (s: string) => locale.t(`dashboard.health.${s.toLowerCase()}`)
-const ags = (s: string) => ({RUNNING:'ds',STOPPED:'dst',ABNORMAL:'dse',UNKNOWN:'dst',running:'ds',stopped:'dst',abnormal:'dse',unknown:'dst'}[s]??'dst')
+const ags = (s: string) => ({RUNNING:'ds',STOPPED:'dst',ABNORMAL:'dse',RECYCLED:'dst',UNKNOWN:'dst',running:'ds',stopped:'dst',abnormal:'dse',recycled:'dst',unknown:'dst'}[s]??'dst')
 /** Unified donut data — shared by SVG, legend, and center total. */
 const C = 314 // circumference = 2*PI*50
-const AGENT_COLORS = { running: '#12b76a', abnormal: '#f04438', stopped: '#98a2b3', unknown: '#d0d5dd' } as const
+const AGENT_COLORS = { running: '#12b76a', abnormal: '#f04438', stopped: '#98a2b3', recycled: '#98a2b3', unknown: '#d0d5dd' } as const
 interface DonutSegment { key: string; label: string; value: number; color: string; dash: string; offset: string }
 const donutSegments = computed<DonutSegment[]>(() => {
   if (!ag.value) return []
@@ -38,6 +38,7 @@ const donutSegments = computed<DonutSegment[]>(() => {
     { key: 'running', label: agz('RUNNING'), value: ag.value.runningAgents, color: AGENT_COLORS.running },
     { key: 'abnormal', label: agz('ABNORMAL'), value: ag.value.abnormalAgents, color: AGENT_COLORS.abnormal },
     { key: 'stopped', label: agz('STOPPED'), value: ag.value.stoppedAgents, color: AGENT_COLORS.stopped },
+    { key: 'recycled', label: agz('RECYCLED'), value: ag.value.recycledAgents, color: AGENT_COLORS.recycled },
     { key: 'unknown', label: agz('UNKNOWN'), value: ag.value.unknownAgents, color: AGENT_COLORS.unknown },
   ]
   const visible = all.filter(s => s.value > 0)

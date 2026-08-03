@@ -31,6 +31,7 @@ export const DASHBOARD_OVERVIEW_QUERY = gql`
         runningAgents
         stoppedAgents
         abnormalAgents
+        recycledAgents
         unknownAgents
         agentsWithoutAvailableModel
         abnormalInstances
@@ -188,6 +189,7 @@ export interface DashboardAgentHealth {
   runningAgents: number
   stoppedAgents: number
   abnormalAgents: number
+  recycledAgents: number
   unknownAgents: number
   agentsWithoutAvailableModel: number
   abnormalInstances: number
