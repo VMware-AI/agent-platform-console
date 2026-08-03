@@ -173,6 +173,7 @@ const STATUS_OPTIONS: Array<StatusKey | 'all'> = [
   'all',
   'running',
   'stopped',
+  'recycled',
   'exception',
   'provisioning',
   'failed',
@@ -293,6 +294,10 @@ const ACTIONS_BY_STATUS: Partial<Record<StatusKey, RowActionKey[]>> = {
   exception: ['rotateKey', 'update', 'installSkill', 'terminal', 'restart', 'stop', 'delete', 'hardDelete'],
   failed:    ['delete', 'hardDelete'],
   provisioning: ['delete', 'hardDelete'],
+  // Recycled is terminal: the only remaining action is hard delete (destroys
+  // the kept VM + row). No start/stop/terminal — the VM is powered off and
+  // disconnected by design.
+  recycled:  ['hardDelete'],
 }
 
 const ICON_FOR_ACTION: Record<RowActionKey, string> = {
@@ -314,11 +319,20 @@ const ICON_FOR_ACTION: Record<RowActionKey, string> = {
 
 const auth = useAuthStore()
 
-function badgeStatusFor(status: Agent['status']): 'success' | 'neutral' | 'danger' {
+function badgeStatusFor(status: Agent['status']): 'success' | 'warning' | 'neutral' | 'danger' {
   if (status === 'running') return 'success'
   if (status === 'exception') return 'danger'
-  if (status === 'provisioning') return 'neutral'
-  return 'neutral'
+  if (status === 'stopped') return 'warning' // paused, restartable — amber
+  return 'neutral' // provisioning / recycled / failed — gray terminal-ish
+}
+
+function statusIconFor(status: Agent['status']): string {
+  if (status === 'running') return 'success'
+  if (status === 'exception') return 'error'
+  if (status === 'provisioning') return 'hourglass'
+  if (status === 'stopped') return 'stop' // paused
+  if (status === 'recycled') return 'trash-can' // deleted, VM kept offline
+  return 'warning'
 }
 
 /* Row action handlers — wired to real backend mutations. */
@@ -1220,7 +1234,7 @@ const summaryText = computed(() => {
               class="status-badge"
             >
               <cds-icon
-                :shape="agent.status === 'running' ? 'success' : agent.status === 'exception' ? 'error' : agent.status === 'provisioning' ? 'hourglass' : 'pause'"
+                :shape="statusIconFor(agent.status)"
                 size="xs"
                 aria-hidden="true"
                 class="status-icon"
@@ -1943,6 +1957,11 @@ const summaryText = computed(() => {
      The class selector beats the attribute selector inside :host, so
      this wins for every status. */
   --color: #fff;
+}
+/* Amber (warning) pill with white text fails WCAG (1.9:1) — the stopped
+   badge keeps Carbon's near-black warning text (7:1) instead. */
+.status-badge[status='warning'] {
+  --color: #21333b;
 }
 
 /* ---------- Row cells ---------- */
