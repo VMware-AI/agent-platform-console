@@ -137,11 +137,13 @@ const instantParents = computed(() =>
   ((pRes.value as any)?.instantCloneParents ?? []).filter((v: any) => v.name.startsWith('ic-p'))
 )
 
-// Auto-select "Resources" as the default placement pool when pools load
+// Auto-select the placement pool only when the vCenter has exactly one pool.
+// With multiple clusters every root pool is named "Resources", so picking the
+// first one silently targets the wrong cluster; leave it empty for an explicit
+// choice — the dropdown shows full inventory paths so clusters stay distinct.
 watch(vspherePools, (pools) => {
-  if (!globalForm.placementPool && pools.length > 0) {
-    const r = pools.find(p => p.name === 'Resources') || pools[0]
-    globalForm.placementPool = r.path
+  if (!globalForm.placementPool && pools.length === 1) {
+    globalForm.placementPool = pools[0].path
   }
 }, { immediate: true })
 
@@ -289,9 +291,9 @@ watch(() => props.open, (o) => {
         <div v-if="currentStep==='env'" class="blk"><h3 class="bh">{{ locale.t('deployAgent.section.env') }}</h3><p class="bd">{{ locale.t('deployAgent.section.envDesc') }}</p>
           <div class="g2">
             <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.version') }}</label><select v-model="globalForm.versionId"><option v-for="v in versionList" :key="v.id" :value="v.id">{{ v.version }}</option></select></cds-select>
-            <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.placementPool') }}</label><select v-model="globalForm.placementPool"><option value="" disabled>{{ vspherePoolsLoading ? '加载中…' : locale.t('deployAgent.selectPlaceholder') }}</option><option v-for="p in vspherePools" :key="p.path" :value="p.path">{{ p.name }}</option></select></cds-select>
+            <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.placementPool') }}</label><select v-model="globalForm.placementPool"><option value="" disabled>{{ vspherePoolsLoading ? '加载中…' : locale.t('deployAgent.selectPlaceholder') }}</option><option v-for="p in vspherePools" :key="p.path" :value="p.path">{{ p.path }}</option></select></cds-select>
             <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.targetNetwork') }}</label><select v-model="globalForm.targetNetwork"><option value="">{{ locale.t('deployAgent.inheritDefault') }}</option><optgroup v-for="(nets,g) in networksGrouped" :key="g" :label="g"><option v-for="n in nets" :key="n.path" :value="n.path">{{ n.name }}</option></optgroup></select></cds-select>
-            <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.targetDatastore') }}</label><select v-model="globalForm.targetDatastore"><option value="">{{ locale.t('deployAgent.datastoreDefault') }}</option><optgroup v-for="(dss,g) in datastoresGrouped" :key="g" :label="g"><option v-for="ds in dss" :key="ds.path" :value="ds.path">{{ ds.name }}</option></optgroup></select></cds-select>
+            <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.targetDatastore') }}</label><select v-model="globalForm.targetDatastore"><option value="">{{ locale.t('deployAgent.datastoreDefault') }}</option><optgroup v-for="(dss,g) in datastoresGrouped" :key="g" :label="g"><option v-for="ds in dss" :key="ds.path" :value="ds.path">{{ ds.path }}</option></optgroup></select></cds-select>
             <cds-select control-width="shrink"><label>{{ locale.t('deployAgent.label.cloneMode') }}</label><select v-model="globalForm.cloneMode"><option value="full">{{ locale.t('deployAgent.cloneMode.full') }}</option><option value="instant">{{ locale.t('deployAgent.cloneMode.instant') }}</option></select></cds-select>
           </div>
           <template v-if="globalForm.cloneMode==='instant'">
