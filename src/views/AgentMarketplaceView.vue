@@ -43,6 +43,7 @@ import '@/components/icons'
 import AddOvaTemplateDialog from './marketplace/AddOvaTemplateDialog.vue'
 import DeployAgentDialog from './marketplace/DeployAgentDialog.vue'
 import VirtualKeySecretDialog from '@/components/VirtualKeySecretDialog.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 const locale = useLocaleStore()
 const toast = useToast()
@@ -210,7 +211,6 @@ const deployedAgentId = ref<string | null>(null)
 const detailOpen = ref(false)
 const deleteConfirmOpen = ref(false)
 const deleteTarget = ref<OvaTemplateFamily | null>(null)
-const deleting = ref(false)
 const detailTemplate = ref<OvaTemplateFamily | null>(null)
 
 function onViewDetails(t: OvaTemplateFamily) {
@@ -232,9 +232,18 @@ function closeDeleteConfirm() {
   deleteConfirmOpen.value = false
   deleteTarget.value = null
 }
+// Body rendered inside the delete ConfirmDialog. The template name is
+// highlighted so the operator sees the exact string they must type below.
+const deleteBodySegments = computed(() => {
+  const name = deleteTarget.value?.name ?? ''
+  return [
+    { text: locale.t('marketplace.deleteTemplate.body.before') },
+    { text: name, bold: true },
+    { text: locale.t('marketplace.deleteTemplate.body.after') },
+  ]
+})
 async function onConfirmDelete() {
   if (!deleteTarget.value) return
-  deleting.value = true
   try {
     await deleteMutate({ id: deleteTarget.value.id })
     toast.success(locale.t('marketplace.toast.deleteFamilyOk').replace('{name}', deleteTarget.value.name))
@@ -242,8 +251,6 @@ async function onConfirmDelete() {
     await refetch()
   } catch (err: unknown) {
     toast.error(graphqlErrorMessage(err, locale.t('marketplace.toast.deleteFamilyFail')))
-  } finally {
-    deleting.value = false
   }
 }
 function onCreateAgent(t: OvaTemplateFamily) {
@@ -747,22 +754,20 @@ const typeFilterLabel = computed(() => {
       </div>
     </cds-dropdown>
   </section>
-  <!-- Delete confirmation modal -->
-  <cds-modal :hidden="!deleteConfirmOpen" size="sm" @closeChange="closeDeleteConfirm">
-    <cds-modal-header>
-      <h2 cds-text="title" class="delete-title">{{ locale.t('marketplace.deleteTemplate.title') }}</h2>
-    </cds-modal-header>
-    <cds-modal-content>
-      <p>{{ locale.t('marketplace.deleteTemplate.body.before') }}<strong>{{ deleteTarget?.name }}</strong>{{ locale.t('marketplace.deleteTemplate.body.after') }}</p>
-      <cds-alert status="warning">
-        <cds-alert-content>{{ locale.t('marketplace.deleteTemplate.warning') }}</cds-alert-content>
-      </cds-alert>
-    </cds-modal-content>
-    <cds-modal-actions>
-      <cds-button action="outline" @click="closeDeleteConfirm">{{ locale.t('common.cancel') }}</cds-button>
-      <cds-button status="danger" :loading-state="deleting ? 'loading' : 'default'" @click="onConfirmDelete">{{ locale.t('marketplace.deleteTemplate.confirm') }}</cds-button>
-    </cds-modal-actions>
-  </cds-modal>
+  <!-- Delete confirmation modal — type-to-confirm: operator must type the
+       template name to unlock the danger button. Width is widened in the
+       scoped styles below to match cds-modal size="md". -->
+  <ConfirmDialog
+    :open="deleteConfirmOpen"
+    :title="locale.t('marketplace.deleteTemplate.title')"
+    :body-segments="deleteBodySegments"
+    :input-label="locale.t('marketplace.deleteTemplate.inputLabel')"
+    :input-placeholder="deleteTarget?.name ?? ''"
+    :expected-input="deleteTarget?.name ?? ''"
+    :danger="true"
+    @close="closeDeleteConfirm"
+    @confirm="onConfirmDelete"
+  />
 </template>
 
 <style scoped>
@@ -1188,5 +1193,12 @@ const typeFilterLabel = computed(() => {
 }
 .modal-title {
   margin: 0;
+}
+/* Widen the destructive-template-delete confirm dialog to match
+   cds-modal size="md" (~600px) instead of the default 420px (size="sm").
+   Scoped style targets the rendered .confirm-card root from
+   <ConfirmDialog>. */
+.confirm-card {
+  width: min(600px, 100%);
 }
 </style>

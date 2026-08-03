@@ -3478,6 +3478,10 @@ export const STRINGS: Dict = {
     zh: '此操作不可撤销。已有智能体引用的模板无法删除。',
     en: 'This cannot be undone. Templates referenced by existing agents cannot be deleted.',
   },
+  'marketplace.deleteTemplate.inputLabel': {
+    zh: '请输入模板名称以确认删除',
+    en: 'Type the template name to confirm deletion',
+  },
   'marketplace.deleteTemplate.confirm': { zh: '确认删除', en: 'Delete' },
 
   /* ============================================================
