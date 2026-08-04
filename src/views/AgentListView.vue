@@ -327,12 +327,12 @@ function badgeStatusFor(status: Agent['status']): 'success' | 'warning' | 'neutr
 }
 
 function statusIconFor(status: Agent['status']): string {
-  if (status === 'running') return 'success'
-  if (status === 'exception') return 'error'
+  if (status === 'running') return 'success-standard'
+  if (status === 'exception') return 'error-standard'
   if (status === 'provisioning') return 'hourglass'
   if (status === 'stopped') return 'stop' // paused
-  if (status === 'recycled') return 'trash-can' // deleted, VM kept offline
-  return 'warning'
+  if (status === 'recycled') return 'trash' // deleted, VM kept offline
+  return 'warning-standard'
 }
 
 /* Row action handlers — wired to real backend mutations. */

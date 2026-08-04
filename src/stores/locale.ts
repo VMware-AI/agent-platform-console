@@ -529,6 +529,7 @@ export const STRINGS: Dict = {
   'dashboard.health.running': { zh: '运行中', en: 'Running' },
   'dashboard.health.abnormal': { zh: '异常', en: 'Abnormal' },
   'dashboard.health.stopped': { zh: '已停止', en: 'Stopped' },
+  'dashboard.health.recycled': { zh: '已回收', en: 'Recycled' },
   'dashboard.health.unknown': { zh: '未知', en: 'Unknown' },
   'dashboard.links.agents': { zh: '智能体列表', en: 'Agent List' },
   'dashboard.links.models': { zh: '模型管理', en: 'Models' },
