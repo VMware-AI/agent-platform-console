@@ -11,7 +11,14 @@ BUILDER   ?= agent-platform-builder
 # in environments where registry.npmjs.org is unreachable (e.g. cron in mainland China).
 NPM_REGISTRY ?= https://registry.npmmirror.com
 VERSION   := $(shell cat VERSION 2>/dev/null || echo "v0.0.0")
-TAG       ?= $(VERSION)-$(shell date -u +%Y%m%d)
+# DEV_TAG = version + UTC date (e.g. v0.0.0-20260805). Used for local builds
+# (`docker-build`, `build-images`) and the image tag that `docker-run` /
+# `docker-run-ssl` pull on localhost. Safe to override: `make docker-build DEV_TAG=my-tag`.
+DEV_TAG      ?= $(VERSION)-$(shell date -u +%Y%m%d)
+# RELEASE_TAG = version only, no date (e.g. v0.0.0). Used ONLY by `release-images`,
+# which additionally tags `:latest` and pushes. Not for local builds — a release
+# tag with no date should be unique per release.
+RELEASE_TAG  ?= $(VERSION)
 
 LOCAL_CONTAINER_NAME ?= agent-platform-console
 # `docker-run` / `docker-stop` / `docker-run-ssl` / `docker-logs` use $(CONTAINER)
@@ -112,21 +119,32 @@ clean-all: clean ## Also remove node_modules
 
 # ---------- Docker ----------
 .PHONY: docker-build
-docker-build: ## Build the local image (single-arch, no push). Tags as $(IMAGE):local AND $(REGISTRY)/$(IMAGE):$(TAG) so `docker-run`/`docker-run-ssl` pick it up.
+docker-build: ## Build the local image (single-arch, no push). Tags as $(IMAGE):local AND $(REGISTRY)/$(IMAGE):$(DEV_TAG) so `docker-run`/`docker-run-ssl` pick it up.
 	docker build \
 		--build-arg NPM_REGISTRY=$(NPM_REGISTRY) \
 		--tag $(IMAGE):local \
-		--tag $(REGISTRY)/$(IMAGE):$(TAG) \
+		--tag $(REGISTRY)/$(IMAGE):$(DEV_TAG) \
 		.
 
-.PHONY: release-images
-release-images: ## Multi-arch build + push to $(REGISTRY)/$(IMAGE):$(TAG) and :latest
+.PHONY: build-images
+build-images: ## Multi-arch build with $(DEV_TAG) (version+date). No --push, no :latest. Validates the multi-arch Dockerfile locally without polluting the registry — use before `release-images`.
 	docker buildx create --name $(BUILDER) --use --driver docker-container 2>/dev/null || true
 	docker buildx build \
 		--builder $(BUILDER) \
 		--platform $(PLATFORMS) \
 		--build-arg NPM_REGISTRY=$(NPM_REGISTRY) \
-		--tag $(REGISTRY)/$(IMAGE):$(TAG) \
+		--tag $(REGISTRY)/$(IMAGE):$(DEV_TAG) \
+		--push \
+		.
+
+.PHONY: release-images
+release-images: ## Multi-arch build + push for release. Tags as $(REGISTRY)/$(IMAGE):$(RELEASE_TAG) (version only, no date) AND :latest.
+	docker buildx create --name $(BUILDER) --use --driver docker-container 2>/dev/null || true
+	docker buildx build \
+		--builder $(BUILDER) \
+		--platform $(PLATFORMS) \
+		--build-arg NPM_REGISTRY=$(NPM_REGISTRY) \
+		--tag $(REGISTRY)/$(IMAGE):$(RELEASE_TAG) \
 		--tag $(REGISTRY)/$(IMAGE):latest \
 		--push \
 		.
@@ -137,7 +155,7 @@ docker-run: ## Run the local image on :80 (HTTP only). Override port with HOST_P
 		--name $(CONTAINER) \
 		-p $(HOST_PORT):80 \
 		-e BACKEND_BASE_URL=$(BACKEND_BASE_URL) \
-		$(REGISTRY)/$(IMAGE):$(TAG)
+		$(REGISTRY)/$(IMAGE):$(DEV_TAG)
 
 .PHONY: docker-stop
 docker-stop: ## Stop and remove the running container (no-op if not running)
@@ -173,7 +191,7 @@ docker-run-ssl: ## Run with TLS enabled (auto-redirects :80 -> :443). Sets SSL_E
 		-e SSL_REDIRECT=$(SSL_REDIRECT) \
 		-v $(SSL_CERT_HOST_PATH):$(SSL_CERT_PATH):ro \
 		-v $(SSL_KEY_HOST_PATH):$(SSL_KEY_PATH):ro \
-		$(REGISTRY)/$(IMAGE):$(TAG)
+		$(REGISTRY)/$(IMAGE):$(DEV_TAG)
 
 # HOST must be set: make gen-cert HOST=console.example.com [OUT_DIR=./docker/certs]
 .PHONY: gen-cert
