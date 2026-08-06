@@ -983,11 +983,10 @@ export const STRINGS: Dict = {
   'resources.form.title.edit': { zh: '编辑资源池', en: 'Edit Resource Pool' },
   'resources.form.name': { zh: '资源池名称', en: 'Resource Pool Name' },
   'resources.form.endpoint': { zh: 'VC 地址', en: 'VC Address' },
-  'resources.form.contentLibrary': { zh: '内容库', en: 'Content Library' },
-  'resources.form.contentLibrarySelect': {
-    zh: '请先测试连接以加载内容库列表',
-    en: 'Test the connection first to load content libraries.',
-  },
+  // 'resources.form.contentLibrary' and 'resources.form.contentLibrarySelect'
+  // removed 2026-08: content library is no longer part of resource pool
+  // onboarding (decoupled — pools function without one; OVA deploy picks
+  // the library per-deploy via ContentLibraryItemID).
   'resources.form.username': { zh: 'vCenter 账号', en: 'vCenter Account' },
   'resources.form.usernamePlaceholder': {
     zh: 'administrator@vsphere.local',
