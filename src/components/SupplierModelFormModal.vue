@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { apolloClient } from '@/api/graphql/client'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
+import { useCurrencySettings } from '@/composables/useCurrencySettings'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
 import {
   MODEL_NAME_PATTERN,
@@ -225,6 +226,13 @@ const MODE_OPTIONS: readonly string[] = [
 
 const locale = useLocaleStore()
 const toast = useToast()
+// Added 2026-08: surface the user's `currencySettings.baseCurrency` in the
+// custom-price hint so admins enter prices in the right unit (raw float, no
+// currency field on the BE side — interpretation follows baseCurrency).
+const { result: currencySettingsResult } = useCurrencySettings()
+const baseCurrency = computed<string>(
+  () => currencySettingsResult.value?.currencySettings?.baseCurrency ?? 'USD',
+)
 
 const name = ref('')
 const gatewayId = ref('')
@@ -1238,6 +1246,12 @@ function formatCost(d: SpecDraft): string {
                           </cds-toggle>
                         </cds-control>
                         <div v-if="d.useCustomPrice" class="toggles-subgrid toggles-subgrid--price">
+                          <!-- Added 2026-08: makes it explicit that prices below are
+                               entered in the user's base currency (not the display
+                               currency) — see supplier.model.form.cost.currencyHint. -->
+                          <cds-control-message status="info" class="cost-currency-hint">
+                            {{ locale.t('supplier.model.form.cost.currencyHint').replace('{baseCurrency}', baseCurrency) }}
+                          </cds-control-message>
                           <div class="duration-field">
                             <div class="duration-row duration-row--no-unit">
                               <label class="duration-label" :for="`spec-inputPrice-${i}`">

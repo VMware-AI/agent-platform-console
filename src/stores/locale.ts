@@ -2617,6 +2617,16 @@ export const STRINGS: Dict = {
     zh: '缓存写入单价(/1M token)',
     en: 'Cache creation cost (per 1M tokens)',
   },
+  // Added 2026-08: prices below are stored as raw floats with no currency
+  // field on the BE side (provider-model.graphql: inputCostPerToken: Float).
+  // They are interpreted as the user's `currencySettings.baseCurrency` (the
+  // same one the metering dashboard uses for conversion). The hint surfaces
+  // this so admins don't accidentally enter display-currency values that
+  // would then be double-converted at meter time.
+  'supplier.model.form.cost.currencyHint': {
+    zh: '单位:每 1M tokens。价格以 {baseCurrency} 录入(基础币种,在「计量设置」可改);计量仪表板会按汇率换算到您设置的默认显示币种。',
+    en: 'Unit: per 1M tokens. Enter prices in {baseCurrency} (your base currency, editable in metering settings); the metering dashboard converts to your default display currency via the configured exchange rate.',
+  },
 
   'supplier.model.form.flag.useInPassThrough': {
     zh: '透传模式',
