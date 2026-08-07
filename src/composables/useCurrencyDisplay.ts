@@ -72,12 +72,7 @@ export function useCurrencyDisplay(): CurrencyDisplay {
     if (base === disp) return 1
     const rows = ratesResult.value?.exchangeRates ?? []
     const active = rows
-      .filter(
-        (r) =>
-          r.fromCurrency === base &&
-          r.toCurrency === disp &&
-          r.status === 'ACTIVE',
-      )
+      .filter((r) => r.fromCurrency === base && r.toCurrency === disp && r.status === 'ACTIVE')
       // Newest effectiveFrom wins; ties fall back to insertion order.
       .sort((a, b) => (b.effectiveFrom > a.effectiveFrom ? 1 : -1))
     return active.length > 0 ? active[0].rate : null
@@ -88,7 +83,6 @@ export function useCurrencyDisplay(): CurrencyDisplay {
     const target = displayCurrency.value
     const converted = r == null ? usdValue : usdValue * r
     if (r == null) {
-       
       console.debug(
         `[useCurrencyDisplay] no active rate for ${baseCurrency.value}→${target}; ` +
           `falling back to base-currency display (${currencySymbol(baseCurrency.value)}${usdValue})`,

@@ -10,7 +10,10 @@
  */
 
 /** Standard separator set: en-US for the English build, zh-CN for Chinese. */
-function numberFormatterImpl(locale: string | undefined, fractionDigits?: number): Intl.NumberFormat {
+function numberFormatterImpl(
+  locale: string | undefined,
+  fractionDigits?: number,
+): Intl.NumberFormat {
   const loc = locale === 'zh' ? 'zh-CN' : 'en-US'
   if (fractionDigits !== undefined) {
     return new Intl.NumberFormat(loc, {
@@ -36,7 +39,10 @@ export function fmtNumber(value: number, locale?: string): string {
  * `Intl.NumberFormat` instance so callers can `.format()` repeatedly if
  * needed.
  */
-export function numberFormatter(locale: string | undefined, fractionDigits?: number): Intl.NumberFormat {
+export function numberFormatter(
+  locale: string | undefined,
+  fractionDigits?: number,
+): Intl.NumberFormat {
   return numberFormatterImpl(locale, fractionDigits)
 }
 
