@@ -27,7 +27,8 @@ import {
 } from '@/api/graphql/queries/metering'
 import MeteringEmptyState from '@/components/metering/MeteringEmptyState.vue'
 import MeteringErrorState from '@/components/metering/MeteringErrorState.vue'
-import { fmtMoney, fmtNumber, fmtCompact } from '@/utils/meter-format'
+import { fmtNumber, fmtCompact } from '@/utils/meter-format'
+import { useCurrencyDisplay } from '@/composables/useCurrencyDisplay'
 import { useMeteringDrillState } from '@/composables/useMeteringDrillState'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
 
@@ -47,6 +48,7 @@ const props = withDefaults(
 const router = useRouter()
 const locale = useLocaleStore()
 const drill = useMeteringDrillState()
+const { formatCost } = useCurrencyDisplay()
 
 const breadcrumb = computed(() => {
   const crumbs: Array<{ label: string; to: { name: string; query: Record<string, string> } }> = [
@@ -273,7 +275,7 @@ const emptyTitle = computed(() => {
         <cds-card class="kpi">
           <div class="kpi-content">
             <span class="kpi-label">{{ locale.t('metering.spend.totalCost') }}</span>
-            <strong class="kpi-value">{{ fmtMoney(topCost, locale.locale) }}</strong>
+            <strong class="kpi-value">{{ formatCost(topCost, locale.locale) }}</strong>
           </div>
         </cds-card>
         <cds-card class="kpi">
@@ -318,7 +320,7 @@ const emptyTitle = computed(() => {
                   :style="{ width: barWidth(r.totalTokens) + '%' }"
                 ></span>
               </span>
-              <span class="rank-meta">{{ fmtCompact(r.totalTokens, locale.locale) }} · {{ fmtMoney(r.cost, locale.locale) }}</span>
+              <span class="rank-meta">{{ fmtCompact(r.totalTokens, locale.locale) }} · {{ formatCost(r.cost, locale.locale) }}</span>
             </button>
           </li>
         </ul>

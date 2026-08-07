@@ -5,7 +5,8 @@ import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
 import { csvCell } from '@/utils/csv'
-import { fmtMoney, fmtNumber, fmtPercent, apiKeyMask, truncate } from '@/utils/meter-format'
+import { fmtNumber, fmtPercent, apiKeyMask, truncate } from '@/utils/meter-format'
+import { useCurrencyDisplay } from '@/composables/useCurrencyDisplay'
 import {
   SPEND_REPORT_QUERY,
   BUDGETS_QUERY,
@@ -101,8 +102,10 @@ const showBudgets = computed(() => groupBy.value === 'TEAM' && budgets.value.len
 /* ---- formatting ---- */
 // fmtMoney / fmtNumber come from @/utils/meter-format so the platform and
 // gateway tabs render money and counts the same way (spec §3 — same page
-// must never mix "$0.65" and "US$0.65").
-const fmtCost = fmtMoney
+// must never mix "$0.65" and "US$0.65"). formatCost comes from
+// useCurrencyDisplay so the displayed currency follows the user's
+// defaultDisplayCurrency setting instead of always being US$.
+const { formatCost: fmtCost } = useCurrencyDisplay()
 const fmtNum = fmtNumber
 const fmtPct = (n: number | null) => fmtPercent(n, locale.locale)
 
