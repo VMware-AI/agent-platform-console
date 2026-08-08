@@ -10,7 +10,10 @@
  */
 
 /** Standard separator set: en-US for the English build, zh-CN for Chinese. */
-function numberFormatter(locale: string | undefined, fractionDigits?: number): Intl.NumberFormat {
+function numberFormatterImpl(
+  locale: string | undefined,
+  fractionDigits?: number,
+): Intl.NumberFormat {
   const loc = locale === 'zh' ? 'zh-CN' : 'en-US'
   if (fractionDigits !== undefined) {
     return new Intl.NumberFormat(loc, {
@@ -30,13 +33,55 @@ export function fmtNumber(value: number, locale?: string): string {
 }
 
 /**
+ * Exposed so composables (useCurrencyDisplay) can format numbers with the
+ * same locale-aware separator rules as `fmtNumber`/`fmtMoney` without going
+ * through the string concatenation those helpers do. Returns an
+ * `Intl.NumberFormat` instance so callers can `.format()` repeatedly if
+ * needed.
+ */
+export function numberFormatter(
+  locale: string | undefined,
+  fractionDigits?: number,
+): Intl.NumberFormat {
+  return numberFormatterImpl(locale, fractionDigits)
+}
+
+/**
+ * Currency code → display symbol. Defaults to `US$` to preserve the historical
+ * prefix style (`US$1.23` not `$1.23`). Codes without an explicit mapping render
+ * as `<CODE> ` so they're unambiguous on the page (e.g. `EUR 1.23`).
+ *
+ * Added 2026-08 to support real currency conversion: callers that need to show
+ * a value in the user's `defaultDisplayCurrency` pass the code via
+ * `fmtMoney(value, locale, code)` instead of relying on the `US$` default.
+ */
+const CURRENCY_SYMBOL: Record<string, string> = {
+  USD: 'US$',
+  CNY: '¥',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+  HKD: 'HK$',
+}
+
+export function currencySymbol(code: string): string {
+  return CURRENCY_SYMBOL[code] ?? `${code} `
+}
+
+/**
  * Currency in the project's fixed `US$` prefix style, with locale-aware
  * separators. Sub-cent values (0 < n < 0.01) show 6 digits so the cost of
  * cheap models is still readable; otherwise 2.
+ *
+ * `currencyCode` defaults to `'US$'` for back-compat — all callers that pass
+ * only `(value, locale)` keep their existing display. New callers that want
+ * real currency conversion pass the user's `defaultDisplayCurrency` here; the
+ * actual multiplication is done by `useCurrencyDisplay().formatCost` upstream,
+ * so this function only owns the symbol-and-format step.
  */
-export function fmtMoney(value: number, locale?: string): string {
+export function fmtMoney(value: number, locale?: string, currencyCode = 'US$'): string {
   const digits = value > 0 && value < 0.01 ? 6 : 2
-  return `US$${numberFormatter(locale, digits).format(value)}`
+  return `${currencySymbol(currencyCode)}${numberFormatter(locale, digits).format(value)}`
 }
 
 /**

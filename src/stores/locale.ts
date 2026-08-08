@@ -983,11 +983,10 @@ export const STRINGS: Dict = {
   'resources.form.title.edit': { zh: '编辑资源池', en: 'Edit Resource Pool' },
   'resources.form.name': { zh: '资源池名称', en: 'Resource Pool Name' },
   'resources.form.endpoint': { zh: 'VC 地址', en: 'VC Address' },
-  'resources.form.contentLibrary': { zh: '内容库', en: 'Content Library' },
-  'resources.form.contentLibrarySelect': {
-    zh: '请先测试连接以加载内容库列表',
-    en: 'Test the connection first to load content libraries.',
-  },
+  // 'resources.form.contentLibrary' and 'resources.form.contentLibrarySelect'
+  // removed 2026-08: content library is no longer part of resource pool
+  // onboarding (decoupled — pools function without one; OVA deploy picks
+  // the library per-deploy via ContentLibraryItemID).
   'resources.form.username': { zh: 'vCenter 账号', en: 'vCenter Account' },
   'resources.form.usernamePlaceholder': {
     zh: 'administrator@vsphere.local',
@@ -2617,6 +2616,16 @@ export const STRINGS: Dict = {
   'supplier.model.form.cost.cacheWrite': {
     zh: '缓存写入单价(/1M token)',
     en: 'Cache creation cost (per 1M tokens)',
+  },
+  // Added 2026-08: prices below are stored as raw floats with no currency
+  // field on the BE side (provider-model.graphql: inputCostPerToken: Float).
+  // They are interpreted as the user's `currencySettings.baseCurrency` (the
+  // same one the metering dashboard uses for conversion). The hint surfaces
+  // this so admins don't accidentally enter display-currency values that
+  // would then be double-converted at meter time.
+  'supplier.model.form.cost.currencyHint': {
+    zh: '单位:每 1M tokens。价格以 {baseCurrency} 录入(基础币种,在「计量设置」可改);计量仪表板会按汇率换算到您设置的默认显示币种。',
+    en: 'Unit: per 1M tokens. Enter prices in {baseCurrency} (your base currency, editable in metering settings); the metering dashboard converts to your default display currency via the configured exchange rate.',
   },
 
   'supplier.model.form.flag.useInPassThrough': {

@@ -50,13 +50,16 @@ const titleKey = computed(() =>
   isEdit.value ? 'resources.form.title.edit' : 'resources.form.title.create',
 )
 
-/** Available content libraries fetched after a successful authenticated test. */
-const contentLibraries = ref<string[]>([])
-/** The library the user selected from the dropdown. */
-const selectedLibrary = ref('')
+// contentLibraries ref removed 2026-08: content library selection is no
+// longer part of resource pool onboarding (pools function without one;
+// OVA deploy picks the library per-deploy via ContentLibraryItemID).
+// `testResult.detail.contentLibraries` is still consumed by the test-detail
+// line below ("vSphere X · N libraries") — that field stays on the inline
+// testResult type. Only the local contentLibraries ref + selectedLibrary
+// ref + library dropdown were dropped.
 
 /** Track which fields the test was computed against — changes after the test
- *  hide the result (stale) and clear the library list. */
+ *  hide the result (stale). */
 const testSnapshot = ref<{
   name: string
   endpoint: string
@@ -73,11 +76,12 @@ const testResult = ref<null | {
 const canTest = computed(
   () => !!(form.name.trim() && form.endpoint.trim() && form.username.trim() && form.password),
 )
-// Creating a pool requires credentials AND a library selection; editing can
-// omit credentials (keeping the stored ones) but must always have a library.
+// Creating a pool requires credentials; editing can omit credentials (keeping
+// the stored ones). Content library is no longer part of onboarding — pools
+// function fine without one; the OVA deploy dialog picks the library per-deploy.
 const canSubmit = computed(
   () =>
-    !!(form.name.trim() && form.endpoint.trim() && selectedLibrary.value) &&
+    !!(form.name.trim() && form.endpoint.trim()) &&
     (isEdit.value || !!(form.username.trim() && form.password)),
 )
 
@@ -91,10 +95,9 @@ watch(
       // Credentials are never returned by the API (write-only); always start blank.
       form.username = ''
       form.password = ''
-      // On edit, pre-select the stored library name so the form is immediately valid.
-      selectedLibrary.value = props.pool?.contentLibraryName ?? ''
-      // Keep the pre-selected library in the list so it renders even before a fresh test.
-      contentLibraries.value = props.pool?.contentLibraryName ? [props.pool.contentLibraryName] : []
+      // Library pre-fill removed 2026-08: content library is no longer part
+      // of pool onboarding. Historical pool.contentLibraryName is preserved
+      // on edit (passed through in onSubmit) so admins don't lose it.
       testResult.value = null
       testSnapshot.value = null
     }
@@ -116,8 +119,6 @@ watch(
       ) {
         testResult.value = null
         testSnapshot.value = null
-        contentLibraries.value = []
-        selectedLibrary.value = ''
       }
     }
   },
@@ -154,17 +155,11 @@ async function onTestConnection() {
         password: form.password,
         insecure: form.insecure,
       }
-      if (res.ok && res.detail?.contentLibraries?.length) {
-        contentLibraries.value = res.detail.contentLibraries
-        // Auto-select when only one library exists, or keep previous selection
-        // if it's still in the list.
-        if (!selectedLibrary.value || !contentLibraries.value.includes(selectedLibrary.value)) {
-          selectedLibrary.value = contentLibraries.value.length === 1 ? contentLibraries.value[0] : ''
-        }
-      } else if (res.ok) {
-        contentLibraries.value = []
-        selectedLibrary.value = ''
-      }
+      // Library list / auto-select branch removed 2026-08: content library
+      // selection is no longer part of pool onboarding. The detail's
+      // contentLibraries array is still consumed by the alert message
+      // ("vSphere X · N libraries") in the template below — that's why
+      // the field stays on the inline testResult type.
     }
   } catch (err) {
     console.error('[resources] test connection failed', err)
@@ -182,7 +177,10 @@ function onSubmit() {
   const input: CreateResourcePoolInput = {
     name: form.name.trim(),
     endpoint: form.endpoint.trim(),
-    contentLibraryName: selectedLibrary.value,
+    // Content library no longer set at onboarding (decoupled 2026-08).
+    // On edit, pass through the historical value to preserve it; on create,
+    // the BE resolver treats "" as no-op (DB default is "").
+    contentLibraryName: isEdit.value ? (props.pool?.contentLibraryName ?? '') : '',
     insecure: form.insecure,
   }
   // Credentials are write-only: always on create, on edit only to rotate.
@@ -320,19 +318,10 @@ function close() {
           </cds-alert>
         </div>
 
-        <!-- Content library dropdown: appears after a successful test -->
-        <cds-control v-if="contentLibraries.length > 0 || selectedLibrary">
-          <cds-select>
-            <label>{{ locale.t('resources.form.contentLibrary') }}</label>
-            <select
-              :value="selectedLibrary"
-              @change="(e: Event) => selectedLibrary = (e.target as HTMLSelectElement).value"
-            >
-              <option value="" disabled>{{ locale.t('resources.form.contentLibrarySelect') }}</option>
-              <option v-for="lib in contentLibraries" :key="lib" :value="lib">{{ lib }}</option>
-            </select>
-          </cds-select>
-        </cds-control>
+        <!-- Content library dropdown removed 2026-08: pool onboarding no
+             longer requires selecting a content library. The library is
+             picked per-OVA-template at deploy time (see OvaTemplate
+             Version.ova_identifier → per-deploy ContentLibraryItemID). -->
       </form>
     </cds-modal-content>
 

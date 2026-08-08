@@ -5,11 +5,13 @@ import { useQuery } from '@vue/apollo-composable'
 import { useLocaleStore } from '@/stores/locale'
 import { useToast } from '@/composables/useToast'
 import { graphqlErrorMessage } from '@/api/graphql/errors'
-import { fmtMoney, fmtNumber, fmtCompact, fmtPercent } from '@/utils/meter-format'
+import { fmtNumber, fmtCompact, fmtPercent } from '@/utils/meter-format'
+import { useCurrencyDisplay } from '@/composables/useCurrencyDisplay'
 import { DASHBOARD_OVERVIEW_QUERY, type DashboardOverviewResult, type DashboardOverviewVars } from '@/api/graphql/queries/dashboard'
 import '@/components/icons'
 
 const locale = useLocaleStore(); const toast = useToast(); const router = useRouter()
+const { formatCost } = useCurrencyDisplay()
 const { result, error, refetch } = useQuery<DashboardOverviewResult, DashboardOverviewVars>(DASHBOARD_OVERVIEW_QUERY, { recentLimit: 6, noticeLimit: 6 })
 watch(error, (err) => { if (err) toast.error(graphqlErrorMessage(err, locale.t('agents.error'))) })
 const ov = computed(() => result.value?.dashboardOverview)
@@ -102,7 +104,7 @@ const hc = computed(() => (stats.value?.successfulCalls??0)+(stats.value?.failed
         <div class="pf"><cds-button action="outline" size="sm" @click="go('agents.list')">{{ locale.t('dashboard.viewAllAgents') }}</cds-button></div>
       </div></cds-card>
       <cds-card class="pn"><div class="pi"><h2>{{ locale.t('dashboard.monthlyUsage') }}</h2>
-        <template v-if="monthly"><div class="us"><span>{{ locale.t('dashboard.col.tokens') }}</span><strong>{{ fmtNumber(monthly.totalTokens) }}</strong></div><div class="us"><span>{{ locale.t('dashboard.kpi.monthlyCost') }}</span><strong>{{ fmtMoney(monthly.estimatedCost) }}</strong></div><div class="us"><span>{{ locale.t('dashboard.projected') }}</span><strong>{{ fmtMoney(monthly.projectedMonthlyCost) }}</strong></div></template>
+        <template v-if="monthly"><div class="us"><span>{{ locale.t('dashboard.col.tokens') }}</span><strong>{{ fmtNumber(monthly.totalTokens) }}</strong></div><div class="us"><span>{{ locale.t('dashboard.kpi.monthlyCost') }}</span><strong>{{ formatCost(monthly.estimatedCost, locale.locale) }}</strong></div><div class="us"><span>{{ locale.t('dashboard.projected') }}</span><strong>{{ formatCost(monthly.projectedMonthlyCost, locale.locale) }}</strong></div></template>
         <div class="pf"><cds-button action="outline" size="sm" @click="go('obs.metering',{tab:'platform',range:'THIS_MONTH'})">{{ locale.t('dashboard.gotoMetering') }}</cds-button></div>
       </div></cds-card>
     </div>

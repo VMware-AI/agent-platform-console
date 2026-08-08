@@ -45,7 +45,8 @@ import TabStrip from '@/components/TabStrip.vue'
 import GatewaySpendPanel from '@/views/metering/GatewaySpendPanel.vue'
 import CurrencySettingsPage from '@/views/metering/CurrencySettingsPage.vue'
 import CostRulesPage from '@/views/metering/CostRulesPage.vue'
-import { fmtMoney, fmtNumber, fmtCompact, truncate, shortDate } from '@/utils/meter-format'
+import { fmtNumber, fmtCompact, truncate, shortDate } from '@/utils/meter-format'
+import { useCurrencyDisplay } from '@/composables/useCurrencyDisplay'
 import '@/components/icons'
 
 type MeteringSource = 'platform' | 'gateway'
@@ -114,6 +115,7 @@ interface DailyUsage {
 
 const locale = useLocaleStore()
 const toast = useToast()
+const { formatCost } = useCurrencyDisplay()
 const selectedRange = ref<TimeRange>('7d')
 const drillModel = ref<string | null>(null)
 /** Custom date inputs from TimeRangeToolbar — when set, override selectedRange */
@@ -326,7 +328,7 @@ const kpiCards = computed<KpiCard[]>(() => {
   const ov = overview.value
   const st = dashStats.value
   return [
-    { label: locale.t('metering.spend.totalCost'), value: fmtMoney(ov?.cost?.totalCost ?? 0, locale.locale) },
+    { label: locale.t('metering.spend.totalCost'), value: formatCost(ov?.cost?.totalCost ?? 0, locale.locale) },
     { label: locale.t('metering.spend.totalTokens'), value: fmtNumber(ov?.totalTokens ?? 0, locale.locale) },
     {
       label: locale.t('metering.kpi.activeAgents'),
@@ -524,7 +526,7 @@ function resetFilters() {
                       <span class="cell-name-primary">{{ ag.name }}</span>
                       <span class="cell-name-secondary">{{ ag.id }}</span>
                     </td>
-                    <td class="num">{{ fmtMoney(agentCost(ag.id), locale.locale) }}</td>
+                    <td class="num">{{ formatCost(agentCost(ag.id), locale.locale) }}</td>
                     <td class="num">{{ fmtNumber(ag.totalTokens, locale.locale) }}</td>
                     <td class="num">{{ fmtNumber(ag.inputTokens, locale.locale) }}</td>
                     <td class="num">{{ fmtNumber(ag.outputTokens, locale.locale) }}</td>
@@ -619,7 +621,7 @@ function resetFilters() {
                       <span class="drill-icon">{{ drillModel === model.name ? '▼' : '▶' }}</span>
                       <span :title="model.name">{{ truncate(model.name, 36) }}</span>
                     </td>
-                    <td class="num">{{ fmtMoney(modelCost(model.name), locale.locale) }}</td>
+                    <td class="num">{{ formatCost(modelCost(model.name), locale.locale) }}</td>
                     <td class="num">{{ fmtNumber(model.totalTokens, locale.locale) }}</td>
                     <td class="num">{{ fmtNumber(model.inputTokens, locale.locale) }}</td>
                     <td class="num">{{ fmtNumber(model.outputTokens, locale.locale) }}</td>
@@ -692,12 +694,12 @@ function resetFilters() {
           <div class="cost-grid">
             <div class="cost-summary">
               <span class="cost-label">{{ locale.t('metering.cost.total') }}</span>
-              <strong class="cost-value">{{ fmtMoney(overview?.cost?.totalCost ?? 0, locale.locale) }}</strong>
+              <strong class="cost-value">{{ formatCost(overview?.cost?.totalCost ?? 0, locale.locale) }}</strong>
             </div>
             <div class="cost-summary">
               <span class="cost-label">{{ locale.t('metering.cost.monthly') }}</span>
               <strong class="cost-value">
-                {{ fmtMoney(overview?.cost?.monthlyCost ?? 0, locale.locale) }}
+                {{ formatCost(overview?.cost?.monthlyCost ?? 0, locale.locale) }}
                 <span class="cost-suffix">/ {{ locale.t('metering.cost.month') }}</span>
               </strong>
             </div>
